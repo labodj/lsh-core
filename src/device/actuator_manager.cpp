@@ -158,7 +158,7 @@ namespace Actuators
     /**
      * @brief Set the state for all actuators.
      *
-     * @param state state to be set.
+     * @param states An array of boolean states to be set. The size must match the number of actuators.
      * @return true if any actuator performed the switch.
      * @return false otherwise.
      */

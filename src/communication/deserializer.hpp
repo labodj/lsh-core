@@ -28,19 +28,17 @@
  */
 namespace Deserializer
 {
+    /**
+     * @brief Represents the result of a dispatch operation.
+     * @details Contains flags indicating the outcome of a command dispatched from the ESP bridge.
+     */
     struct DispatchResult
     {
-        bool stateChanged = false;
-        bool networkClickHandled = false;
+        bool stateChanged = false;        //!< True if the device state was changed by the command.
+        bool networkClickHandled = false; //!< True if a network click was confirmed or handled.
     };
 
-    /**
-     * @brief Deserializes the JSON document and immediately executes the corresponding command.
-     * @param doc The JSON document to process.
-     * @return true if the command requires a subsequent, general state update to be sent.
-     * @return false otherwise.
-     */
-    auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult;
+    auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult; //!<  Main entry point for command processing.
 
 } // namespace Deserializer
 

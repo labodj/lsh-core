@@ -62,7 +62,13 @@ public:
     auto operator=(Configurator &&) -> Configurator & = delete;
 #endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
 
-    static void configure();     // The actual configuration
+    /**
+     * @brief The main user-defined device configuration function.
+     * @details This function is implemented by the user in their `src/configs/device.cpp` file.
+     *          It is responsible for instantiating all Actuator, Clickable, and Indicator
+     *          objects and defining their relationships and behaviors.
+     */
+    static void configure();
     static void finalizeSetup(); // Final steps of configuration, must be called after configuration()
 };
 

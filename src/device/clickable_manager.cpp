@@ -138,14 +138,11 @@ namespace Clickables
         }
     }
 
-    /**
-     * @brief Perform a click action.
+    /** @brief Perform a click action.
      *
-     * This helper function centralizes all click-related logic. It's necessary because some actions,
-     * like a super long click that turns off all unprotected actuators, require access to global
-     * collections (Actuators) and cannot be handled entirely within the Clickable class itself.
+     * This helper function centralizes all click-related logic...
      *
-     * @param clickable  The clickable to click.
+     * @param clickableIndex The index of the clickable to click.
      * @param clickType  The click type to perform.
      * @return true if any actuator state was changed.
      * @return false otherwise.

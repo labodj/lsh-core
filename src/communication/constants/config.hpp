@@ -75,20 +75,22 @@ namespace constants
                                                      -> (24 + 3 + 3 = 30)
                 We can use 48 as base minimum size
                 */
-                constexpr uint16_t RECEIVED_DOC_MIN_SIZE = etl::bit_ceil(JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2) + 4U);
-                constexpr uint16_t RECEIVED_DOC_SIZE = RECEIVED_DOC_MIN_SIZE <= 48U ? 48U : RECEIVED_DOC_MIN_SIZE;
+                constexpr uint16_t RECEIVED_DOC_MIN_SIZE = etl::bit_ceil(JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2) + 4U); //!< Calculated minimum size for the JSON document received from the bridge.
+                constexpr uint16_t RECEIVED_DOC_SIZE = RECEIVED_DOC_MIN_SIZE <= 48U ? 48U : RECEIVED_DOC_MIN_SIZE;                          //!< Final allocated size for the received JSON document, ensuring a minimum of 48 bytes.
 
                 /**
                  * @brief Defines the size of the temporary on-stack buffer for reading raw serial messages.
                  */
-                constexpr uint16_t RAW_INPUT_BUFFER_MIN_SIZE = etl::bit_ceil(22U); // {"p":16,"t":1,"i":1} -> 20 char +1 for '\n' +1 for '\0'.
+                constexpr uint16_t RAW_INPUT_BUFFER_MIN_SIZE = etl::bit_ceil(22U); //!< Minimum buffer size
 
-                // Calculated size for the longest variable-length command ({"p":12,"s":[0,1,0,1,0,...]})
+                /**
+                 * @brief Calculated size for the longest variable-length command ({"p":12,"s":[0,1,0,1,0,...]})
+                 */
                 constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = (CONFIG_MAX_ACTUATORS > 0U)
                                                                             ? etl::bit_ceil(16U + (2U * CONFIG_MAX_ACTUATORS)) // {"p":12,"s":[0,1,0,1,0,...]} -> 16 + CONFIG_MAX_ACTUATORS *2
                                                                             : etl::bit_ceil(17U);                              // Special case for 0 actuators. ({"p":12,"s":[]} -> 15 +1 for '\n' +1 for '\0' )
 
-                constexpr uint16_t RAW_INPUT_BUFFER_SIZE = RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_MIN_SIZE ? RAW_INPUT_BUFFER_MIN_SIZE : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE;
+                constexpr uint16_t RAW_INPUT_BUFFER_SIZE = RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_MIN_SIZE ? RAW_INPUT_BUFFER_MIN_SIZE : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE; //!< Final allocated size for the raw serial input buffer.
                 /*
                 Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *
@@ -96,7 +98,7 @@ namespace constants
                                                              -> 8*CONFIG_MAX_ACTUATORS + 8*CONFIG_MAX_CLICKABLES + 32
                 The bare minimum is 32 with no actuators nor clickables
                 */
-                constexpr uint16_t SENT_DOC_DETAILS_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) + JSON_OBJECT_SIZE(4);
+                constexpr uint16_t SENT_DOC_DETAILS_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) + JSON_OBJECT_SIZE(4); //!< Calculated size for the JSON document sent with device details.
 
                 /*
                 Sent state Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
@@ -104,18 +106,16 @@ namespace constants
                 {"p":2,"s":[0,1,0,1,...]}-> JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2)
                 The bare minimum is 16 with no actuators
                 */
-                constexpr uint16_t SENT_DOC_STATE_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2);
+                constexpr uint16_t SENT_DOC_STATE_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2); //!< Calculated size for the JSON document sent with actuator states.
 
                 /*
                 Sent network click Json Document, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *
                 {"p":3,"t":1,"i":1,"c":0} -> JSON_OBJECT_SIZE(4) -> 32
                 */
-                constexpr uint16_t SENT_DOC_NETWORK_CLICK_SIZE = JSON_OBJECT_SIZE(4);
+                constexpr uint16_t SENT_DOC_NETWORK_CLICK_SIZE = JSON_OBJECT_SIZE(4); //!< Calculated size for the JSON document sent for network clicks.
 
-                constexpr uint16_t SENT_DOC_MAX_SIZE = SENT_DOC_DETAILS_SIZE;
-
-#define SERIAL_RX_BUFFER_SIZE = 2048
+                constexpr uint16_t SENT_DOC_MAX_SIZE = SENT_DOC_DETAILS_SIZE; //!< The maximum possible size for any JSON document sent by the device.
         } // namespace espComConfigs
 } // namespace constants
 

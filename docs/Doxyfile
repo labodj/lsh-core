@@ -1,0 +1,26 @@
+# Doxyfile for LSH-Core (Plain Doxygen Setup)
+
+# --- Project Information ---
+PROJECT_NAME           = "LSH-Core"
+PROJECT_BRIEF          = "A robust C++ framework for Arduino-based home automation nodes"
+
+# --- Output Configuration ---
+# Generate documentation inside the 'docs/' directory.
+# This will create 'docs/html/'
+OUTPUT_DIRECTORY       = docs
+
+# --- Input Configuration ---
+# Paths are relative to the directory where doxygen is run (the project root).
+INPUT                  = include src README.md docs/mainpage.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.cpp *.h *.md
+EXCLUDE_PATTERNS       = */examples/*
+
+# --- Graphviz Configuration (for diagrams) ---
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+UML_LOOK               = YES
+
+# --- HTML Navigation ---
+GENERATE_TREEVIEW      = YES

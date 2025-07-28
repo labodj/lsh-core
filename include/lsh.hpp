@@ -25,7 +25,20 @@
 
 namespace LSH
 {
+    /**
+     * @brief Initializes the LSH-Core framework.
+     * @details This function must be called once in the Arduino `setup()` function.
+     *          It initializes serial communication, applies the user-defined device
+     *          configuration, and prepares all managers (Actuators, Clickables, Indicators).
+     */
     void setup();
+
+    /**
+     * @brief The main execution loop for the LSH-Core framework.
+     * @details This function must be called continuously in the Arduino `loop()` function.
+     *          It handles input polling, click detection, network communication,
+     *          and timed events like actuator auto-off timers.
+     */
     void loop();
 }
 

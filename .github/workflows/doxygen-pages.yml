@@ -1,0 +1,63 @@
+# GitHub Actions workflow for generating and deploying Doxygen documentation
+
+name: Deploy Doxygen Documentation
+
+on:
+  # Run this workflow automatically on pushes to the 'main' branch
+  push:
+    branches: ["main"]
+
+  # Allows you to run this workflow manually from the Actions tab on GitHub
+  workflow_dispatch:
+
+# Grant GITHUB_TOKEN the necessary permissions to deploy to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    # Use a fresh Ubuntu environment
+    runs-on: ubuntu-latest
+
+    # Configure the environment for GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # Step 1: Check out your repository's code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # This is important! It ensures that if you add Git submodules
+          # (like for a theme), they are also checked out.
+          submodules: "recursive"
+
+      # Step 2: Install Doxygen and Graphviz
+      - name: Install Doxygen and Graphviz
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+
+      # Step 3: Build the Doxygen documentation
+      - name: Build Doxygen documentation
+        # Run doxygen from the project root. It will use the configuration
+        # file located at 'docs/Doxyfile'.
+        run: doxygen docs/Doxyfile
+
+      # Step 4: Configure GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      # Step 5: Upload the generated documentation as an artifact
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # This is the directory Doxygen generates the HTML files into,
+          # as specified by OUTPUT_DIRECTORY = docs in your Doxyfile.
+          path: "./docs/html"
+
+      # Step 6: Deploy the artifact to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

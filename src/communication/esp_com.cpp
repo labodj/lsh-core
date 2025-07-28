@@ -32,8 +32,8 @@ namespace EspCom
     uint32_t lastReceivedPayloadTime_ms = 0U; //!< Last time a valid payload has been received
     bool firstValidPayloadReceived = false;   //!< True after the first valid payload has been received
 #ifndef CONFIG_MSG_PACK
-    char inputBuffer[constants::espComConfigs::RAW_INPUT_BUFFER_SIZE];
-    size_t bytesRead = 0;
+    char inputBuffer[constants::espComConfigs::RAW_INPUT_BUFFER_SIZE]; //!< Raw buffer for incoming serial data.
+    size_t bytesRead = 0;                                              //!< Number of bytes currently in the inputBuffer.
 #endif
 
     /**

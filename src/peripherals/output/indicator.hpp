@@ -47,11 +47,19 @@ private:
 
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
+    /**
+     * @brief Construct a new Indicator object using standard I/O.
+     * @param pin The Arduino pin number for the indicator.
+     */
     explicit constexpr Indicator(uint8_t pin) noexcept : pinNumber(pin)
     {
         pinMode(pin, OUTPUT); // PinMode to Output
     }
 #else
+    /**
+     * @brief Construct a new Indicator object using fast I/O (direct port manipulation).
+     * @param pin The Arduino pin number for the indicator.
+     */
     explicit Indicator(uint8_t pin) noexcept : pinMask(digitalPinToBitMask(pin)), pinPort(portOutputRegister(digitalPinToPort(pin)))
     {
         // PinMode to OUTPUT

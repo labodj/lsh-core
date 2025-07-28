@@ -37,7 +37,9 @@ namespace LSH
         constexpr const char *KEY_TYPE = "t";            //!< Click Type
         constexpr const char *KEY_CONFIRM = "c";         //!< Confirm
 
-        // Valid values for "p" key (commands/data)
+        /**
+         * @brief Defines the valid command types for the 'p' (payload) key in JSON messages.
+         */
         enum class Command : uint8_t
         {
             // Arduino -> ESP
@@ -63,7 +65,9 @@ namespace LSH
             SYSTEM_RESET = 255
         };
 
-        // Valid values for "t" key
+        /**
+         * @brief Defines the valid click types for the 't' (type) key in JSON messages.
+         */
         enum class ProtocolClickType : uint8_t
         {
             LONG = 1,

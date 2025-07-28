@@ -33,14 +33,18 @@ extern void *__brkval;
  * The free list structure as maintained by the
  * avr-libc memory allocation routines.
  */
+
+/**
+ * @brief Internal structure used by avr-libc to manage the free memory list.
+ */
 struct __freelist
 {
-    size_t sz;
-    struct __freelist *nx;
+    size_t sz;             //!< Size of the free block.
+    struct __freelist *nx; //!< Pointer to the next free block.
 };
 
 /* The head of the free list structure */
-extern struct __freelist *__flp;
+extern struct __freelist *__flp; //!< Pointer to the head of the free list.
 
 /* Calculates the size of the free list */
 auto freeListSize() -> size_t
