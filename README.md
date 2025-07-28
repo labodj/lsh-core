@@ -1,6 +1,6 @@
 # LSH-Core: The Arduino Firmware Engine for Labo Smart Home
 
-Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home (LSH)** ecosystem. This framework was created by developer me and was originally designed for personal use with industrial-grade Controllino PLCs to ensure maximum reliability.
+Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home (LSH)** ecosystem. This framework was created by me and was originally designed for personal use with industrial-grade Controllino PLCs to ensure maximum reliability.
 
 This document serves as the official guide for using the `lsh-core` library in your own PlatformIO projects.
 
