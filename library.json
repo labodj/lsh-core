@@ -1,0 +1,44 @@
+{
+  "name": "lsh-core",
+  "version": "1.0.0",
+  "description": "LSH-Core: A robust and efficient C++ framework for Arduino-based home automation nodes, designed for Controllino PLCs.",
+  "keywords": [
+    "home automation",
+    "domotics",
+    "iot",
+    "controllino",
+    "plc",
+    "etl",
+    "esp32",
+    "mqtt",
+    "framework"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/labodj/lsh-core.git"
+  },
+  "authors": [
+    {
+      "name": "Jacopo Labardi",
+      "email": "2527836+labodj@users.noreply.github.com",
+      "maintainer": true
+    }
+  ],
+  "license": "Apache-2.0",
+  "frameworks": "arduino",
+  "platforms": "atmelavr",
+  "dependencies": {
+    "etlcpp/Embedded Template Library": "^20.39.4",
+    "bblanchon/ArduinoJson": "^6.21.5"
+  },
+  "build": {
+    "libLDFMode": "deep+"
+  },
+  "export": {
+    "exclude": [
+      "examples/*",
+      "scripts/*",
+      "platformio.ini"
+    ]
+  }
+}
