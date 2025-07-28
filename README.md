@@ -1,6 +1,8 @@
 # LSH-Core: The Arduino Firmware Engine for Labo Smart Home
 
-Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home (LSH)** ecosystem. This framework was created by me and was originally designed for personal use with industrial-grade Controllino PLCs to ensure maximum reliability.
+[![API Documentation](https://img.shields.io/badge/API%20Reference-Doxygen-blue.svg)](https://labodj.github.io/lsh-core/)
+
+Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home (LSH)** ecosystem. This framework was originally designed for personal use with industrial-grade Controllino PLCs to ensure maximum reliability.
 
 This document serves as the official guide for using the `lsh-core` library in your own PlatformIO projects.
 
@@ -12,7 +14,7 @@ LSH is a complete, distributed home automation system composed of three distinct
 
 * **`lsh-bridge`:** A lightweight firmware designed for an ESP32. It acts as a transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
 
-* **`node-red-contrib-lsh-logic`:** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
+* **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
 
 ### System Architecture
 
@@ -33,6 +35,14 @@ The three components work together to create a robust and responsive system.
                                                                                  | --(5) Command --+
                                                                                  +-----------------+
 ```
+
+### API Documentation
+
+While this README provides a comprehensive guide for getting started and common use cases, a full, in-depth API reference is also available. This documentation is automatically generated using Doxygen from the source code comments and provides detailed information on all public classes, methods, and namespaces.
+
+It is the perfect resource for developers who want to understand the inner workings of the library or explore advanced functionalities beyond the examples provided here.
+
+**[Browse the full API Documentation here](https://labodj.github.io/lsh-core/)**
 
 ## Hardware & Electrical Setup
 
