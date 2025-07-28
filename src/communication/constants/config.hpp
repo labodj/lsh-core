@@ -49,11 +49,11 @@ namespace constants
                 static constexpr const uint16_t CONNECTION_TIMEOUT_MS = CONFIG_CONNECTION_TIMEOUT_MS; //!< Time for a connection timeout in ms
 #endif // CONFIG_CONNECTION_TIMEOUT_MS
 
-#ifndef CONFIG_COM_SERIAL_SPEED_BAUD
-                static constexpr const uint32_t COM_SERIAL_SPEED_BAUD = 250000U; //!< Default Serial connected with ESP speed in bauds
+#ifndef CONFIG_COM_SERIAL_BAUD
+                static constexpr const uint32_t COM_SERIAL_BAUD = 250000U; //!< Default Serial connected with ESP speed in bauds
 #else
-                static constexpr const uint32_t COM_SERIAL_SPEED_BAUD = CONFIG_COM_SERIAL_SPEED_BAUD; //!< Serial connected with ESP speed in bauds
-#endif // CONFIG_COM_SERIAL_SPEED_BAUD
+                static constexpr const uint32_t COM_SERIAL_BAUD = CONFIG_COM_SERIAL_BAUD; //!< Serial connected with ESP speed in bauds
+#endif // CONFIG_COM_SERIAL_BAUD
 
 #ifndef CONFIG_COM_SERIAL_TIMEOUT_MS
                 static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS = 5U; //!< Default Serial connected with ESP timeout

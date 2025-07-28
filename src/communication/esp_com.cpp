@@ -42,7 +42,7 @@ namespace EspCom
      */
     void init()
     {
-        CONFIG_COM_SERIAL->begin(constants::espComConfigs::COM_SERIAL_SPEED_BAUD, SERIAL_8N1);
+        CONFIG_COM_SERIAL->begin(constants::espComConfigs::COM_SERIAL_BAUD, SERIAL_8N1);
         CONFIG_COM_SERIAL->setTimeout(constants::espComConfigs::COM_SERIAL_TIMEOUT_MS);
     }
 
