@@ -30,6 +30,20 @@
 #include "peripherals/input/clickable.hpp"
 #include "peripherals/output/actuator.hpp"
 #include "util/debug/debug.hpp"
+
+namespace
+{
+    /**
+     * @brief A static JsonDocument used as a reusable buffer for all serialization tasks.
+     * @details By declaring this document as static within an anonymous namespace, we ensure
+     *          it is allocated only once in the .bss segment, not on the stack in every function call.
+     *          This significantly improves performance by avoiding repeated construction/destruction
+     *          and reduces the risk of stack overflow. The document is cleared before each use.
+     *          Its size is determined by the largest possible payload to accommodate all message types.
+     */
+    static StaticJsonDocument<constants::espComConfigs::SENT_DOC_MAX_SIZE> serializationDoc;
+} // namespace
+
 namespace Serializer
 {
     using namespace Debug;
@@ -70,30 +84,27 @@ namespace Serializer
     void serializeDetails()
     {
         DP_CONTEXT();
-#if (SENT_DOC_DETAILS_SIZE > 1024U)
-        DynamicJsonDocument doc(constants::espComConfigs::SENT_DOC_DETAILS_SIZE);
-#else
-        StaticJsonDocument<constants::espComConfigs::SENT_DOC_DETAILS_SIZE> doc;
-#endif
         using namespace LSH::protocol;
 
-        doc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::DEVICE_DETAILS); // "p":"1" (Payload: Device Details)
-        doc[KEY_NAME] = CONFIG_DEVICE_NAME;                               // "n":"c1" (Device Name: c1)
+        serializationDoc.clear();
 
-        JsonArray jsonActuators = doc.createNestedArray(KEY_ACTUATORS_ARRAY); // "a": (Actuators IDs: ...)
+        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::DEVICE_DETAILS); // "p":"1" (Payload: Device Details)
+        serializationDoc[KEY_NAME] = CONFIG_DEVICE_NAME;                               // "n":"c1" (Device Name: c1)
+
+        JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_ACTUATORS_ARRAY); // "a": (Actuators IDs: ...)
         for (const auto *const actuator : Actuators::actuators)
         {
             jsonActuators.add(actuator->getId());
         }
 
-        JsonArray jsonClickables = doc.createNestedArray(KEY_BUTTONS_ARRAY); // "b": (Buttons IDs: ...)
+        JsonArray jsonClickables = serializationDoc.createNestedArray(KEY_BUTTONS_ARRAY); // "b": (Buttons IDs: ...)
         for (const auto *const clickable : Clickables::clickables)
         {
             jsonClickables.add(clickable->getId());
         }
 
         // Send the Json
-        EspCom::sendJson(doc);
+        EspCom::sendJson(serializationDoc);
     }
 
     /**
@@ -102,15 +113,13 @@ namespace Serializer
     void serializeActuatorsState()
     {
         DP_CONTEXT();
-#if (SENT_DOC_STATE_SIZE > 1024U)
-        DynamicJsonDocument doc(constants::espComConfigs::SENT_DOC_STATE_SIZE);
-#else
-        StaticJsonDocument<constants::espComConfigs::SENT_DOC_STATE_SIZE> doc;
-#endif
         using namespace LSH::protocol;
+
+        serializationDoc.clear();
+
         // Write the Json
-        doc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE); // "p":2   (Payload: Actuators State)
-        JsonArray jsonActuators = doc.createNestedArray(KEY_STATE);        // "s": (State: ...)
+        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE); // "p":2   (Payload: Actuators State)
+        JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_STATE);        // "s": (State: ...)
 
         for (const auto *const actuator : Actuators::actuators)
         {
@@ -118,7 +127,7 @@ namespace Serializer
         }
 
         // Send the Json
-        EspCom::sendJson(doc);
+        EspCom::sendJson(serializationDoc);
     }
 
     /**
@@ -131,33 +140,30 @@ namespace Serializer
     void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm)
     {
         DP_CONTEXT();
-#if (SENT_DOC_NETWORK_CLICK_SIZE > 1024U)
-        DynamicJsonDocument doc(constants::espComConfigs::SENT_DOC_NETWORK_CLICK_SIZE);
-#else
-        StaticJsonDocument<constants::espComConfigs::SENT_DOC_NETWORK_CLICK_SIZE> doc;
-#endif
+        using namespace LSH::protocol;
+
+        serializationDoc.clear();
 
         // Write the Json
-        using namespace LSH::protocol;
-        doc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::NETWORK_CLICK); // "p":3   (Payload: Network CLick)
+        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::NETWORK_CLICK); // "p":3   (Payload: Network CLick)
 
         switch (clickType)
         {
         case constants::ClickType::LONG:
-            doc[KEY_TYPE] = static_cast<uint8_t>(LSH::protocol::ProtocolClickType::LONG); // "t":1  (Click Type: Long)
+            serializationDoc[KEY_TYPE] = static_cast<uint8_t>(LSH::protocol::ProtocolClickType::LONG); // "t":1  (Click Type: Long)
             break;
         case constants::ClickType::SUPER_LONG:
-            doc[KEY_TYPE] = static_cast<uint8_t>(LSH::protocol::ProtocolClickType::SUPER_LONG); // "t":2  (Click Type: Super Long)
+            serializationDoc[KEY_TYPE] = static_cast<uint8_t>(LSH::protocol::ProtocolClickType::SUPER_LONG); // "t":2  (Click Type: Super Long)
             break;
         default:
             return; // Not valid click type
         }
 
-        doc[KEY_ID] = Clickables::clickables[clickableIndex]->getId(); // "i":7 (Button ID: 7)
-        doc[KEY_CONFIRM] = static_cast<uint8_t>(confirm);              // "c":0 (Confirm: false)
+        serializationDoc[KEY_ID] = Clickables::clickables[clickableIndex]->getId(); // "i":7 (Button ID: 7)
+        serializationDoc[KEY_CONFIRM] = static_cast<uint8_t>(confirm);              // "c":0 (Confirm: false)
 
         // Send the Json
-        EspCom::sendJson(doc);
+        EspCom::sendJson(serializationDoc);
     }
 
 } // namespace Serializer
