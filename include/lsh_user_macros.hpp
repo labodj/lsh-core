@@ -47,8 +47,8 @@
  * @param pin The hardware pin for the clickable.
  * @param id The unique numeric ID for the clickable. MUST be > 0.
  */
-#define LSH_BUTTON(var_name, pin, id)                                                                  \
-    static_assert((id) > 0, "Button ID cannot must be > 0. Please use positive IDs starting from 1."); \
+#define LSH_BUTTON(var_name, pin, id)                                                           \
+    static_assert((id) > 0, "Button ID must be > 0. Please use positive IDs starting from 1."); \
     Clickable var_name((pin), (id))
 
 /**
