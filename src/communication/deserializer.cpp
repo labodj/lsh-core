@@ -96,7 +96,7 @@ namespace Deserializer
      * to execute the command. This avoids intermediate state storage (like ResultsHolder)
      * and multiple switch statements in the main loop, maximizing performance.
      * The validation relies on a "validation by convention" approach, where a value of 0
-     * for IDs or commands is treated as invalid, eliminating the need for most
+     * for IDs or commands is treated as invalid, eliminating the need for
      * `containsKey` checks.
      *
      * @param doc A const reference to the parsed JsonDocument from EspCom.
@@ -123,15 +123,10 @@ namespace Deserializer
                     break;
                 }
 
-                if (!doc.containsKey(KEY_STATE))
-                {
-                    break; // Missing KEY_STATE
-                }
-
                 const JsonVariantConst jsonState = doc[KEY_STATE];
-                if (!jsonState.is<uint8_t>())
+                if (jsonState.isNull() || !jsonState.is<uint8_t>())
                 {
-                    break; // Wrong jsonState
+                    break; // Wrong or missing jsonState
                 }
                 const auto state = jsonState.as<uint8_t>() == 1;
 
