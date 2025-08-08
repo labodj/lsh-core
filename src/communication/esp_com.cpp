@@ -26,32 +26,6 @@
 #include "util/debug/debug.hpp"
 #include "util/timekeeper.hpp"
 
-namespace
-{
-    /**
-     * @brief A static lambda that creates and returns the master filter document.
-     * @details This filter is created only once at program startup. Using a static
-     *          lambda ensures thread-safe initialization (guaranteed by the C++11 standard)
-     *          and keeps the filter object local to this compilation unit, preventing
-     *          global namespace pollution. It includes all possible keys from the protocol
-     *          to act as a universal whitelist for incoming messages.
-     */
-    static const auto masterFilter = []
-    {
-        // The filter's size is calculated at compile-time for an object with 4 members.
-        // This is highly efficient as it avoids dynamic memory allocation.
-        StaticJsonDocument<JSON_OBJECT_SIZE(4)> filter;
-        using namespace LSH::protocol;
-
-        filter[KEY_PAYLOAD] = true;
-        filter[KEY_ID] = true;
-        filter[KEY_STATE] = true;
-        filter[KEY_TYPE] = true;
-
-        return filter;
-    }();
-} // namespace
-
 namespace EspCom
 {
     using namespace Debug;
@@ -106,7 +80,7 @@ namespace EspCom
     {
         static StaticJsonDocument<constants::espComConfigs::RECEIVED_DOC_SIZE> doc;
 #ifdef CONFIG_MSG_PACK
-        DeserializationError err = deserializeMsgPack(doc, *CONFIG_COM_SERIAL, DeserializationOption::Filter(masterFilter), DeserializationOption::NestingLimit(1));
+        DeserializationError err = deserializeMsgPack(doc, *CONFIG_COM_SERIAL);
 
         if (err == DeserializationError::Ok)
         {
@@ -141,7 +115,7 @@ namespace EspCom
                     inputBuffer[bytesRead] = '\0'; // Null-terminate the completed string.
 
                     // The message is complete. Attempt to parse it.
-                    const DeserializationError err = deserializeJson(doc, inputBuffer, DeserializationOption::Filter(masterFilter), DeserializationOption::NestingLimit(1));
+                    const DeserializationError err = deserializeJson(doc, inputBuffer);
                     bytesRead = 0; // Reset buffer for next msg
 
                     if (err == DeserializationError::Ok)
