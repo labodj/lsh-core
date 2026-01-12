@@ -161,7 +161,6 @@ namespace Clickables
         DP_CONTEXT();
         for (auto *const clickable : clickables) // Resize vectors inside clickable
         {
-            clickable->resizeVectors();
             clickable->check();
         }
         if (clickablesMap.size() != totalClickables)

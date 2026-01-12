@@ -196,7 +196,7 @@ namespace Actuators
             i++;
         }
 
-        actuatorsWithAutoOffIndexes.resize(actuatorsWithAutoOffIndexes.size()); // Resize actuators with auto off vector
+
 
         if (actuatorsMap.size() != totalActuators)
         {

@@ -116,9 +116,14 @@ namespace LSH
             Serializer::serializeStaticJson(StaticType::PING_); // Try to send ping to ESP, ~1000Hz for this function is more than enough.
             ClickType clickType = ClickType::NONE;              //!< Temp holder of clickable click type
             lastClickablesCheck_ms = now;
-            for (uint8_t i = 0; i < Clickables::totalClickables; ++i)
+            // Optimization: Iterate using pointers to avoid repeated array indexing calculations
+            // Since clickables is an etl::array (contiguous memory), we can use raw pointers.
+            auto **const begin = Clickables::clickables.begin(); // Pointer to the first Clickable*
+            auto **const end = begin + Clickables::totalClickables;
+
+            for (auto **it = begin; it != end; ++it)
             {
-                auto *const currClickable = Clickables::clickables[i]; // Cache the pointer to the current clickable object.
+                auto *const currClickable = *it; // Dereference to get Clickable*
 
                 switch (currClickable->clickDetection()) // Get the clickable action and decide what to do
                 {

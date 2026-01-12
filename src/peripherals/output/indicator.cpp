@@ -22,26 +22,7 @@
 
 #include "device/actuator_manager.hpp"
 #include "peripherals/output/actuator.hpp"
-/**
- * @brief Set the state of the indicator.
- *
- * @param stateToSet the state to set true=ON, false=OFF.
- */
-void inline Indicator::setState(bool stateToSet)
-{
-#ifdef CONFIG_USE_FAST_INDICATORS
-    if (!stateToSet)
-    {
-        *this->pinPort &= ~this->pinMask;
-    }
-    else
-    {
-        *this->pinPort |= this->pinMask;
-    }
-#else
-    digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToSet));
-#endif
-}
+
 
 /**
  * @brief Set the indicator index on Indicators namespace Array.
@@ -163,14 +144,7 @@ void Indicator::check()
     this->setState(newState);     // Apply new state
 }
 
-/**
- * @brief Resize controlled actuators vector to its actual size.
- *
- */
-void Indicator::resizeVectors()
-{
-    this->controlledActuators.resize(this->controlledActuators.size());
-}
+
 
 /**
  * @brief Get the indicator index on Indicators namespace Array.

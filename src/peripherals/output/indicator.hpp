@@ -79,12 +79,31 @@ public:
     auto operator=(Indicator &&) -> Indicator & = delete;
 #endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
 
-    void setState(bool stateToSet);                                      // Set the new state
+    /**
+     * @brief Set the state of the indicator.
+     *
+     * @param stateToSet the state to set true=ON, false=OFF.
+     */
+    inline void setState(bool stateToSet)
+    {
+#ifdef CONFIG_USE_FAST_INDICATORS
+        if (!stateToSet)
+        {
+            *this->pinPort &= ~this->pinMask;
+        }
+        else
+        {
+            *this->pinPort |= this->pinMask;
+        }
+#else
+        digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToSet));
+#endif
+    }
     void setIndex(uint8_t indexToSet);                                   // Set the indicator index on Indicators namespace Array
     auto addActuator(uint8_t actuatorIndex) -> Indicator &;              // Add one actuator to controlled actuators vector
     auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &; // Set indicator mode
     void check();                                                        // Perform the actual check
-    void resizeVectors();                                                // Resize controlled actuators vector to its actual size.
+
     [[nodiscard]] auto getIndex() const -> uint8_t;                      // Get the indicator index on Indicators namespace Array
 };
 

@@ -60,6 +60,7 @@ private:
     };
 
     // Bitfield for configuration flags to save RAM. These are "cold" data, mostly read after setup.
+    // Data structures definitions
     struct ClickableConfigFlags
     {
         uint8_t isShortClickable : 1 = true;             //!< True if the clickable is short clickable
@@ -72,6 +73,9 @@ private:
         uint8_t isChecked : 1 = false;                   //!< True if we checked at least once the clickable validity
     };
 
+    // Bitfield for configuration flags to save RAM. "Hot" data, read every detection.
+    ClickableConfigFlags configFlags;
+
 #ifndef CONFIG_USE_FAST_CLICKABLES
     const uint8_t pinNumber; //!< The pin to which the clickable is connected to, for conventional IO
 #else
@@ -81,30 +85,29 @@ private:
     uint8_t index = 0U; //!< Clickable index on Clickables namespace Array
     const uint8_t id;   //!< Unique ID of the clickable (integer)
 
-    ClickableConfigFlags configFlags; //!< Configuration is stored in the bitfield.
+    // State variables for the FSM ("hot" data, move to top for <64 byte offset optimization).
+    State currentState = State::IDLE;                //!< The current state of the FSM.
+    uint32_t stateChangeTime = 0U;                   //!< Timestamp of the last state change.
+    ActionFired lastActionFired = ActionFired::NONE; //!< Tracks which timed action has already been triggered.
 
-    // Non-boolean configuration properties remain separate.
+    // Timings ("hot" configuration, move to top)
+    uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;            //!< Long click time in ms
+    uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS; //!< Super long click time in ms
+protected:
+    uint8_t debounce_ms = constants::timings::CLICKABLE_DEBOUNCE_TIME_MS; //!< Debounce time in ms
+private:
+
+    // Non-boolean configuration properties (Cold data, rarely accessed in tight loops)
     constants::LongClickType longClickType = constants::LongClickType::NONE;                    //!< Long clickability setting
     constants::NoNetworkClickType longClickFallback = constants::NoNetworkClickType::NONE;      //!< Fallback for long click over network
     constants::SuperLongClickType superLongClickType = constants::SuperLongClickType::NONE;     //!< Super long clickability setting
     constants::NoNetworkClickType superLongClickFallback = constants::NoNetworkClickType::NONE; //!< Fallback for super long click over network
 
-    // State variables for the FSM remain separate for fast access ("hot" data).
-    State currentState = State::IDLE;                //!< The current state of the FSM.
-    uint32_t stateChangeTime = 0U;                   //!< Timestamp of the last state change.
-    ActionFired lastActionFired = ActionFired::NONE; //!< Tracks which timed action has already been triggered.
-
-    // Attached actuators
+    // Attached actuators (HUGE size due to static storage)
+    // Keep at the bottom to avoid pushing hot variables out of the 64-byte displacement range.
     etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsShort{};     //!< Actuators controlled via short click
     etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsLong{};      //!< Actuators controlled via long click
     etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsSuperLong{}; //!< Actuators controlled via super long click
-
-    // Timings
-    uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;            //!< Long click time in ms
-    uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS; //!< Super long click time in ms
-
-protected:
-    uint8_t debounce_ms = constants::timings::CLICKABLE_DEBOUNCE_TIME_MS; //!< Debounce time in ms
 
 public:
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -133,7 +136,20 @@ public:
     auto operator=(Clickable &&) -> Clickable & = delete;
 #endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
 
-    [[nodiscard]] auto getState() -> bool; // Get the state of the clickable
+    /**
+     * @brief Get the state of the clickable if configured as INPUT with its external pulldown resistor (PIN -> BUTTON -> +12v/+5V).
+     *
+     * @return true if clicked.
+     * @return false if not clicked.
+     */
+    inline auto getState() const -> bool
+    {
+#ifdef CONFIG_USE_FAST_CLICKABLES
+        return (*this->pinPort & this->pinMask) != 0U;
+#else
+        return (static_cast<bool>(digitalRead(this->pinNumber)));
+#endif
+    }
 
     void setIndex(uint8_t indexToSet); // Set the Clickable index on Clickables namespace Array
 
@@ -175,7 +191,7 @@ public:
     [[nodiscard]] auto longClick() const -> bool;                  // Perform a long click action
     [[nodiscard]] auto superLongClickSelective() const -> bool;    // Perform a selective super long click;
     [[nodiscard]] auto clickDetection() -> constants::ClickResult; // Processes input state and determines the click type using an internal Finite State Machine (FSM).
-    void resizeVectors();                                          // Resize vectors to actual needed size
+
 };
 
 #endif // LSHCORE_PERIPHERALS_INPUT_CLICKABLE_HPP

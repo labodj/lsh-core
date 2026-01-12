@@ -80,10 +80,7 @@ namespace Indicators
     void finalizeSetup()
     {
         DP_CONTEXT();
-        for (auto *const indicator : indicators) // Resize vectors inside indicators
-        {
-            indicator->resizeVectors();
-        }
+        // Resize vectors was removed as it is redundant for etl::vector
     }
 
 } // namespace Indicators

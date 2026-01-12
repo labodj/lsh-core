@@ -26,20 +26,7 @@
 
 using constants::ClickType;
 
-/**
- * @brief Get the state of the clickable if configured as INPUT with its external pulldown resistor (PIN -> BUTTON -> +12v/+5V).
- *
- * @return true if clicked.
- * @return false if not clicked.
- */
-auto inline Clickable::getState() -> bool
-{
-#ifdef CONFIG_USE_FAST_CLICKABLES
-    return (*this->pinPort & this->pinMask) != 0U;
-#else
-    return (static_cast<bool>(digitalRead(this->pinNumber)));
-#endif
-}
+
 
 /**
  * @brief Store the Clickable index on Clickables namespace Array.
@@ -560,15 +547,4 @@ auto Clickable::clickDetection() -> constants::ClickResult
     }
     }
     return ClickResult::NO_CLICK;
-}
-
-/**
- * @brief Resize vectors to actual needed size
- *
- */
-void Clickable::resizeVectors()
-{
-    this->actuatorsShort.resize(this->actuatorsShort.size());
-    this->actuatorsLong.resize(this->actuatorsLong.size());
-    this->actuatorsSuperLong.resize(this->actuatorsSuperLong.size());
 }
