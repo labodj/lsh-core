@@ -107,8 +107,29 @@ namespace Serializer
         EspCom::sendJson(serializationDoc);
     }
 
+    namespace
+    {
+        /**
+         * @brief Lookup table for bit masks (8-bit).
+         * @details ESSENTIAL for AVR: AVR has no barrel shifter, so `1 << i` becomes
+         *          an O(i) loop (~i cycles). LUT provides O(1) lookup (~2 cycles).
+         *          For 12 actuators: ~66 cycles saved per serialization.
+         */
+        constexpr uint8_t BIT_MASK_8[8] = {
+            0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
+    } // anonymous namespace
+
     /**
-     * @brief Prepare and send a json actuators state payload (eg: {"p":2,"s":[0,1,0,1,...]}).
+     * @brief Prepare and send a JSON actuators state payload with bitpacked byte array.
+     * @details AVR-optimized packing using:
+     *          - LUT for O(1) bit mask lookup (essential, AVR has no barrel shifter)
+     *          - Bit shift `>>3` instead of `/8` (~1 cycle vs ~20-50 cycles)
+     *          - Per-byte loop structure (fewer outer iterations)
+     *          - Incremental index instead of multiplication (avoids `*8`)
+     *
+     *          Output format: {"p":2,"s":[byte0,byte1,...]}
+     *          Each byte contains 8 actuator states (bit 0 = first actuator in byte).
+     *          Example: 12 actuators → {"p":2,"s":[90,15]} (2 bytes vs 12 array elements)
      */
     void serializeActuatorsState()
     {
@@ -117,13 +138,31 @@ namespace Serializer
 
         serializationDoc.clear();
 
-        // Write the Json
-        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE); // "p":2   (Payload: Actuators State)
-        JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_STATE);        // "s": (State: ...)
+        // Calculate how many bytes we need: ceil(totalActuators / 8)
+        // Using >>3 instead of /8 (bit shift is MUCH faster on AVR, no division unit)
+        const uint8_t numBytes = (Actuators::totalActuators + 7U) >> 3U;
 
-        for (const auto *const actuator : Actuators::actuators)
+        // Create the JSON structure
+        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE); // "p":2
+        JsonArray stateArray = serializationDoc.createNestedArray(KEY_STATE);           // "s":[]
+
+        // Pack actuator states into bytes using optimized loop
+        // Using <<3 instead of *8 (bit shift is single cycle on AVR)
+        uint8_t actuatorIndex = 0U;
+        for (uint8_t byteIndex = 0U; byteIndex < numBytes; ++byteIndex)
         {
-            jsonActuators.add(static_cast<uint8_t>(actuator->getState())); // Convert bool to uint
+            uint8_t packedByte = 0U;
+
+            // Pack up to 8 actuators into this byte
+            for (uint8_t bitIndex = 0U; bitIndex < 8U && actuatorIndex < Actuators::totalActuators; ++bitIndex)
+            {
+                if (Actuators::actuators[actuatorIndex]->getState())
+                {
+                    packedByte |= BIT_MASK_8[bitIndex]; // LUT lookup: O(1), ~2 cycles
+                }
+                ++actuatorIndex;
+            }
+            stateArray.add(packedByte);
         }
 
         // Send the Json
@@ -131,7 +170,9 @@ namespace Serializer
     }
 
     /**
-     * @brief Prepares and sends a JSON network click payload (e.g., {"p":3,"t":1,"i":1,"c":0}).
+     * @brief Prepares and sends a JSON network click payload.
+     * @details Uses NETWORK_CLICK_REQUEST (p:3) for network click requests.
+     *          Example request:  {"p":3,"t":1,"i":7}
      *
      * @param clickableIndex The index of the clickable.
      * @param clickType The type of the click (long, super long).
@@ -144,8 +185,9 @@ namespace Serializer
 
         serializationDoc.clear();
 
-        // Write the Json
-        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::NETWORK_CLICK); // "p":3   (Payload: Network CLick)
+        // Select command based on confirm flag
+        const Command cmd = confirm ? Command::NETWORK_CLICK_CONFIRM : Command::NETWORK_CLICK_REQUEST;
+        serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(cmd);
 
         switch (clickType)
         {
@@ -160,7 +202,6 @@ namespace Serializer
         }
 
         serializationDoc[KEY_ID] = Clickables::clickables[clickableIndex]->getId(); // "i":7 (Button ID: 7)
-        serializationDoc[KEY_CONFIRM] = static_cast<uint8_t>(confirm);              // "c":0 (Confirm: false)
 
         // Send the Json
         EspCom::sendJson(serializationDoc);

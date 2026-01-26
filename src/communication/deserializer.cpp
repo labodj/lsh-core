@@ -136,14 +136,24 @@ namespace Deserializer
         case Command::SET_STATE:
         {
             const JsonArrayConst statesArray = doc[KEY_STATE];
-            if (statesArray.size() != Actuators::totalActuators)
-            {
-                break;
-            }
+            const uint8_t numBytes = statesArray.size();
+
+            // LUT for bit masks (re-using the same pattern as Serializer for consistency)
+            static constexpr uint8_t BIT_MASK_8[8] = {
+                0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
+
             bool anyStateChanged = false;
-            for (uint8_t i = 0; i < Actuators::totalActuators; ++i)
+            uint8_t actuatorIndex = 0;
+
+            for (uint8_t byteIndex = 0; byteIndex < numBytes && actuatorIndex < Actuators::totalActuators; ++byteIndex)
             {
-                anyStateChanged |= Actuators::actuators[i]->setState(statesArray[i].as<uint8_t>() == 1);
+                const uint8_t packedByte = statesArray[byteIndex].as<uint8_t>();
+                for (uint8_t bitIndex = 0; bitIndex < 8 && actuatorIndex < Actuators::totalActuators; ++bitIndex)
+                {
+                    const bool state = (packedByte & BIT_MASK_8[bitIndex]) != 0;
+                    anyStateChanged |= Actuators::actuators[actuatorIndex]->setState(state);
+                    ++actuatorIndex;
+                }
             }
             result.stateChanged = anyStateChanged;
             break;

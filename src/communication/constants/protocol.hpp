@@ -28,14 +28,13 @@ namespace LSH
     namespace protocol
     {
         // === JSON KEYS ===
-        constexpr const char *KEY_PAYLOAD = "p";         //!< Payload
+        constexpr const char *KEY_PAYLOAD = "p";         //!< Payload type (Command enum)
         constexpr const char *KEY_NAME = "n";            //!< Device Name
-        constexpr const char *KEY_ACTUATORS_ARRAY = "a"; //!< Actuators IDs
-        constexpr const char *KEY_BUTTONS_ARRAY = "b";   //!< Buttons IDs
-        constexpr const char *KEY_ID = "i";              //!< ID
-        constexpr const char *KEY_STATE = "s";           //!< Actuators State
+        constexpr const char *KEY_ACTUATORS_ARRAY = "a"; //!< Actuators IDs array
+        constexpr const char *KEY_BUTTONS_ARRAY = "b";   //!< Buttons IDs array
+        constexpr const char *KEY_ID = "i";              //!< Actuator/Button ID
+        constexpr const char *KEY_STATE = "s";           //!< Actuators State (bitpacked bytes array)
         constexpr const char *KEY_TYPE = "t";            //!< Click Type
-        constexpr const char *KEY_CONFIRM = "c";         //!< Confirm
 
         /**
          * @brief Defines the valid command types for the 'p' (payload) key in JSON messages.
@@ -43,22 +42,23 @@ namespace LSH
         enum class Command : uint8_t
         {
             // Arduino -> ESP
-            DEVICE_DETAILS = 1,
-            ACTUATORS_STATE = 2,
-            NETWORK_CLICK = 3,
+            DEVICE_DETAILS = 1,         //!< Device info: {"p":1,"n":"name","a":[ids],"b":[ids]}
+            ACTUATORS_STATE = 2,        //!< Bitpacked state: {"p":2,"s":[byte0,byte1,...]} (each byte = 8 actuators)
+            NETWORK_CLICK_REQUEST = 3,  //!< Network click request: {"p":3,"i":buttonId,"t":clickType}
+            NETWORK_CLICK_CONFIRM = 17, //!< Network click confirm after ACK received
 
             // Omnidirectional
-            BOOT = 4,
-            PING_ = 5,
+            BOOT = 4,  //!< Boot notification: {"p":4}
+            PING_ = 5, //!< Ping/heartbeat: {"p":5}
 
             // ESP -> Arduino (or MQTT -> ESP)
-            REQUEST_DETAILS = 10,
-            REQUEST_STATE = 11,
-            SET_STATE = 12,
-            SET_SINGLE_ACTUATOR = 13,
-            NETWORK_CLICK_ACK = 14,
-            FAILOVER = 15,
-            FAILOVER_CLICK = 16,
+            REQUEST_DETAILS = 10,     //!< Request device details: {"p":10}
+            REQUEST_STATE = 11,       //!< Request current state: {"p":11}
+            SET_STATE = 12,           //!< Set all actuators: {"p":12,"s":[byte0,byte1,...]}
+            SET_SINGLE_ACTUATOR = 13, //!< Set single actuator: {"p":13,"i":id,"s":0|1}
+            NETWORK_CLICK_ACK = 14,   //!< Acknowledge network click: {"p":14,"i":buttonId,"t":clickType}
+            FAILOVER = 15,            //!< General failover: {"p":15}
+            FAILOVER_CLICK = 16,      //!< Failover for specific click: {"p":16,"i":buttonId,"t":clickType}
 
             // ESP System command (MQTT -> ESP)
             SYSTEM_REBOOT = 254,
