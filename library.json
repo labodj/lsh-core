@@ -28,8 +28,8 @@
   "frameworks": "arduino",
   "platforms": "atmelavr",
   "dependencies": {
-    "etlcpp/Embedded Template Library": "^20.45.0",
-    "bblanchon/ArduinoJson": "^6.21.5"
+    "etlcpp/Embedded Template Library": "^20.46.2",
+    "bblanchon/ArduinoJson": "^6.21.6"
   },
   "build": {
     "libLDFMode": "deep+"
