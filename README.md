@@ -369,22 +369,11 @@ The same bootstrapping contract is used outside of clicks:
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
 
-### Shared Protocol Workflow
+The protocol maintenance workflow itself is documented once in [vendor/lsh-protocol/README.md](vendor/lsh-protocol/README.md). This README only keeps the `lsh-core`-specific invariants and runtime behavior.
 
-This repository vendors the shared wire-protocol source of truth at [vendor/lsh-protocol](vendor/lsh-protocol).
-
-Refresh the vendored copy:
+To verify that the generated protocol files in this repository are aligned with the vendored source of truth:
 
 ```bash
-git remote add lsh-protocol git@github.com:labodj/lsh-protocol.git || git remote set-url lsh-protocol git@github.com:labodj/lsh-protocol.git
-git fetch lsh-protocol
-git subtree pull --prefix=vendor/lsh-protocol lsh-protocol main --squash
-```
-
-Regenerate or verify the target-specific generated files:
-
-```bash
-python3 tools/update_lsh_protocol.py
 python3 tools/update_lsh_protocol.py --check
 ```
 
