@@ -35,6 +35,22 @@ namespace Clickables
     etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};       //!< Device clickables
     etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{}; //!< Device clickables map (UUID -> clickables index)
 
+    namespace
+    {
+        void failWrongClickableId()
+        {
+            using namespace constants::wrongConfigStrings;
+            NDSB();
+            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+            delay(10000);
+            deviceReset();
+        }
+    } // namespace
+
     /**
      * @brief Adds a clickable to the system.
      *
@@ -58,6 +74,12 @@ namespace Clickables
             delay(10000);
             deviceReset();
         }
+
+        if (clickable->getId() == 0U)
+        {
+            failWrongClickableId();
+        }
+
         clickable->setIndex(currentIndex);                // Store current index inside the object, it can be useful
         clickables[currentIndex] = clickable;             // Insert in array of clickables
         clickablesMap[clickable->getId()] = currentIndex; // Insert in map of clickables Map(UUID (integer) -> index in Vector)

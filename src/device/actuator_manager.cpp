@@ -34,6 +34,22 @@ namespace Actuators
     etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};          //!< Device actuators map (UUID -> actuator index)
     etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{}; //!< Indexes of actuators with auto off functionality active
 
+    namespace
+    {
+        void failWrongActuatorId()
+        {
+            using namespace constants::wrongConfigStrings;
+            NDSB();
+            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+            delay(10000);
+            deviceReset();
+        }
+    } // namespace
+
     /**
      * @brief Adds an actuator to the system.
      *
@@ -57,6 +73,12 @@ namespace Actuators
             delay(10000);
             deviceReset();
         }
+
+        if (actuator->getId() == 0U)
+        {
+            failWrongActuatorId();
+        }
+
         actuator->setIndex(currentIndex);   // Store current index inside the object, it can be useful
         actuators[currentIndex] = actuator; // Insert in array of actuators
         actuatorsMap[actuator->getId()] = currentIndex;

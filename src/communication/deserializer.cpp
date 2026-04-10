@@ -142,6 +142,25 @@ namespace Deserializer
         case Command::SET_STATE:
         {
             const JsonArrayConst statesArray = doc[KEY_STATE];
+            if (statesArray.isNull())
+            {
+                break;
+            }
+
+            const uint8_t expectedBytes = static_cast<uint8_t>((Actuators::totalActuators + 7U) / 8U);
+            if (statesArray.size() != expectedBytes)
+            {
+                break;
+            }
+
+            for (const JsonVariantConst packedByte : statesArray)
+            {
+                if (!packedByte.is<uint8_t>())
+                {
+                    return result;
+                }
+            }
+
             const uint8_t numBytes = statesArray.size();
 
             // LUT for bit masks (re-using the same pattern as Serializer for consistency)
