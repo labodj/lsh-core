@@ -364,9 +364,9 @@ Understanding the handshake between devices helps clarify when a fallback is tri
 The same bootstrapping contract is used outside of clicks:
 
 * `lsh-core` sends `BOOT` during startup after configuration has been finalized.
-* If the controller reboots while `lsh-esp` is online, the bridge forwards that `BOOT` on the device `misc` topic so Node-RED can request fresh `details + state`.
+* If the controller reboots while `lsh-esp` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
 * When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
-* This is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
+* This reboot-driven handshake is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
 
