@@ -74,6 +74,10 @@ namespace Serializer
         if (!payloadToSend.empty())
         {
             CONFIG_COM_SERIAL->write(payloadToSend.data(), payloadToSend.size());
+            if constexpr (constants::espComConfigs::COM_SERIAL_FLUSH_AFTER_SEND)
+            {
+                CONFIG_COM_SERIAL->flush();
+            }
             EspCom::updateLastSentTime();
         }
     }

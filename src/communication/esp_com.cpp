@@ -36,6 +36,7 @@ namespace EspCom
 #ifndef CONFIG_MSG_PACK
     char inputBuffer[constants::espComConfigs::RAW_INPUT_BUFFER_SIZE]; //!< Raw buffer for incoming serial data.
     size_t bytesRead = 0;                                              //!< Number of bytes currently in the inputBuffer.
+    bool discardInputUntilNewline = false;                             //!< True after an overflow until the trailing newline is consumed.
 #endif
 
     /**
@@ -112,6 +113,15 @@ namespace EspCom
         {
             char receivedChar = CONFIG_COM_SERIAL->read();
 
+            if (discardInputUntilNewline)
+            {
+                if (receivedChar == '\n')
+                {
+                    discardInputUntilNewline = false;
+                }
+                continue;
+            }
+
             // A newline character marks the end of a potential message.
             if (receivedChar == '\n')
             {
@@ -147,9 +157,12 @@ namespace EspCom
             else
             {
                 // Handle the rare case of a buffer overflow.
-                // Discard the corrupt message and start over to prevent parsing errors.
+                // Discard the corrupt message and ignore every following byte until the
+                // newline terminator, otherwise the payload tail could be misread as a
+                // fresh command on the next iterations.
                 DPL("Buffer overflow!");
                 bytesRead = 0;
+                discardInputUntilNewline = true;
             }
         }
         return {}; // No complete message received in this cycle

@@ -40,6 +40,7 @@ namespace EspCom
 #ifndef CONFIG_MSG_PACK
     extern char inputBuffer[constants::espComConfigs::RAW_INPUT_BUFFER_SIZE];
     extern size_t bytesRead;
+    extern bool discardInputUntilNewline;
 #endif
 
     void init();                                               // Initialize serial
