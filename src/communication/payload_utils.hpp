@@ -21,9 +21,8 @@
 #ifndef LSHCORE_COMMUNICATION_PAYLOAD_UTILS_HPP
 #define LSHCORE_COMMUNICATION_PAYLOAD_UTILS_HPP
 
-#include <etl/span.h>
-
 #include "communication/constants/static_payloads.hpp"
+#include "internal/etl_span.hpp"
 
 namespace utils::payloads
 {

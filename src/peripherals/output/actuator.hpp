@@ -56,7 +56,7 @@ public:
      * @param uniqueId the actuator unique id.
      * @param normalState the default state of the actuator.
      */
-    explicit constexpr Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinNumber(pin), defaultState(normalState), id(uniqueId)
+    explicit constexpr Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinNumber(pin), defaultState(normalState), actualState(normalState), id(uniqueId)
     {
         pinMode(pin, OUTPUT);                                 // PinMode to Output
         digitalWrite(pin, static_cast<uint8_t>(normalState)); // Set the default state
@@ -69,7 +69,7 @@ public:
      * @param uniqueId the actuator unique id.
      * @param normalState the default state of the actuator.
      */
-    explicit Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinMask(digitalPinToBitMask(pin)), pinPort(portOutputRegister(digitalPinToPort(pin))), defaultState(normalState), id(uniqueId)
+    explicit Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinMask(digitalPinToBitMask(pin)), pinPort(portOutputRegister(digitalPinToPort(pin))), defaultState(normalState), actualState(normalState), id(uniqueId)
     {
         // PinMode to OUTPUT
         uint8_t port = digitalPinToPort(pin);

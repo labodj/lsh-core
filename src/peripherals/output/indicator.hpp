@@ -21,9 +21,9 @@
 #ifndef LSHCORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
 #define LSHCORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
 
-#include <etl/vector.h>
 #include <stdint.h>
 
+#include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/indicatormodes.hpp"
 

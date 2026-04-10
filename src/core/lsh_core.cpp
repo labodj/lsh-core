@@ -56,9 +56,11 @@ namespace LSH
         DPL(FPSTR(dStr::COMPILED_BY_GCC), FPSTR(dStr::SPACE), __GNUC__, FPSTR(dStr::POINT), __GNUC_MINOR__, FPSTR(dStr::POINT), __GNUC_PATCHLEVEL__);
         timeKeeper::update();
         EspCom::init();
-        Configurator::configure();                                              // Apply configuration
-        Configurator::finalizeSetup();                                          // Finalize configuration
-        Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT); // Start first communication, send boot payload
+        Configurator::configure();     // Apply user configuration and register the real runtime topology.
+        Configurator::finalizeSetup(); // Finalize setup for the actually registered devices only.
+        // BOOT invalidates the bridge-side model: after any reboot the ESP must re-sync
+        // details and state instead of assuming any previously cached topology.
+        Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT);
         DFM();
     }
 

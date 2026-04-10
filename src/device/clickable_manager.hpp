@@ -21,10 +21,10 @@
 #ifndef LSHCORE_DEVICE_CLICKABLE_MANAGER_HPP
 #define LSHCORE_DEVICE_CLICKABLE_MANAGER_HPP
 
-#include <etl/array.h>
-#include <etl/map.h>
 #include <stdint.h>
 
+#include "internal/etl_array.hpp"
+#include "internal/etl_map.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/clicktypes.hpp"
 

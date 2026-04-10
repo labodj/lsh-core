@@ -40,7 +40,7 @@ namespace timeKeeper
      *
      * @return The cached time in milliseconds.
      */
-    inline auto getTime() -> const uint32_t
+    inline auto getTime() -> uint32_t
     {
         return now;
     }

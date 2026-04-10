@@ -62,7 +62,13 @@ namespace EspCom
         serializeJson(json, *CONFIG_COM_SERIAL);
         CONFIG_COM_SERIAL->write("\n", 1); // Add a newline character after sending the JSON payload.
 #endif // CONFIG_MSG_PACK
-        CONFIG_COM_SERIAL->flush();
+        if constexpr (constants::espComConfigs::COM_SERIAL_FLUSH_AFTER_SEND)
+        {
+            // Conservative default: this path is the currently validated, known-good setup.
+            // The compile-time switch exists only to evaluate whether the link stays
+            // resilient even without a blocking flush after each send.
+            CONFIG_COM_SERIAL->flush();
+        }
         DP(FPSTR(dStr::JSON_SENT), FPSTR(dStr::COLON_SPACE));
         DPJ(json);
         updateLastSentTime();

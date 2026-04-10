@@ -89,18 +89,23 @@ namespace Serializer
         serializationDoc.clear();
 
         serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::DEVICE_DETAILS); // "p":"1" (Payload: Device Details)
+        serializationDoc[KEY_PROTOCOL_MAJOR] = WIRE_PROTOCOL_MAJOR;                     // "v":2   (Handshake-only protocol major)
         serializationDoc[KEY_NAME] = CONFIG_DEVICE_NAME;                               // "n":"c1" (Device Name: c1)
 
         JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_ACTUATORS_ARRAY); // "a": (Actuators IDs: ...)
-        for (const auto *const actuator : Actuators::actuators)
+        auto *const actuatorBegin = Actuators::actuators.data();
+        auto *const actuatorEnd = actuatorBegin + Actuators::totalActuators;
+        for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator)
         {
-            jsonActuators.add(actuator->getId());
+            jsonActuators.add((*currActuator)->getId());
         }
 
         JsonArray jsonClickables = serializationDoc.createNestedArray(KEY_BUTTONS_ARRAY); // "b": (Buttons IDs: ...)
-        for (const auto *const clickable : Clickables::clickables)
+        auto *const clickableBegin = Clickables::clickables.data();
+        auto *const clickableEnd = clickableBegin + Clickables::totalClickables;
+        for (auto *currClickable = clickableBegin; currClickable != clickableEnd; ++currClickable)
         {
-            jsonClickables.add(clickable->getId());
+            jsonClickables.add((*currClickable)->getId());
         }
 
         // Send the Json
@@ -172,13 +177,14 @@ namespace Serializer
     /**
      * @brief Prepares and sends a JSON network click payload.
      * @details Uses NETWORK_CLICK_REQUEST (p:3) for network click requests.
-     *          Example request:  {"p":3,"t":1,"i":7}
+     *          Example request:  {"p":3,"t":1,"i":7,"c":42}
      *
      * @param clickableIndex The index of the clickable.
      * @param clickType The type of the click (long, super long).
      * @param confirm Set to true to confirm the action after an ACK has been received.
+     * @param correlationId The correlation ID that ties request, ack, failover and confirm together.
      */
-    void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm)
+    void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm, uint8_t correlationId)
     {
         DP_CONTEXT();
         using namespace LSH::protocol;
@@ -202,6 +208,7 @@ namespace Serializer
         }
 
         serializationDoc[KEY_ID] = Clickables::clickables[clickableIndex]->getId(); // "i":7 (Button ID: 7)
+        serializationDoc[KEY_CORRELATION_ID] = correlationId;                        // "c":42 (Correlation ID)
 
         // Send the Json
         EspCom::sendJson(serializationDoc);

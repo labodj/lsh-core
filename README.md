@@ -12,7 +12,7 @@ LSH is a complete, distributed home automation system composed of three distinct
 
 * **`lsh-core` (This Project):** The heart of the physical layer. This C++23 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
 
-* **`lsh-bridge`:** A lightweight firmware designed for an ESP32. It acts as a transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
+* **`lsh-esp` (`lsh-bridge`):** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
 
 * **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
 
@@ -35,6 +35,17 @@ The three components work together to create a robust and responsive system.
                                                                                  | --(5) Command --+
                                                                                  +-----------------+
 ```
+
+### Operational Invariants
+
+The serial contract between `lsh-core` and `lsh-esp` is intentionally strict:
+
+* The device topology is built during `Configurator::configure()` and is considered static until the next controller reboot.
+* `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define **maximum accepted capacity**, not the real cardinality of the configured device.
+* The real runtime counts are determined by how many times `addActuator()`, `addClickable()`, and `addIndicator()` are actually called.
+* `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
+* A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
+* The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
 
 ### API Documentation
 
@@ -111,6 +122,12 @@ All device-specific logic is defined in the `Configurator::configure()` function
 * `addClickable(Clickable* clickable)`: Registers a clickable with the system.
 * `addIndicator(Indicator* indicator)`: Registers an indicator with the system.
 * `getIndex(const Actuator& actuator)`: A crucial helper that returns the unique internal index of a registered actuator. You **must** use this function when connecting an actuator to a button or indicator, as shown below:
+
+Important capacity rule:
+
+* `LSH_MAX_*` macros size the fixed-capacity containers used by the firmware.
+* The real number of registered devices can be lower than the declared maximum.
+* For best RAM/code efficiency you will often set the maximum equal to the real count, but this is an optimization choice, not a functional requirement.
 
 ```cpp
 // GOOD: Connects the button to the actuator using its safe index.
@@ -344,6 +361,14 @@ Understanding the handshake between devices helps clarify when a fallback is tri
 7. **Execution:** Upon receiving the ACK, `lsh-core` stops its timeout, confirms the action (e.g., with a quick LED blink), and sends a final confirmation message to `lsh-bridge` ("Button ID 5, Long Click, Confirmed").
 8. **Final Action:** `lsh-logic` receives the final confirmation and executes the network-wide automation (e.g., turning on lights on three different devices).
 
+The same bootstrapping contract is used outside of clicks:
+
+* `lsh-core` sends `BOOT` during startup after configuration has been finalized.
+* When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
+* This is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
+
+For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [../shared/lsh_protocol.md](../shared/lsh_protocol.md).
+
 #### When is Fallback Logic Triggered?
 
 The configured fallback logic is applied instantly if any step in this chain fails:
@@ -432,6 +457,17 @@ These flags allow you to override the default timing behavior of the framework. 
 * **Default:** `PING_INTERVAL_MS + 200U`
 * **Description:** The duration after the last received message from `lsh-bridge` before `lsh-core` considers the connection to be lost.
 * **Example:** `-D CONFIG_CONNECTION_TIMEOUT_MS=15500U`
+
+#### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`
+
+* **Default:** `1` (`enabled`)
+* **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to the ESP bridge.
+* **Current status:** The system is currently validated with `flush()` enabled and in this configuration it works correctly and reliably.
+* **Why this exists:** This flag is exposed only to evaluate whether the serial link remains resilient even without `flush()`, potentially reducing blocking time on send.
+* **Recommendation:** Keep it enabled unless you are deliberately benchmarking or stress-testing the serial path without flush.
+* **Examples:**
+  * Keep the validated behavior: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=1`
+  * Experimental mode without flush: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
 
 ### Benchmarking (for developers)
 

@@ -159,9 +159,11 @@ namespace Clickables
     void finalizeSetup()
     {
         DP_CONTEXT();
-        for (auto *const clickable : clickables) // Resize vectors inside clickable
+        auto *const clickableBegin = clickables.data();
+        auto *const clickableEnd = clickableBegin + totalClickables;
+        for (auto *currClickable = clickableBegin; currClickable != clickableEnd; ++currClickable)
         {
-            clickable->check();
+            (*currClickable)->check();
         }
         if (clickablesMap.size() != totalClickables)
         {

@@ -23,8 +23,7 @@
 
 #include <stdint.h>
 
-#include <etl/array.h>
-
+#include "internal/etl_array.hpp"
 #include "internal/user_config_bridge.hpp"
 
 class Indicator; //!< Forward declaration

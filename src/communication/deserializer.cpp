@@ -51,6 +51,7 @@ namespace Deserializer
             // Directly get numeric values..as<uint8_t>() returns 0 if key is missing / null.
             const auto jsonClickType = doc[KEY_TYPE].as<uint8_t>();
             const auto clickableId = doc[KEY_ID].as<uint8_t>();
+            const auto correlationId = doc[KEY_CORRELATION_ID].as<uint8_t>();
 
             // A single check for existence handles missing keys (id=0) and invalid IDs.
             if (!Clickables::clickableExists(clickableId))
@@ -71,6 +72,11 @@ namespace Deserializer
             }
 
             const uint8_t clickableIndex = Clickables::getIndex(clickableId);
+            if (!NetworkClicks::matchesCorrelationId(clickableIndex, clickType, correlationId))
+            {
+                DPL("Ignoring stale or mismatched network click response for clickable ID ", clickableId, " with correlation ID ", correlationId, ".");
+                return;
+            }
 
             if (cmd == Command::FAILOVER_CLICK)
             {
@@ -179,6 +185,8 @@ namespace Deserializer
             break;
 
         case Command::BOOT:
+            // BOOT is the only supported topology resync trigger. The controller topology is
+            // static between reboots, so this always means "send fresh details and full state".
             Serializer::serializeDetails();
             Serializer::serializeActuatorsState();
             result.stateChanged = false;

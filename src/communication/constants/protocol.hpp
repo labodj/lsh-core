@@ -1,21 +1,7 @@
 /**
- * @file    protocol.hpp
- * @author  Jacopo Labardi (labodj)
- * @brief   Defines the communication protocol contract (JSON keys, command IDs).
- *
- * Copyright 2025 Jacopo Labardi
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @file Auto-generated from shared/lsh_protocol.json.
+ * @brief Defines the communication protocol contract (JSON keys and command IDs).
+ * @note Do not edit manually. Run tools/generate_lsh_protocol.py instead.
  */
 
 #ifndef LSHCORE_COMMUNICATION_CONSTANTS_PROTOCOL_HPP
@@ -27,51 +13,49 @@ namespace LSH
 {
     namespace protocol
     {
+        inline constexpr uint32_t SPEC_REVISION = 2026041003U; //!< Code-only revision, never transmitted on wire.
+        inline constexpr uint8_t WIRE_PROTOCOL_MAJOR = 3U; //!< Handshake-only protocol major, transmitted only in DEVICE_DETAILS.
+
         // === JSON KEYS ===
-        constexpr const char *KEY_PAYLOAD = "p";         //!< Payload type (Command enum)
-        constexpr const char *KEY_NAME = "n";            //!< Device Name
-        constexpr const char *KEY_ACTUATORS_ARRAY = "a"; //!< Actuators IDs array
-        constexpr const char *KEY_BUTTONS_ARRAY = "b";   //!< Buttons IDs array
-        constexpr const char *KEY_ID = "i";              //!< Actuator/Button ID
-        constexpr const char *KEY_STATE = "s";           //!< Actuators State (bitpacked bytes array)
-        constexpr const char *KEY_TYPE = "t";            //!< Click Type
+        inline constexpr char KEY_PAYLOAD[] = "p";
+        inline constexpr char KEY_PROTOCOL_MAJOR[] = "v";
+        inline constexpr char KEY_NAME[] = "n";
+        inline constexpr char KEY_ACTUATORS_ARRAY[] = "a";
+        inline constexpr char KEY_BUTTONS_ARRAY[] = "b";
+        inline constexpr char KEY_CORRELATION_ID[] = "c";
+        inline constexpr char KEY_ID[] = "i";
+        inline constexpr char KEY_STATE[] = "s";
+        inline constexpr char KEY_TYPE[] = "t";
 
         /**
-         * @brief Defines the valid command types for the 'p' (payload) key in JSON messages.
+         * @brief Valid command types for the 'p' (payload) key.
          */
         enum class Command : uint8_t
         {
-            // Arduino -> ESP
-            DEVICE_DETAILS = 1,         //!< Device info: {"p":1,"n":"name","a":[ids],"b":[ids]}
-            ACTUATORS_STATE = 2,        //!< Bitpacked state: {"p":2,"s":[byte0,byte1,...]} (each byte = 8 actuators)
-            NETWORK_CLICK_REQUEST = 3,  //!< Network click request: {"p":3,"i":buttonId,"t":clickType}
-            NETWORK_CLICK_CONFIRM = 17, //!< Network click confirm after ACK received
-
-            // Omnidirectional
-            BOOT = 4,  //!< Boot notification: {"p":4}
-            PING_ = 5, //!< Ping/heartbeat: {"p":5}
-
-            // ESP -> Arduino (or MQTT -> ESP)
-            REQUEST_DETAILS = 10,     //!< Request device details: {"p":10}
-            REQUEST_STATE = 11,       //!< Request current state: {"p":11}
-            SET_STATE = 12,           //!< Set all actuators: {"p":12,"s":[byte0,byte1,...]}
-            SET_SINGLE_ACTUATOR = 13, //!< Set single actuator: {"p":13,"i":id,"s":0|1}
-            NETWORK_CLICK_ACK = 14,   //!< Acknowledge network click: {"p":14,"i":buttonId,"t":clickType}
-            FAILOVER = 15,            //!< General failover: {"p":15}
-            FAILOVER_CLICK = 16,      //!< Failover for specific click: {"p":16,"i":buttonId,"t":clickType}
-
-            // ESP System command (MQTT -> ESP)
-            SYSTEM_REBOOT = 254,
-            SYSTEM_RESET = 255
+            DEVICE_DETAILS = 1, //!< Device details payload with handshake-only protocol major.
+            ACTUATORS_STATE = 2, //!< Bitpacked actuator state payload.
+            NETWORK_CLICK_REQUEST = 3, //!< Network click request with correlation ID.
+            BOOT = 4, //!< Boot notification.
+            PING_ = 5, //!< Ping or heartbeat payload.
+            REQUEST_DETAILS = 10, //!< Request device details.
+            REQUEST_STATE = 11, //!< Request current state.
+            SET_STATE = 12, //!< Set all actuators.
+            SET_SINGLE_ACTUATOR = 13, //!< Set a single actuator.
+            NETWORK_CLICK_ACK = 14, //!< Acknowledge a network click with correlation ID.
+            FAILOVER = 15, //!< General failover signal.
+            FAILOVER_CLICK = 16, //!< Failover for a specific click with correlation ID.
+            NETWORK_CLICK_CONFIRM = 17, //!< Confirm a network click after ACK using the same correlation ID.
+            SYSTEM_REBOOT = 254, //!< ESP system reboot command.
+            SYSTEM_RESET = 255, //!< ESP system reset command.
         };
 
         /**
-         * @brief Defines the valid click types for the 't' (type) key in JSON messages.
+         * @brief Valid click types for the 't' (type) key.
          */
         enum class ProtocolClickType : uint8_t
         {
             LONG = 1,
-            SUPER_LONG = 2
+            SUPER_LONG = 2,
         };
 
     } // namespace protocol

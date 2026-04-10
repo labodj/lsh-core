@@ -34,6 +34,52 @@ namespace NetworkClicks
 {
     namespace
     {
+        uint8_t nextCorrelationId = 0U; //!< Monotonic 8-bit generator. 0 is reserved as "missing/invalid".
+
+        auto getCorrelationStorage(constants::ClickType clickType) -> etl::array<uint8_t, CONFIG_MAX_CLICKABLES> *
+        {
+            using constants::ClickType;
+            switch (clickType)
+            {
+            case ClickType::LONG:
+                return &longClickedCorrelationIds;
+            case ClickType::SUPER_LONG:
+                return &superLongClickedCorrelationIds;
+            default:
+                return nullptr;
+            }
+        }
+
+        auto generateCorrelationId() -> uint8_t
+        {
+            ++nextCorrelationId;
+            if (nextCorrelationId == 0U)
+            {
+                ++nextCorrelationId;
+            }
+            return nextCorrelationId;
+        }
+
+        void clearCorrelationId(uint8_t clickableIndex, constants::ClickType clickType)
+        {
+            auto *const correlationStorage = getCorrelationStorage(clickType);
+            if (correlationStorage == nullptr)
+            {
+                return;
+            }
+            (*correlationStorage)[clickableIndex] = 0U;
+        }
+
+        auto getStoredCorrelationId(uint8_t clickableIndex, constants::ClickType clickType) -> uint8_t
+        {
+            auto *const correlationStorage = getCorrelationStorage(clickType);
+            if (correlationStorage == nullptr)
+            {
+                return 0U;
+            }
+            return (*correlationStorage)[clickableIndex];
+        }
+
         /**
          * @brief Timeout checks for a specific type of network-pending clickables.
          *
@@ -60,6 +106,7 @@ namespace NetworkClicks
                     {
                         localFallbackPerformed |= Clickables::click(clickable, clickType);
                     }
+                    clearCorrelationId(it->first, clickType);
                     map->erase(it++); // Erase and increment
                 }
                 else
@@ -75,6 +122,8 @@ namespace NetworkClicks
 
     etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> longClickedNetworkClickables{};      //!< Map of long clicked network clickable (<Clickable index, stored time>)
     etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> superLongClickedNetworkClickables{}; //!< Map of super long clicked network clickable (<Clickable index, stored time>)
+    etl::array<uint8_t, CONFIG_MAX_CLICKABLES> longClickedCorrelationIds{};                 //!< Correlation IDs for active long clicks, indexed by clickable index.
+    etl::array<uint8_t, CONFIG_MAX_CLICKABLES> superLongClickedCorrelationIds{};            //!< Correlation IDs for active super-long clicks, indexed by clickable index.
 
     /**
      * @brief Initiates a network click action.
@@ -87,8 +136,8 @@ namespace NetworkClicks
     void request(uint8_t clickableIndex, constants::ClickType clickType)
     {
         DP_CONTEXT();
-        Serializer::serializeNetworkClick(clickableIndex, clickType, false);
         storeNetworkClickTime(clickableIndex, clickType);
+        Serializer::serializeNetworkClick(clickableIndex, clickType, false, getStoredCorrelationId(clickableIndex, clickType));
     }
 
     /**
@@ -101,7 +150,13 @@ namespace NetworkClicks
     auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
     {
         DP_CONTEXT();
-        Serializer::serializeNetworkClick(clickableIndex, clickType, true);
+        const uint8_t correlationId = getStoredCorrelationId(clickableIndex, clickType);
+        if (correlationId == 0U)
+        {
+            return thereAreActiveNetworkCLicks();
+        }
+
+        Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId);
         eraseNetworkClick(clickableIndex, clickType);
         return thereAreActiveNetworkCLicks();
     }
@@ -139,6 +194,20 @@ namespace NetworkClicks
         }
 
         (*map)[clickableIndex] = timeKeeper::getTime();
+        auto *const correlationStorage = getCorrelationStorage(clickType);
+        if (correlationStorage != nullptr)
+        {
+            (*correlationStorage)[clickableIndex] = generateCorrelationId();
+        }
+    }
+
+    auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId) -> bool
+    {
+        if (correlationId == 0U)
+        {
+            return false;
+        }
+        return getStoredCorrelationId(clickableIndex, clickType) == correlationId;
     }
 
     /**
@@ -181,6 +250,7 @@ namespace NetworkClicks
         {
             map->erase(it);
         }
+        clearCorrelationId(clickableIndex, clickType);
     }
 
     /**
@@ -216,6 +286,7 @@ namespace NetworkClicks
         }
         if (timeKeeper::getTime() - it->second > LCNB_TIMEOUT_MS) // It's expired
         {
+            clearCorrelationId(clickableIndex, clickType);
             map->erase(it); // Erase it for convenience
             return true;
         }
@@ -268,6 +339,7 @@ namespace NetworkClicks
                 {
                     localFallbackPerformed |= Clickables::click(clickable, clickType);
                 }
+                clearCorrelationId(clickableIndex, clickType);
                 map->erase(it);
             }
         }

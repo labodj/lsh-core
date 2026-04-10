@@ -35,7 +35,7 @@ namespace Serializer
     void serializeStaticJson(constants::payloads::StaticType payloadType);                            // Send a static json payload
     void serializeDetails();                                                                          // Prepare and send json details payload
     void serializeActuatorsState();                                                                   // Prepare and send a json actuators state payload
-    void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm); // Prepare and send a json network click payload
+    void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm, uint8_t correlationId); // Prepare and send a json network click payload
 } // namespace Serializer
 
 #endif // LSHCORE_COMMUNICATION_SERIALIZER_HPP

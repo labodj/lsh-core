@@ -21,9 +21,10 @@
 #ifndef LSHCORE_CORE_NETWORK_CLICKS_HPP
 #define LSHCORE_CORE_NETWORK_CLICKS_HPP
 
-#include <etl/map.h>
 #include <stdint.h>
 
+#include "internal/etl_array.hpp"
+#include "internal/etl_map.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/clicktypes.hpp"
 /**
@@ -34,11 +35,14 @@ namespace NetworkClicks
 {
     extern etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> longClickedNetworkClickables;      //!< Map of long clicked network clickable (<Clickable index, stored time>)
     extern etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> superLongClickedNetworkClickables; //!< Map of super long clicked network clickable (<Clickable index, stored time>)
+    extern etl::array<uint8_t, CONFIG_MAX_CLICKABLES> longClickedCorrelationIds;                 //!< Correlation IDs for active long clicks, indexed by clickable index.
+    extern etl::array<uint8_t, CONFIG_MAX_CLICKABLES> superLongClickedCorrelationIds;            //!< Correlation IDs for active super-long clicks, indexed by clickable index.
 
     // Network clicks
     void request(uint8_t clickableIndex, constants::ClickType clickType);                                                     // Initiates a network click action.
     [[nodiscard]] auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool;                               // Confirms a pending network click action after receiving an ACK
     void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType);                                       // Store click time for a network attached clickable
+    [[nodiscard]] auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId) -> bool; // Returns true if the active click matches the given correlation ID.
     [[nodiscard]] auto thereAreActiveNetworkCLicks() -> bool;                                                                 // Returns if there are active stored network clicks
     void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType);                                           // Erase a stored network click
     [[nodiscard]] auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickType) -> bool;                 // Returns true if the timer of the clickable has passed the threshold, false otherwise

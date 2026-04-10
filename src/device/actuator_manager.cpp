@@ -166,10 +166,12 @@ namespace Actuators
     {
         DP_CONTEXT();
         bool anySwitchPerformed = false;
-        for (uint8_t i = 0U; const bool state : states)
+        auto *const actuatorBegin = actuators.data();
+        auto *const actuatorEnd = actuatorBegin + totalActuators;
+        const bool *stateIt = states.data();
+        for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++stateIt)
         {
-            anySwitchPerformed |= actuators[i]->setState(state);
-            i++;
+            anySwitchPerformed |= (*currActuator)->setState(*stateIt);
         }
         return anySwitchPerformed;
     }
@@ -187,16 +189,16 @@ namespace Actuators
             return;
         }
 
-        for (uint8_t i = 0U; const auto *const actuator : actuators)
+        auto *const actuatorBegin = actuators.data();
+        auto *const actuatorEnd = actuatorBegin + totalActuators;
+        uint8_t i = 0U;
+        for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++i)
         {
-            if (actuator->hasAutoOff())
+            if ((*currActuator)->hasAutoOff())
             {
                 actuatorsWithAutoOffIndexes.push_back(i);
             }
-            i++;
         }
-
-
 
         if (actuatorsMap.size() != totalActuators)
         {
