@@ -31,8 +31,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # This is important! It ensures that if you add Git submodules
-          # (like for a theme), they are also checked out.
+          # Keep recursive checkout enabled. It is harmless for the current
+          # subtree-based layout and future-proofs the workflow if the docs
+          # pipeline ever adds submodules again.
           submodules: "recursive"
 
       # Step 2: Install Doxygen and Graphviz
