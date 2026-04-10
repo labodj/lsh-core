@@ -70,7 +70,7 @@ namespace constants
                 /*
                 Received Json Document Size, the size is computed here https://arduinojson.org/v6/assistant/
                 Processor: AVR, Mode: Deserialize, Input Type: Stream
-                {"p":"10} -> min: 10, recommended: 24
+                {"p":10} -> min: 10, recommended: 24
                               -> (JSON_OBJECT_SIZE(1) + number of strings + string characters number)
                               -> (8 + 2 + 6 = 16)
                 {"p":12,"s":[0,1,0,1,0,...]} -> min: JSON_ARRAY_SIZE(N) + JSON_OBJECT_SIZE(2) + number of strings + string characters number
@@ -103,7 +103,7 @@ namespace constants
                 /*
                 Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *
-                {"p":1,"v":2,"n":"c1","a":[1,2,...],"b":[1,3,...]} -> JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) + JSON_OBJECT_SIZE(5)
+                {"p":1,"v":3,"n":"c1","a":[1,2,...],"b":[1,3,...]} -> JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) + JSON_OBJECT_SIZE(5)
                                                                     -> 8*CONFIG_MAX_ACTUATORS + 8*CONFIG_MAX_CLICKABLES + 40
                 The bare minimum is 40 with no actuators nor clickables
                 */
@@ -120,7 +120,7 @@ namespace constants
                 /*
                 Sent network click Json Document, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *
-                {"p":3,"t":1,"i":1,"c":0} -> JSON_OBJECT_SIZE(4) -> 32
+                {"p":3,"t":1,"i":1,"c":42} -> JSON_OBJECT_SIZE(4) -> 32
                 */
                 constexpr uint16_t SENT_DOC_NETWORK_CLICK_SIZE = JSON_OBJECT_SIZE(4); //!< Calculated size for the JSON document sent for network clicks.
 

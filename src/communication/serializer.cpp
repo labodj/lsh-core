@@ -79,7 +79,7 @@ namespace Serializer
     }
 
     /**
-     * @brief Prepare and send json details payload (eg: {"p":1,"n":"c1","a":[1,2,...],"b":[1,3,...]}).
+     * @brief Prepare and send json details payload (eg: {"p":1,"v":3,"n":"c1","a":[1,2,...],"b":[1,3,...]}).
      */
     void serializeDetails()
     {
@@ -89,7 +89,7 @@ namespace Serializer
         serializationDoc.clear();
 
         serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::DEVICE_DETAILS); // "p":"1" (Payload: Device Details)
-        serializationDoc[KEY_PROTOCOL_MAJOR] = WIRE_PROTOCOL_MAJOR;                     // "v":2   (Handshake-only protocol major)
+        serializationDoc[KEY_PROTOCOL_MAJOR] = WIRE_PROTOCOL_MAJOR;                     // "v":3   (Handshake-only protocol major)
         serializationDoc[KEY_NAME] = CONFIG_DEVICE_NAME;                               // "n":"c1" (Device Name: c1)
 
         JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_ACTUATORS_ARRAY); // "a": (Actuators IDs: ...)
