@@ -367,7 +367,26 @@ The same bootstrapping contract is used outside of clicks:
 * When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
 * This is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
 
-For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [../shared/lsh_protocol.md](../shared/lsh_protocol.md).
+For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
+
+### Shared Protocol Workflow
+
+This repository vendors the shared wire-protocol source of truth at [vendor/lsh-protocol](vendor/lsh-protocol).
+
+Refresh the vendored copy:
+
+```bash
+git remote add lsh-protocol git@github.com:labodj/lsh-protocol.git || git remote set-url lsh-protocol git@github.com:labodj/lsh-protocol.git
+git fetch lsh-protocol
+git subtree pull --prefix=vendor/lsh-protocol lsh-protocol main --squash
+```
+
+Regenerate or verify the target-specific generated files:
+
+```bash
+python3 tools/update_lsh_protocol.py
+python3 tools/update_lsh_protocol.py --check
+```
 
 #### When is Fallback Logic Triggered?
 
