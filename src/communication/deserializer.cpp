@@ -86,8 +86,7 @@ namespace Deserializer
             {
                 if (!NetworkClicks::isNetworkClickExpired(clickableIndex, clickType))
                 {
-                    result.stateChanged = NetworkClicks::confirm(clickableIndex, clickType);
-                    result.networkClickHandled = result.stateChanged;
+                    result.networkClickHandled = NetworkClicks::confirm(clickableIndex, clickType);
                 }
             }
         }

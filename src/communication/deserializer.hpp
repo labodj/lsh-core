@@ -35,7 +35,7 @@ namespace Deserializer
     struct DispatchResult
     {
         bool stateChanged = false;        //!< True if the device state was changed by the command.
-        bool networkClickHandled = false; //!< True if a network click was confirmed or handled.
+        bool networkClickHandled = false; //!< True if network click timer processing must remain active after this dispatch.
     };
 
     auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult; //!<  Main entry point for command processing.
