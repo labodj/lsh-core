@@ -13,7 +13,7 @@ namespace LSH
 {
     namespace protocol
     {
-        inline constexpr uint32_t SPEC_REVISION = 2026041003U; //!< Code-only revision, never transmitted on wire.
+        inline constexpr uint32_t SPEC_REVISION = 2026041004U; //!< Code-only revision, never transmitted on wire.
         inline constexpr uint8_t WIRE_PROTOCOL_MAJOR = 3U; //!< Handshake-only protocol major, transmitted only in DEVICE_DETAILS.
 
         // === JSON KEYS ===
@@ -35,7 +35,7 @@ namespace LSH
             DEVICE_DETAILS = 1, //!< Device details payload with handshake-only protocol major.
             ACTUATORS_STATE = 2, //!< Bitpacked actuator state payload.
             NETWORK_CLICK_REQUEST = 3, //!< Network click request with correlation ID.
-            BOOT = 4, //!< Boot notification.
+            BOOT = 4, //!< Controller boot notification and re-sync trigger.
             PING_ = 5, //!< Ping or heartbeat payload.
             REQUEST_DETAILS = 10, //!< Request device details.
             REQUEST_STATE = 11, //!< Request current state.
