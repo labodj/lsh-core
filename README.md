@@ -10,11 +10,11 @@ This document serves as the official guide for using the `lsh-core` library in y
 
 LSH is a complete, distributed home automation system composed of three distinct, open-source projects:
 
-* **`lsh-core` (This Project):** The heart of the physical layer. This C++23 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
+- **`lsh-core` (This Project):** The heart of the physical layer. This C++23 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
 
-* **`lsh-esp` (`lsh-bridge`):** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
+- **`lsh-esp` (`lsh-bridge`):** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
 
-* **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
+- **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
 
 ### System Architecture
 
@@ -40,12 +40,13 @@ The three components work together to create a robust and responsive system.
 
 The serial contract between `lsh-core` and `lsh-esp` is intentionally strict:
 
-* The device topology is built during `Configurator::configure()` and is considered static until the next controller reboot.
-* `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define **maximum accepted capacity**, not the real cardinality of the configured device.
-* The real runtime counts are determined by how many times `addActuator()`, `addClickable()`, and `addIndicator()` are actually called.
-* `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
-* A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
-* The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
+- The device topology is built during `Configurator::configure()` and is considered static until the next controller reboot.
+- `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define **maximum accepted capacity**, not the real cardinality of the configured device.
+- The real runtime counts are determined by how many times `addActuator()`, `addClickable()`, and `addIndicator()` are actually called.
+- `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
+- A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
+- The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
+- Serial framing is transport-specific: JSON uses newline-delimited frames, while MsgPack uses a 16-bit little-endian payload-length prefix followed by the raw payload bytes.
 
 ### API Documentation
 
@@ -73,8 +74,8 @@ When a button is pressed, it closes the circuit, connecting the input pin to `VD
 
 ### Output Wiring
 
-* **High-Voltage Outputs (Relays):** The Controllino's relay outputs are used to switch high-voltage loads like 230V AC for lighting.
-* **Low-Voltage Outputs (Digital Out):** These outputs provide a `VDD` signal and are typically used to power status LEDs on button panels.
+- **High-Voltage Outputs (Relays):** The Controllino's relay outputs are used to switch high-voltage loads like 230V AC for lighting.
+- **Low-Voltage Outputs (Digital Out):** These outputs provide a `VDD` signal and are typically used to power status LEDs on button panels.
 
 ### ESP32 (`lsh-bridge`) Connection
 
@@ -82,8 +83,8 @@ For network functionality, `lsh-core` communicates with an `lsh-bridge` device o
 
 > **Crucial:** The Controllino operates at 5V logic, while the ESP32 operates at 3.3V. A **bi-directional logic level shifter** is **required** between them to prevent damage to the ESP32.
 
-* **Controllino `TX` pin** → Logic Level Shifter (HV side) → (LV side) → **ESP32 `RX` pin**
-* **Controllino `RX` pin** → Logic Level Shifter (HV side) → (LV side) → **ESP32 `TX` pin**
+- **Controllino `TX` pin** → Logic Level Shifter (HV side) → (LV side) → **ESP32 `RX` pin**
+- **Controllino `RX` pin** → Logic Level Shifter (HV side) → (LV side) → **ESP32 `TX` pin**
 
 Typically, `Serial2` on the Controllino Maxi is used for this communication.
 
@@ -97,37 +98,37 @@ Typically, `Serial2` on the Controllino Maxi is used for this communication.
    ```ini
     [env:my_device]
     lib_deps = https://github.com/labodj/lsh-core.git
-    ```
+   ```
 
 3. Create the following directory structure inside your project:
 
-    ```text
-    LSH-User-Project/
-    ├── platformio.ini
-    ├── include/
-    │   ├── lsh_user_config.hpp    # The "router" for your configurations
-    │   └── lsh_configs/
-    │       └── ... (your device header files go here)
-    └── src/
-        ├── main.cpp
-        └── configs/
-            └── ... (your device logic files go here)
-    ```
+   ```text
+   LSH-User-Project/
+   ├── platformio.ini
+   ├── include/
+   │   ├── lsh_user_config.hpp    # The "router" for your configurations
+   │   └── lsh_configs/
+   │       └── ... (your device header files go here)
+   └── src/
+       ├── main.cpp
+       └── configs/
+           └── ... (your device logic files go here)
+   ```
 
 ### Core Configuration Concepts
 
 All device-specific logic is defined in the `Configurator::configure()` function within your `src/configs/your_device.cpp` file. The LSH library provides a set of helper functions within the `Configurator` class to make this process clean and readable.
 
-* `addActuator(Actuator* actuator)`: Registers an actuator with the system.
-* `addClickable(Clickable* clickable)`: Registers a clickable with the system.
-* `addIndicator(Indicator* indicator)`: Registers an indicator with the system.
-* `getIndex(const Actuator& actuator)`: A crucial helper that returns the unique internal index of a registered actuator. You **must** use this function when connecting an actuator to a button or indicator, as shown below:
+- `addActuator(Actuator* actuator)`: Registers an actuator with the system.
+- `addClickable(Clickable* clickable)`: Registers a clickable with the system.
+- `addIndicator(Indicator* indicator)`: Registers an indicator with the system.
+- `getIndex(const Actuator& actuator)`: A crucial helper that returns the unique internal index of a registered actuator. You **must** use this function when connecting an actuator to a button or indicator, as shown below:
 
 Important capacity rule:
 
-* `LSH_MAX_*` macros size the fixed-capacity containers used by the firmware.
-* The real number of registered devices can be lower than the declared maximum.
-* For best RAM/code efficiency you will often set the maximum equal to the real count, but this is an optimization choice, not a functional requirement.
+- `LSH_MAX_*` macros size the fixed-capacity containers used by the firmware.
+- The real number of registered devices can be lower than the declared maximum.
+- For best RAM/code efficiency you will often set the maximum equal to the real count, but this is an optimization choice, not a functional requirement.
 
 ```cpp
 // GOOD: Connects the button to the actuator using its safe index.
@@ -331,22 +332,22 @@ To enable a network click, set the third parameter of `setClickableLong()` or `s
 You can choose between two different fallback types:
 
 1. **`NoNetworkClickType::LOCAL_FALLBACK` (Default)**
-    If a network problem occurs, the click is treated as a standard, local-only action. The actuators defined with `addActuatorLong()` or `addActuatorSuperLong()` for that button will be triggered on the device itself. This ensures the button always does *something*.
+   If a network problem occurs, the click is treated as a standard, local-only action. The actuators defined with `addActuatorLong()` or `addActuatorSuperLong()` for that button will be triggered on the device itself. This ensures the button always does _something_.
 
-    ```cpp
-    // This long click is a network action.
-    // If the network is down, it will fall back to its local long-click logic.
-    btn0.setClickableLong(true, LongClickType::ON_ONLY, true, NoNetworkClickType::LOCAL_FALLBACK);
-    ```
+   ```cpp
+   // This long click is a network action.
+   // If the network is down, it will fall back to its local long-click logic.
+   btn0.setClickableLong(true, LongClickType::ON_ONLY, true, NoNetworkClickType::LOCAL_FALLBACK);
+   ```
 
 2. **`NoNetworkClickType::DO_NOTHING`**
-    If a network problem occurs, the click is simply ignored. This is useful for actions that only make sense in a network context (e.g., "All Lights Off" across the entire house).
+   If a network problem occurs, the click is simply ignored. This is useful for actions that only make sense in a network context (e.g., "All Lights Off" across the entire house).
 
-    ```cpp
-    // This super-long click is a network-only action.
-    // If the network is down, pressing the button will have no effect.
-    btn1.setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
-    ```
+   ```cpp
+   // This super-long click is a network-only action.
+   // If the network is down, pressing the button will have no effect.
+   btn1.setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
+   ```
 
 #### The Network Communication Flow
 
@@ -363,10 +364,10 @@ Understanding the handshake between devices helps clarify when a fallback is tri
 
 The same bootstrapping contract is used outside of clicks:
 
-* `lsh-core` sends `BOOT` during startup after configuration has been finalized.
-* If the controller reboots while `lsh-esp` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
-* When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
-* This reboot-driven handshake is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
+- `lsh-core` sends `BOOT` during startup after configuration has been finalized.
+- If the controller reboots while `lsh-esp` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
+- When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
+- This reboot-driven handshake is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
 
@@ -382,10 +383,10 @@ python3 tools/update_lsh_protocol.py --check
 
 The configured fallback logic is applied instantly if any step in this chain fails:
 
-* The `lsh-bridge` (ESP32) is physically disconnected or unreachable.
-* The `lsh-bridge` has no Wi-Fi connection or cannot reach the MQTT broker.
-* The `lsh-logic` controller sends a negative acknowledgement (NACK) because the request is invalid or other devices are offline.
-* **Most importantly: If the initial ACK from `lsh-logic` does not arrive back at the `lsh-core` device within the timeout period (typically ~1 second).**
+- The `lsh-bridge` (ESP32) is physically disconnected or unreachable.
+- The `lsh-bridge` has no Wi-Fi connection or cannot reach the MQTT broker.
+- The `lsh-logic` controller sends a negative acknowledgement (NACK) because the request is invalid or other devices are offline.
+- **Most importantly: If the initial ACK from `lsh-logic` does not arrive back at the `lsh-core` device within the timeout period (typically ~1 second).**
 
 This robust system ensures that the user gets immediate feedback and predictable behavior, whether the network is perfectly responsive or completely offline.
 
@@ -399,9 +400,11 @@ You can set these flags globally for all devices or on a per-device basis in you
 
 #### `CONFIG_MSG_PACK`
 
-* **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from human-readable JSON to the more efficient, binary MessagePack format.
-* **When to use:** Recommended for most production environments. MessagePack significantly reduces the size of the payloads, leading to faster and more reliable serial communication. This also reduces the RAM required for serialization buffers on both the Controllino and the ESP32.
-* **Impact:** Smaller firmware size and lower RAM usage. Requires the `lsh-bridge` firmware to also be configured for MessagePack.
+- **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from human-readable JSON to the more efficient, binary MessagePack format.
+- **When to use:** Recommended for most production environments. MessagePack significantly reduces the size of the payloads, leading to faster and more reliable serial communication. This also reduces the RAM required for serialization buffers on both the Controllino and the ESP32.
+- **Serial framing:** When this flag is enabled, the serial transport no longer relies on stream timeouts. Each serial frame is encoded as `[len_lo][len_hi][msgpack-payload...]`, where the 16-bit little-endian prefix contains the raw MessagePack payload size. JSON mode continues to use newline-delimited text frames.
+- **Compile-time static frames:** Static control payloads such as `BOOT` and `PING` are generated at compile time already in their final transport form. Runtime prefixing is only used for dynamic payloads whose size is not known until serialization time.
+- **Impact:** Smaller firmware size and lower RAM usage. Requires the `lsh-bridge` firmware to also be configured for MessagePack.
 
 ### I/O Performance
 
@@ -409,21 +412,21 @@ These flags replace standard `digitalRead()` and `digitalWrite()` calls with dir
 
 #### `CONFIG_USE_FAST_CLICKABLES`
 
-* **Description:** Optimizes the reading of input pins for buttons (`Clickable` objects).
-* **When to use:** Always recommended unless you are using a non-standard board or core where direct port manipulation might not be supported. The performance gain ensures that even very rapid button presses are never missed.
-* **Impact:** Faster input polling.
+- **Description:** Optimizes the reading of input pins for buttons (`Clickable` objects).
+- **When to use:** Always recommended unless you are using a non-standard board or core where direct port manipulation might not be supported. The performance gain ensures that even very rapid button presses are never missed.
+- **Impact:** Faster input polling.
 
 #### `CONFIG_USE_FAST_ACTUATORS`
 
-* **Description:** Optimizes the writing to output pins for relays (`Actuator` objects).
-* **When to use:** Always recommended for performance-critical applications.
-* **Impact:** Faster relay switching.
+- **Description:** Optimizes the writing to output pins for relays (`Actuator` objects).
+- **When to use:** Always recommended for performance-critical applications.
+- **Impact:** Faster relay switching.
 
 #### `CONFIG_USE_FAST_INDICATORS`
 
-* **Description:** Optimizes the writing to output pins for status LEDs (`Indicator` objects).
-* **When to use:** Always recommended.
-* **Impact:** Faster LED state changes.
+- **Description:** Optimizes the writing to output pins for status LEDs (`Indicator` objects).
+- **When to use:** Always recommended.
+- **Impact:** Faster LED state changes.
 
 ### Timing Configuration
 
@@ -431,52 +434,52 @@ These flags allow you to override the default timing behavior of the framework. 
 
 #### `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`
 
-* **Default:** `20U` (20 milliseconds)
-* **Description:** Sets the debounce time for all buttons. This is the minimum time a button state must be stable before being recognized as a valid press or release, preventing electrical noise from causing multiple triggers.
-* **Example:** `-D CONFIG_CLICKABLE_DEBOUNCE_TIME_MS=30U`
+- **Default:** `20U` (20 milliseconds)
+- **Description:** Sets the debounce time for all buttons. This is the minimum time a button state must be stable before being recognized as a valid press or release, preventing electrical noise from causing multiple triggers.
+- **Example:** `-D CONFIG_CLICKABLE_DEBOUNCE_TIME_MS=30U`
 
 #### `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`
 
-* **Default:** `400U` (400 milliseconds)
-* **Description:** Sets the time a button must be held down to be registered as a "long click".
-* **Example:** `-D CONFIG_CLICKABLE_LONG_CLICK_TIME_MS=500U`
+- **Default:** `400U` (400 milliseconds)
+- **Description:** Sets the time a button must be held down to be registered as a "long click".
+- **Example:** `-D CONFIG_CLICKABLE_LONG_CLICK_TIME_MS=500U`
 
 #### `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS`
 
-* **Default:** `1000U` (1000 milliseconds)
-* **Description:** Sets the time a button must be held down to be registered as a "super-long click".
-* **Example:** `-D CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS=1500U`
+- **Default:** `1000U` (1000 milliseconds)
+- **Description:** Sets the time a button must be held down to be registered as a "super-long click".
+- **Example:** `-D CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS=1500U`
 
 #### `CONFIG_LCNB_TIMEOUT_MS`
 
-* **Default:** `1000U` (1000 milliseconds)
-* **Description:** Sets the timeout for network clicks. If `lsh-core` sends a network click request and does not receive an ACK within this period, it will trigger the configured fallback logic.
-* **Example:** `-D CONFIG_LCNB_TIMEOUT_MS=1200U`
+- **Default:** `1000U` (1000 milliseconds)
+- **Description:** Sets the timeout for network clicks. If `lsh-core` sends a network click request and does not receive an ACK within this period, it will trigger the configured fallback logic.
+- **Example:** `-D CONFIG_LCNB_TIMEOUT_MS=1200U`
 
 ### Network and Communication Buffers
 
 #### `CONFIG_PING_INTERVAL_MS`
 
-* **Default:** `10000U` (10 seconds)
-* **Description:** Sets the interval at which `lsh-core` sends a "ping" message to `lsh-bridge` to keep the connection alive and verify that the bridge is responsive.
-* **Example:** `-D CONFIG_PING_INTERVAL_MS=15000U`
+- **Default:** `10000U` (10 seconds)
+- **Description:** Sets the interval at which `lsh-core` sends a "ping" message to `lsh-bridge` to keep the connection alive and verify that the bridge is responsive.
+- **Example:** `-D CONFIG_PING_INTERVAL_MS=15000U`
 
 #### `CONFIG_CONNECTION_TIMEOUT_MS`
 
-* **Default:** `PING_INTERVAL_MS + 200U`
-* **Description:** The duration after the last received message from `lsh-bridge` before `lsh-core` considers the connection to be lost.
-* **Example:** `-D CONFIG_CONNECTION_TIMEOUT_MS=15500U`
+- **Default:** `PING_INTERVAL_MS + 200U`
+- **Description:** The duration after the last received message from `lsh-bridge` before `lsh-core` considers the connection to be lost.
+- **Example:** `-D CONFIG_CONNECTION_TIMEOUT_MS=15500U`
 
 #### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`
 
-* **Default:** `1` (`enabled`)
-* **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to the ESP bridge.
-* **Current status:** The system is currently validated with `flush()` enabled and in this configuration it works correctly and reliably.
-* **Why this exists:** This flag is exposed only to evaluate whether the serial link remains resilient even without `flush()`, potentially reducing blocking time on send.
-* **Recommendation:** Keep it enabled unless you are deliberately benchmarking or stress-testing the serial path without flush.
-* **Examples:**
-  * Keep the validated behavior: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=1`
-  * Experimental mode without flush: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
+- **Default:** `1` (`enabled`)
+- **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to the ESP bridge.
+- **Current status:** The system is currently validated with `flush()` enabled and in this configuration it works correctly and reliably.
+- **Why this exists:** This flag is exposed only to evaluate whether the serial link remains resilient even without `flush()`, potentially reducing blocking time on send.
+- **Recommendation:** Keep it enabled unless you are deliberately benchmarking or stress-testing the serial path without flush.
+- **Examples:**
+  - Keep the validated behavior: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=1`
+  - Experimental mode without flush: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
 
 ### Benchmarking (for developers)
 
@@ -484,14 +487,14 @@ These flags are intended for development and performance testing of the LSH-Core
 
 #### `CONFIG_LSH_BENCH`
 
-* **Description:** Enables a simple benchmarking routine in the main `loop()`. It measures the time taken to complete a fixed number of empty loop iterations.
-* **When to use:** Only for library development or performance tuning to measure the overhead of the core loop. This should be disabled in production.
+- **Description:** Enables a simple benchmarking routine in the main `loop()`. It measures the time taken to complete a fixed number of empty loop iterations.
+- **When to use:** Only for library development or performance tuning to measure the overhead of the core loop. This should be disabled in production.
 
 #### `CONFIG_BENCH_ITERATIONS`
 
-* **Default:** `1000000U` (1 million)
-* **Description:** Sets the number of iterations for the benchmark loop enabled by `CONFIG_LSH_BENCH`.
-* **Example:** `-D CONFIG_BENCH_ITERATIONS=500000U`
+- **Default:** `1000000U` (1 million)
+- **Description:** Sets the number of iterations for the benchmark loop enabled by `CONFIG_LSH_BENCH`.
+- **Example:** `-D CONFIG_BENCH_ITERATIONS=500000U`
 
 ## Building and Uploading
 

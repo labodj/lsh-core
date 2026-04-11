@@ -210,7 +210,7 @@ namespace LSH
             {
                 lastNetworkClickCheckTime_ms = now;
                 mustSendState |= NetworkClicks::checkAllNetworkClicksTimers(false);
-                mustCheckNetworkClicks = NetworkClicks::thereAreActiveNetworkCLicks(); // We must check again only if there are active network clicks
+                mustCheckNetworkClicks = NetworkClicks::thereAreActiveNetworkClicks(); // We must check again only if there are active network clicks
             }
         }
 

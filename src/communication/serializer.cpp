@@ -51,7 +51,7 @@ namespace Serializer
     using LSH::protocol::KEY_PAYLOAD;
 
     /**
-     * @brief Send a static json payload.
+     * @brief Send a compile-time pre-serialized static payload.
      *
      * @param payloadType type of the payload.
      */
@@ -158,6 +158,7 @@ namespace Serializer
         // Pack actuator states into bytes using optimized loop
         // Using <<3 instead of *8 (bit shift is single cycle on AVR)
         uint8_t actuatorIndex = 0U;
+        auto *const localActuators = Actuators::actuators.data();
         for (uint8_t byteIndex = 0U; byteIndex < numBytes; ++byteIndex)
         {
             uint8_t packedByte = 0U;
@@ -165,7 +166,7 @@ namespace Serializer
             // Pack up to 8 actuators into this byte
             for (uint8_t bitIndex = 0U; bitIndex < 8U && actuatorIndex < Actuators::totalActuators; ++bitIndex)
             {
-                if (Actuators::actuators[actuatorIndex]->getState())
+                if (localActuators[actuatorIndex]->getState())
                 {
                     packedByte |= BIT_MASK_8[bitIndex]; // LUT lookup: O(1), ~2 cycles
                 }

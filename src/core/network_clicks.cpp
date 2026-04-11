@@ -23,6 +23,8 @@
 
 #include "communication/serializer.hpp"
 #include "device/clickable_manager.hpp"
+#include "internal/etl_array.hpp"
+#include "internal/user_config_bridge.hpp"
 #include "peripherals/input/clickable.hpp"
 #include "util/constants/timing.hpp"
 #include "util/debug/debug.hpp"
@@ -34,7 +36,27 @@ namespace NetworkClicks
 {
     namespace
     {
+        etl::array<uint32_t, CONFIG_MAX_CLICKABLES> longClickedNetworkClickTimes{};      //!< Stored times for active long clicks, indexed by clickable index.
+        etl::array<uint32_t, CONFIG_MAX_CLICKABLES> superLongClickedNetworkClickTimes{}; //!< Stored times for active super-long clicks, indexed by clickable index.
+        etl::array<uint8_t, CONFIG_MAX_CLICKABLES> longClickedCorrelationIds{};          //!< Correlation IDs for active long clicks, indexed by clickable index.
+        etl::array<uint8_t, CONFIG_MAX_CLICKABLES> superLongClickedCorrelationIds{};     //!< Correlation IDs for active super-long clicks, indexed by clickable index.
+        uint8_t activeLongClickedNetworkClicks = 0U;                                     //!< Number of pending long-click transactions.
+        uint8_t activeSuperLongClickedNetworkClicks = 0U;                                //!< Number of pending super-long-click transactions.
         uint8_t nextCorrelationId = 0U; //!< Monotonic 8-bit generator. 0 is reserved as "missing/invalid".
+
+        auto getTimeStorage(constants::ClickType clickType) -> etl::array<uint32_t, CONFIG_MAX_CLICKABLES> *
+        {
+            using constants::ClickType;
+            switch (clickType)
+            {
+            case ClickType::LONG:
+                return &longClickedNetworkClickTimes;
+            case ClickType::SUPER_LONG:
+                return &superLongClickedNetworkClickTimes;
+            default:
+                return nullptr;
+            }
+        }
 
         auto getCorrelationStorage(constants::ClickType clickType) -> etl::array<uint8_t, CONFIG_MAX_CLICKABLES> *
         {
@@ -45,6 +67,20 @@ namespace NetworkClicks
                 return &longClickedCorrelationIds;
             case ClickType::SUPER_LONG:
                 return &superLongClickedCorrelationIds;
+            default:
+                return nullptr;
+            }
+        }
+
+        auto getActiveCountStorage(constants::ClickType clickType) -> uint8_t *
+        {
+            using constants::ClickType;
+            switch (clickType)
+            {
+            case ClickType::LONG:
+                return &activeLongClickedNetworkClicks;
+            case ClickType::SUPER_LONG:
+                return &activeSuperLongClickedNetworkClicks;
             default:
                 return nullptr;
             }
@@ -80,38 +116,84 @@ namespace NetworkClicks
             return (*correlationStorage)[clickableIndex];
         }
 
+        auto isNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType) -> bool
+        {
+            return getStoredCorrelationId(clickableIndex, clickType) != 0U;
+        }
+
         /**
-         * @brief Timeout checks for a specific type of network-pending clickables.
+         * @brief Bumps the active counter only when a click slot becomes active.
+         */
+        void markNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType)
+        {
+            auto *const activeCount = getActiveCountStorage(clickType);
+            if (activeCount == nullptr || isNetworkClickActive(clickableIndex, clickType))
+            {
+                return;
+            }
+            ++(*activeCount);
+        }
+
+        /**
+         * @brief Drops the active counter only when a click slot was actually pending.
+         */
+        void markNetworkClickInactive(uint8_t clickableIndex, constants::ClickType clickType)
+        {
+            auto *const activeCount = getActiveCountStorage(clickType);
+            if (activeCount == nullptr || !isNetworkClickActive(clickableIndex, clickType) || *activeCount == 0U)
+            {
+                return;
+            }
+            --(*activeCount);
+        }
+
+        /**
+         * @brief Timeout checks for every pending click of the specified type.
          *
-         * @param map The map of pending clicks to check, e.g., long-clicked or super-long-clicked.
-         * @param clickType The type of click this map represents (e.g., LONG, SUPER_LONG). This is crucial for retrieving the correct fallback behavior.
-         * @param failover If true, forces the fallback action for all pending clicks in the map, ignoring their timers.
+         * @details The storage stays array-based to minimise RAM. Full scans are
+         * only performed while at least one click of the given type is pending,
+         * which keeps the steady-state cost near zero for a feature that is used
+         * very rarely in normal installations.
+         * @param clickType The click type to sweep (LONG or SUPER_LONG).
+         * @param now Cached current time for this sweep.
+         * @param failover If true, forces the fallback action for all pending clicks of that type, ignoring their timers.
          * @return true if any timer expired (or was forced by failover) and at least one local fallback action was performed.
          * @return false otherwise.
          */
-        auto checkAllNetworkClicksTimers(etl::imap<uint8_t, uint32_t> *const map, constants::ClickType clickType, bool failover) -> bool
+        auto checkAllNetworkClicksTimers(constants::ClickType clickType, uint32_t now, bool failover) -> bool
         {
             DP_CONTEXT();
             using constants::NoNetworkClickType;
             using constants::timings::LCNB_TIMEOUT_MS;
             bool localFallbackPerformed = false; // True if a network click expired and a local click has been performed
 
-            for (auto it = map->begin(); it != map->end();) // No increment (See: https://stackoverflow.com/questions/8234779/how-to-remove-from-a-map-while-iterating-it)
+            auto *const timeStorage = getTimeStorage(clickType);
+            auto *const activeCount = getActiveCountStorage(clickType);
+            if (timeStorage == nullptr || activeCount == nullptr || *activeCount == 0U)
             {
-                if (failover || timeKeeper::getTime() - it->second > LCNB_TIMEOUT_MS) // If expired or failover
+                return false;
+            }
+
+            for (uint8_t clickableIndex = 0U; clickableIndex < Clickables::totalClickables; ++clickableIndex)
+            {
+                if (!isNetworkClickActive(clickableIndex, clickType))
                 {
-                    DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), it->first);
-                    auto *const clickable = Clickables::clickables[it->first];
+                    continue;
+                }
+
+                if (failover || now - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS) // If expired or failover
+                {
+                    DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), clickableIndex);
+                    auto *const clickable = Clickables::clickables[clickableIndex];
                     if (clickable->getNetworkFallback(clickType) == NoNetworkClickType::LOCAL_FALLBACK)
                     {
                         localFallbackPerformed |= Clickables::click(clickable, clickType);
                     }
-                    clearCorrelationId(it->first, clickType);
-                    map->erase(it++); // Erase and increment
-                }
-                else
-                {
-                    ++it; // Increment
+                    eraseNetworkClick(clickableIndex, clickType);
+                    if (*activeCount == 0U)
+                    {
+                        break;
+                    }
                 }
             }
             return localFallbackPerformed;
@@ -119,11 +201,6 @@ namespace NetworkClicks
     } // namespace
 
     using constants::ClickType;
-
-    etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> longClickedNetworkClickables{};      //!< Map of long clicked network clickable (<Clickable index, stored time>)
-    etl::map<uint8_t, uint32_t, CONFIG_MAX_CLICKABLES> superLongClickedNetworkClickables{}; //!< Map of super long clicked network clickable (<Clickable index, stored time>)
-    etl::array<uint8_t, CONFIG_MAX_CLICKABLES> longClickedCorrelationIds{};                 //!< Correlation IDs for active long clicks, indexed by clickable index.
-    etl::array<uint8_t, CONFIG_MAX_CLICKABLES> superLongClickedCorrelationIds{};            //!< Correlation IDs for active super-long clicks, indexed by clickable index.
 
     /**
      * @brief Initiates a network click action.
@@ -153,12 +230,12 @@ namespace NetworkClicks
         const uint8_t correlationId = getStoredCorrelationId(clickableIndex, clickType);
         if (correlationId == 0U)
         {
-            return thereAreActiveNetworkCLicks();
+            return thereAreActiveNetworkClicks();
         }
 
         Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId);
         eraseNetworkClick(clickableIndex, clickType);
-        return thereAreActiveNetworkCLicks();
+        return thereAreActiveNetworkClicks();
     }
 
     /**
@@ -176,24 +253,14 @@ namespace NetworkClicks
             FPSTR(dStr::CLICK), FPSTR(dStr::SPACE), FPSTR(dStr::TYPE),
             FPSTR(dStr::COLON_SPACE), static_cast<int8_t>(clickType));
 
-        etl::imap<uint8_t, uint32_t> *map = nullptr;
-        switch (clickType)
+        auto *const timeStorage = getTimeStorage(clickType);
+        if (timeStorage == nullptr)
         {
-        case ClickType::LONG:
-        {
-            map = &longClickedNetworkClickables;
-        }
-        break;
-        case ClickType::SUPER_LONG:
-        {
-            map = &superLongClickedNetworkClickables;
-        }
-        break;
-        default:
             return;
         }
 
-        (*map)[clickableIndex] = timeKeeper::getTime();
+        markNetworkClickActive(clickableIndex, clickType);
+        (*timeStorage)[clickableIndex] = timeKeeper::getTime();
         auto *const correlationStorage = getCorrelationStorage(clickType);
         if (correlationStorage != nullptr)
         {
@@ -216,9 +283,9 @@ namespace NetworkClicks
      * @return true if active stored network clicks are found.
      * @return false there are no stored network click.
      */
-    auto thereAreActiveNetworkCLicks() -> bool
+    auto thereAreActiveNetworkClicks() -> bool
     {
-        return (!longClickedNetworkClickables.empty() || !superLongClickedNetworkClickables.empty());
+        return (activeLongClickedNetworkClicks != 0U || activeSuperLongClickedNetworkClicks != 0U);
     }
 
     /**
@@ -230,26 +297,13 @@ namespace NetworkClicks
     void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType)
     {
         DP_CONTEXT();
-        etl::imap<uint8_t, uint32_t> *map = nullptr;
-        switch (clickType)
+        auto *const timeStorage = getTimeStorage(clickType);
+        if (timeStorage == nullptr)
         {
-        case ClickType::LONG:
-            map = &longClickedNetworkClickables;
-            break;
-
-        case ClickType::SUPER_LONG:
-            map = &superLongClickedNetworkClickables;
-            break;
-
-        default:
             return;
         }
-
-        const auto it = map->find(clickableIndex);
-        if (it != map->end())
-        {
-            map->erase(it);
-        }
+        markNetworkClickInactive(clickableIndex, clickType);
+        (*timeStorage)[clickableIndex] = 0U;
         clearCorrelationId(clickableIndex, clickType);
     }
 
@@ -266,28 +320,19 @@ namespace NetworkClicks
     {
         DP_CONTEXT();
         using constants::timings::LCNB_TIMEOUT_MS;
-        etl::imap<uint8_t, uint32_t> *map = nullptr;
-        switch (clickType)
+        auto *const timeStorage = getTimeStorage(clickType);
+        if (timeStorage == nullptr)
         {
-        case ClickType::LONG:
-            map = &longClickedNetworkClickables;
-            break;
-        case ClickType::SUPER_LONG:
-            map = &superLongClickedNetworkClickables;
-            break;
-        default:
             return true; // Clickable type is not valid, so it's "expired"
         }
 
-        const auto it = map->find(clickableIndex);
-        if (it == map->end())
+        if (!isNetworkClickActive(clickableIndex, clickType))
         {
             return true;
         }
-        if (timeKeeper::getTime() - it->second > LCNB_TIMEOUT_MS) // It's expired
+        if (timeKeeper::getTime() - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS) // It's expired
         {
-            clearCorrelationId(clickableIndex, clickType);
-            map->erase(it); // Erase it for convenience
+            eraseNetworkClick(clickableIndex, clickType);
             return true;
         }
 
@@ -298,7 +343,7 @@ namespace NetworkClicks
      * @brief Checks a specific pending network click for expiration or forced failover.
      *
      * If the timer has expired, or if `failover` is true, this function triggers the
-     * configured fallback action (if any) and removes the click from the pending map.
+     * configured fallback action (if any) and removes the click from the pending storage.
      *
      * @param clickableIndex The index of the clickable to check.
      * @param clickType The type of the pending click.
@@ -311,36 +356,24 @@ namespace NetworkClicks
         using constants::NoNetworkClickType;
         using constants::timings::LCNB_TIMEOUT_MS;
 
-        etl::imap<uint8_t, uint32_t> *map = nullptr;
-
-        switch (clickType)
+        auto *const timeStorage = getTimeStorage(clickType);
+        if (timeStorage == nullptr)
         {
-        case ClickType::LONG:
-            map = &longClickedNetworkClickables;
-            break;
-
-        case ClickType::SUPER_LONG:
-            map = &superLongClickedNetworkClickables;
-            break;
-
-        default:
             return false;
         }
 
         bool localFallbackPerformed = false; // True if a network click expired and a local click has been performed
 
-        const auto it = map->find(clickableIndex);
-        if (it != map->end())
+        if (isNetworkClickActive(clickableIndex, clickType))
         {
-            if (failover || timeKeeper::getTime() - it->second > LCNB_TIMEOUT_MS) // expired
+            if (failover || timeKeeper::getTime() - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS) // expired
             {
-                auto *const clickable = Clickables::clickables[it->first];
+                auto *const clickable = Clickables::clickables[clickableIndex];
                 if (clickable->getNetworkFallback(clickType) == NoNetworkClickType::LOCAL_FALLBACK)
                 {
                     localFallbackPerformed |= Clickables::click(clickable, clickType);
                 }
-                clearCorrelationId(clickableIndex, clickType);
-                map->erase(it);
+                eraseNetworkClick(clickableIndex, clickType);
             }
         }
         return localFallbackPerformed;
@@ -359,15 +392,17 @@ namespace NetworkClicks
     {
         // DP_CONTEXT(); pollutes serial
         bool localFallbackPerformed = false; // True if any network click expired and any local click has been performed
-        if (!longClickedNetworkClickables.empty())
+        const auto now = timeKeeper::getTime();
+
+        if (activeLongClickedNetworkClicks != 0U)
         {
             DPL(FPSTR(dStr::LONG), " ", FPSTR(dStr::CLICKED), FPSTR(dStr::NET_BUTTONS_NOT_EMPTY));
-            localFallbackPerformed |= checkAllNetworkClicksTimers(&longClickedNetworkClickables, ClickType::LONG, failover);
+            localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::LONG, now, failover);
         }
-        if (!superLongClickedNetworkClickables.empty())
+        if (activeSuperLongClickedNetworkClicks != 0U)
         {
             DPL(FPSTR(dStr::SUPER_LONG), " ", FPSTR(dStr::CLICKED), FPSTR(dStr::NET_BUTTONS_NOT_EMPTY));
-            localFallbackPerformed |= checkAllNetworkClicksTimers(&superLongClickedNetworkClickables, ClickType::SUPER_LONG, failover);
+            localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::SUPER_LONG, now, failover);
         }
         return localFallbackPerformed;
     }

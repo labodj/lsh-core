@@ -114,6 +114,25 @@ namespace Clickables
     }
 
     /**
+     * @brief Resolves a clickable ID to its dense runtime index with a single map lookup.
+     *
+     * @param clickableId Clickable UUID.
+     * @param clickableIndex Output runtime index when the ID exists.
+     * @return true if the clickable exists.
+     * @return false otherwise.
+     */
+    auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
+    {
+        const auto it = clickablesMap.find(clickableId);
+        if (it == clickablesMap.end())
+        {
+            return false;
+        }
+        clickableIndex = it->second;
+        return true;
+    }
+
+    /**
      * @brief Get if the clickable actually exists.
      *
      * @param clickableId Unique ID of the clickable.

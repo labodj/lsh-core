@@ -43,6 +43,7 @@ namespace Actuators
     void addActuator(Actuator *actuator);                                                                  // Add one actuator to actuators vector and activate it
     [[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;                                      // Returns a single actuator
     [[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;                                            // Returns a single actuator index
+    [[nodiscard]] auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool;                   // Returns true and writes the actuator index when the ID exists
     [[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;                                         // Returns true if actuator exists
     [[nodiscard]] auto actuatorsAutoOffTimersCheck() -> bool;                                              // Performs an auto-off timer check for actuators
     [[nodiscard]] auto turnOffAllActuators() -> bool;                                                      // Turns off all actuators

@@ -33,7 +33,39 @@ namespace EspCom
     uint32_t lastSentPayloadTime_ms = 0U;     //!< Last time a payload has been sent
     uint32_t lastReceivedPayloadTime_ms = 0U; //!< Last time a valid payload has been received
     bool firstValidPayloadReceived = false;   //!< True after the first valid payload has been received
-#ifndef CONFIG_MSG_PACK
+#ifdef CONFIG_MSG_PACK
+    namespace
+    {
+        enum class MsgPackRxState : uint8_t
+        {
+            WAIT_LENGTH_LOW,
+            WAIT_LENGTH_HIGH,
+            READ_PAYLOAD,
+            DISCARD_PAYLOAD
+        };
+
+        uint8_t inputBuffer[constants::espComConfigs::MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE]; //!< Raw MessagePack payload buffer.
+        MsgPackRxState msgPackRxState = MsgPackRxState::WAIT_LENGTH_LOW;                   //!< Framing state for length-prefixed MsgPack transport.
+        uint16_t pendingPayloadLength = 0U;                                                //!< Payload length declared by the current frame header.
+        uint16_t bytesRead = 0U;                                                           //!< Number of payload bytes currently stored in inputBuffer.
+        uint16_t discardBytesRemaining = 0U;                                               //!< Remaining oversized payload bytes to discard.
+
+        void resetMsgPackRxState()
+        {
+            msgPackRxState = MsgPackRxState::WAIT_LENGTH_LOW;
+            pendingPayloadLength = 0U;
+            bytesRead = 0U;
+            discardBytesRemaining = 0U;
+        }
+
+        void writeMsgPackFramePrefix(size_t payloadSize)
+        {
+            const uint16_t payloadLength = static_cast<uint16_t>(payloadSize);
+            CONFIG_COM_SERIAL->write(static_cast<uint8_t>(payloadLength & 0xFFU));
+            CONFIG_COM_SERIAL->write(static_cast<uint8_t>((payloadLength >> 8U) & 0xFFU));
+        }
+    } // namespace
+#else
     char inputBuffer[constants::espComConfigs::RAW_INPUT_BUFFER_SIZE]; //!< Raw buffer for incoming serial data.
     size_t bytesRead = 0;                                              //!< Number of bytes currently in the inputBuffer.
     bool discardInputUntilNewline = false;                             //!< True after an overflow until the trailing newline is consumed.
@@ -58,6 +90,8 @@ namespace EspCom
     {
         DP_CONTEXT();
 #ifdef CONFIG_MSG_PACK
+        const size_t payloadSize = measureMsgPack(json);
+        writeMsgPackFramePrefix(payloadSize);
         serializeMsgPack(json, *CONFIG_COM_SERIAL);
 #else
         serializeJson(json, *CONFIG_COM_SERIAL);
@@ -79,7 +113,7 @@ namespace EspCom
      * @brief Reads from the communication serial port, processes complete messages, and dispatches commands.
      * @details This function handles both MsgPack and JSON-newline protocols based on compilation flags.
      *          For JSON, it buffers incoming bytes until a newline is detected, then parses the message.
-     *          For MsgPack, it attempts to deserialize directly from the stream.
+     *          For MsgPack, it expects a 16-bit little-endian payload-length prefix followed by the raw payload bytes.
      *          Upon receiving a valid message, it calls Deserializer::deserializeAndDispatch to execute the command.
      * @return Deserializer::DispatchResult A struct indicating if the command changed the device state.
      */
@@ -87,25 +121,74 @@ namespace EspCom
     {
         static StaticJsonDocument<constants::espComConfigs::RECEIVED_DOC_SIZE> doc;
 #ifdef CONFIG_MSG_PACK
-        DeserializationError err = deserializeMsgPack(doc, *CONFIG_COM_SERIAL);
-
-        if (err == DeserializationError::Ok)
-        {
-            DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
-            DPJ(doc);
-            firstValidPayloadReceived = true;
-            lastReceivedPayloadTime_ms = timeKeeper::getTime();
-            return Deserializer::deserializeAndDispatch(doc);
-        }
-
-        if (err == DeserializationError::IncompleteInput)
-        {
-            return {}; // Not an error, wait for more data
-        }
-
-        DPL(err.f_str());
         while (CONFIG_COM_SERIAL->available())
-            CONFIG_COM_SERIAL->read(); // Empties buffer
+        {
+            const uint8_t receivedByte = static_cast<uint8_t>(CONFIG_COM_SERIAL->read());
+
+            switch (msgPackRxState)
+            {
+            case MsgPackRxState::WAIT_LENGTH_LOW:
+                pendingPayloadLength = receivedByte;
+                msgPackRxState = MsgPackRxState::WAIT_LENGTH_HIGH;
+                break;
+
+            case MsgPackRxState::WAIT_LENGTH_HIGH:
+                pendingPayloadLength |= static_cast<uint16_t>(receivedByte) << 8U;
+
+                if (pendingPayloadLength == 0U)
+                {
+                    DPL("Invalid zero-length MsgPack frame.");
+                    resetMsgPackRxState();
+                    break;
+                }
+
+                if (pendingPayloadLength > constants::espComConfigs::MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE)
+                {
+                    DPL("MsgPack frame too large, discarding ", pendingPayloadLength, " bytes.");
+                    discardBytesRemaining = pendingPayloadLength;
+                    msgPackRxState = MsgPackRxState::DISCARD_PAYLOAD;
+                    bytesRead = 0U;
+                    break;
+                }
+
+                bytesRead = 0U;
+                msgPackRxState = MsgPackRxState::READ_PAYLOAD;
+                break;
+
+            case MsgPackRxState::READ_PAYLOAD:
+                inputBuffer[bytesRead++] = receivedByte;
+                if (bytesRead == pendingPayloadLength)
+                {
+                    const uint16_t payloadLength = pendingPayloadLength;
+                    resetMsgPackRxState();
+
+                    const DeserializationError err = deserializeMsgPack(doc, inputBuffer, payloadLength);
+                    if (err != DeserializationError::Ok)
+                    {
+                        DPL(err.f_str());
+                        return {};
+                    }
+
+                    DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
+                    DPJ(doc);
+                    firstValidPayloadReceived = true;
+                    lastReceivedPayloadTime_ms = timeKeeper::getTime();
+                    return Deserializer::deserializeAndDispatch(doc);
+                }
+                break;
+
+            case MsgPackRxState::DISCARD_PAYLOAD:
+                if (discardBytesRemaining > 0U)
+                {
+                    --discardBytesRemaining;
+                }
+                if (discardBytesRemaining == 0U)
+                {
+                    resetMsgPackRxState();
+                }
+                break;
+            }
+        }
         return {};
 
 #else

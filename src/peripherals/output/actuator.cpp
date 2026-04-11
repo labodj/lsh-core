@@ -39,8 +39,10 @@ auto Actuator::setState(bool state) -> bool
         return false;
     }
 
+    const uint32_t now = timeKeeper::getTime();
+
     // Apply state if debounce is not active (elided at compile time) OR if it's active check if debounce time is elapsed
-    if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (timeKeeper::getTime() - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
+    if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
     {
         return false;
     }
@@ -57,7 +59,7 @@ auto Actuator::setState(bool state) -> bool
     digitalWrite(this->pinNumber, static_cast<uint8_t>(state)); // Perform the switch
 #endif
     this->actualState = state; // Store the new state
-    this->lastTimeSwitched = timeKeeper::getTime();
+    this->lastTimeSwitched = now;
     return true;
 }
 

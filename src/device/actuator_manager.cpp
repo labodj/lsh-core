@@ -113,6 +113,25 @@ namespace Actuators
     }
 
     /**
+     * @brief Resolves an actuator ID to its dense runtime index with a single map lookup.
+     *
+     * @param actuatorId Actuator UUID.
+     * @param actuatorIndex Output runtime index when the ID exists.
+     * @return true if the actuator exists.
+     * @return false otherwise.
+     */
+    auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool
+    {
+        const auto it = actuatorsMap.find(actuatorId);
+        if (it == actuatorsMap.end())
+        {
+            return false;
+        }
+        actuatorIndex = it->second;
+        return true;
+    }
+
+    /**
      * @brief Get if the actuator actually exists.
      *
      * @param actuatorId Unique ID of the actuator.

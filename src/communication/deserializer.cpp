@@ -53,10 +53,6 @@ namespace Deserializer
             const auto clickableId = doc[KEY_ID].as<uint8_t>();
             const auto correlationId = doc[KEY_CORRELATION_ID].as<uint8_t>();
 
-            // A single check for existence handles missing keys (id=0) and invalid IDs.
-            if (!Clickables::clickableExists(clickableId))
-                return;
-
             constants::ClickType clickType = constants::ClickType::NONE;
             switch (static_cast<LSH::protocol::ProtocolClickType>(jsonClickType))
             {
@@ -71,7 +67,11 @@ namespace Deserializer
                 return; // Invalid click type (was 0 or other value)
             }
 
-            const uint8_t clickableIndex = Clickables::getIndex(clickableId);
+            uint8_t clickableIndex = 0U;
+            if (!Clickables::tryGetIndex(clickableId, clickableIndex))
+            {
+                return;
+            }
             if (!NetworkClicks::matchesCorrelationId(clickableIndex, clickType, correlationId))
             {
                 DPL("Ignoring stale or mismatched network click response for clickable ID ", clickableId, " with correlation ID ", correlationId, ".");
@@ -121,21 +121,26 @@ namespace Deserializer
         case Command::SET_SINGLE_ACTUATOR:
             // Get values from Json
             {
-                const auto id = doc[KEY_ID].as<uint8_t>();
-                // ActuatorExists handles id=0 (key missing) and non-existent IDs in one call.
-                if (!Actuators::actuatorExists(id))
-                {
-                    break;
-                }
-
                 const JsonVariantConst jsonState = doc[KEY_STATE];
                 if (jsonState.isNull() || !jsonState.is<uint8_t>())
                 {
                     break; // Wrong or missing jsonState
                 }
-                const auto state = jsonState.as<uint8_t>() == 1;
+                const auto stateValue = jsonState.as<uint8_t>();
+                if (stateValue > 1U)
+                {
+                    break;
+                }
+                const auto state = stateValue == 1U;
 
-                result.stateChanged = Actuators::actuators[Actuators::getIndex(id)]->setState(state);
+                const auto id = doc[KEY_ID].as<uint8_t>();
+                uint8_t actuatorIndex = 0U;
+                if (!Actuators::tryGetIndex(id, actuatorIndex))
+                {
+                    break;
+                }
+
+                result.stateChanged = Actuators::actuators[actuatorIndex]->setState(state);
                 break;
             }
         case Command::SET_STATE:
@@ -168,6 +173,7 @@ namespace Deserializer
 
             bool anyStateChanged = false;
             uint8_t actuatorIndex = 0;
+            auto *const localActuators = Actuators::actuators.data();
 
             for (uint8_t byteIndex = 0; byteIndex < numBytes && actuatorIndex < Actuators::totalActuators; ++byteIndex)
             {
@@ -175,7 +181,7 @@ namespace Deserializer
                 for (uint8_t bitIndex = 0; bitIndex < 8 && actuatorIndex < Actuators::totalActuators; ++bitIndex)
                 {
                     const bool state = (packedByte & BIT_MASK_8[bitIndex]) != 0;
-                    anyStateChanged |= Actuators::actuators[actuatorIndex]->setState(state);
+                    anyStateChanged |= localActuators[actuatorIndex]->setState(state);
                     ++actuatorIndex;
                 }
             }

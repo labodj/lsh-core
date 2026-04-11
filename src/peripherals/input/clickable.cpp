@@ -350,9 +350,10 @@ auto Clickable::shortClick() const -> bool
     }
 
     bool anyActuatorChangedState = false;
+    auto *const localActuators = Actuators::actuators.data();
     for (const auto actuatorIndex : this->actuatorsShort)
     {
-        anyActuatorChangedState |= Actuators::actuators[actuatorIndex]->toggleState();
+        anyActuatorChangedState |= localActuators[actuatorIndex]->toggleState();
     }
 
     return anyActuatorChangedState;
@@ -380,6 +381,7 @@ auto Clickable::longClick() const -> bool
 
     bool stateToSet = false;      // The state to be set to long actuators
     uint8_t actuatorsLongOn = 0U; // Number of active long actuators
+    auto *const localActuators = Actuators::actuators.data();
 
     switch (this->longClickType)
     {
@@ -387,7 +389,7 @@ auto Clickable::longClick() const -> bool
         // Check long actuators are ON or OFF (actuatorsLongOn==0: everything OFF, actuatorsLongOn==totalLongActuators: everything ON)
         for (const auto actuatorIndex : this->actuatorsLong)
         {
-            actuatorsLongOn += static_cast<uint8_t>(Actuators::actuators[actuatorIndex]->getState());
+            actuatorsLongOn += static_cast<uint8_t>(localActuators[actuatorIndex]->getState());
         }
         /*
         Less than half of attached secondary actuators are OFF -> stateToSet = true
@@ -396,7 +398,7 @@ auto Clickable::longClick() const -> bool
         To avoid float arithmetics and to speed things up use shift operator and swap the division with a multiplication
         (Long actuators ON x 2 < Total actuators)
         */
-        stateToSet = ((actuatorsLongOn << 1U) < this->getTotalActuators(ClickType::LONG));
+        stateToSet = ((actuatorsLongOn << 1U) < static_cast<uint8_t>(this->actuatorsLong.size()));
         break;
     case LongClickType::ON_ONLY:
         stateToSet = true;
@@ -412,7 +414,7 @@ auto Clickable::longClick() const -> bool
     // Set stateToSet to all actuators in the long actuators list
     for (const auto actuatorIndex : this->actuatorsLong)
     {
-        anyActuatorChangedState |= Actuators::actuators[actuatorIndex]->setState(stateToSet);
+        anyActuatorChangedState |= localActuators[actuatorIndex]->setState(stateToSet);
     }
     return anyActuatorChangedState;
 }
@@ -434,11 +436,12 @@ auto Clickable::superLongClickSelective() const -> bool
     }
 
     bool anyActuatorChangedState = false;
+    auto *const localActuators = Actuators::actuators.data();
     for (const auto actuatorIndex : this->actuatorsSuperLong)
     {
-        if (!Actuators::actuators[actuatorIndex]->hasProtection())
+        if (!localActuators[actuatorIndex]->hasProtection())
         {
-            anyActuatorChangedState |= Actuators::actuators[actuatorIndex]->setState(false);
+            anyActuatorChangedState |= localActuators[actuatorIndex]->setState(false);
         }
     }
     return anyActuatorChangedState;

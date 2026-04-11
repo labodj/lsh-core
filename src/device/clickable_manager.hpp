@@ -43,6 +43,7 @@ namespace Clickables
     void addClickable(Clickable *clickable);                                                      // Add one clickable to clickables vector and activate it
     [[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;                          // Returns a single clickable
     [[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;                                  // Returns a single clickable index
+    [[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool;        // Returns true and writes the clickable index when the ID exists
     [[nodiscard]] auto clickableExists(uint8_t clickableId) -> bool;                              // Returns true if clickable exists
     [[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType) -> bool; // Method for all types of clicks, since not all click can be done within clickable class
     [[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;     // Alternative method for all types of click

@@ -100,6 +100,53 @@ namespace constants
 
                 constexpr uint16_t RAW_INPUT_BUFFER_SIZE = RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_MIN_SIZE ? RAW_INPUT_BUFFER_MIN_SIZE : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE; //!< Final allocated size for the raw serial input buffer.
                 static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size click/failover commands plus null terminator.");
+
+                /**
+                 * @brief Returns the worst-case MessagePack array header size for the given element count.
+                 *
+                 * The serial transport uses a dedicated length-prefixed framing for MessagePack.
+                 * This helper sizes only the raw payload body, not the 2-byte transport header.
+                 */
+                [[nodiscard]] constexpr auto msgPackArrayHeaderSize(uint16_t elementCount) -> uint16_t
+                {
+                        return elementCount <= 15U ? 1U : 3U; // fixarray vs array16
+                }
+
+                /**
+                 * @brief Maximum number of packed actuator-state bytes accepted from the bridge.
+                 */
+                constexpr uint16_t MSGPACK_STATE_ARRAY_BYTES = static_cast<uint16_t>((CONFIG_MAX_ACTUATORS + 7U) / 8U);
+
+                /**
+                 * @brief Maximum MessagePack payload size accepted from the bridge for `SET_STATE`.
+                 *
+                 * Worst case:
+                 * - fixmap(2)                -> 1
+                 * - key "p" + value         -> 2 + 1
+                 * - key "s"                 -> 2
+                 * - array header            -> 1 or 3
+                 * - each packed byte        -> 2 (uint8 worst case)
+                 */
+                constexpr uint16_t MSGPACK_SET_STATE_MAX_SIZE =
+                    static_cast<uint16_t>(6U + msgPackArrayHeaderSize(MSGPACK_STATE_ARRAY_BYTES) + (2U * MSGPACK_STATE_ARRAY_BYTES));
+
+                /**
+                 * @brief Maximum MessagePack payload size accepted from the bridge.
+                 *
+                 * `SET_STATE` is the largest command that the core can receive from the bridge.
+                 */
+                constexpr uint16_t MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE =
+                    etl::bit_ceil(MSGPACK_SET_STATE_MAX_SIZE > 15U ? MSGPACK_SET_STATE_MAX_SIZE : 15U);
+
+                /**
+                 * @brief MessagePack serial transport framing header size.
+                 *
+                 * MessagePack frames are transported as:
+                 *   [len_lo][len_hi][payload...]
+                 * where `len` is the raw payload size in bytes.
+                 */
+                constexpr uint16_t MSGPACK_FRAME_HEADER_SIZE = 2U;
+                static_assert(MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE <= 0xFFFFU, "MessagePack serial framing uses a 16-bit payload length.");
                 /*
                 Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *

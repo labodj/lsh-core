@@ -27,7 +27,10 @@
 namespace utils::payloads
 {
     /**
-     * @brief Gets a span pointing to the correct pre-defined static payload.
+     * @brief Gets a span pointing to the correct pre-defined static transport frame.
+     *
+     * JSON payloads include the newline delimiter. MsgPack payloads include the
+     * serial framing prefix when the active transport requires it.
      */
     template <bool IsMsgPack>
     [[nodiscard]] constexpr auto get(constants::payloads::StaticType type) -> etl::span<const uint8_t>
