@@ -34,6 +34,36 @@ namespace Deserializer
     using namespace LSH::protocol;
     namespace
     {
+        [[nodiscard]] auto tryGetPackedStateByte(const JsonVariantConst &value, uint8_t &out) -> bool
+        {
+            if (value.isNull() || value.is<const char *>() || value.is<bool>() ||
+                value.is<JsonArrayConst>() || value.is<JsonObjectConst>())
+            {
+                return false;
+            }
+
+            if (value.is<uint8_t>())
+            {
+                out = value.as<uint8_t>();
+                return true;
+            }
+
+            const double rawValue = value.as<double>();
+            if (rawValue < 0.0 || rawValue > 255.0)
+            {
+                return false;
+            }
+
+            const auto packedByte = static_cast<uint8_t>(rawValue);
+            if (static_cast<double>(packedByte) != rawValue)
+            {
+                return false;
+            }
+
+            out = packedByte;
+            return true;
+        }
+
         /**
          * @brief Processes payloads for network click acknowledgements and failovers.
          * @details This helper function handles the shared logic for both NETWORK_CLICK_ACK
@@ -157,14 +187,6 @@ namespace Deserializer
                 break;
             }
 
-            for (const JsonVariantConst packedByte : statesArray)
-            {
-                if (!packedByte.is<uint8_t>())
-                {
-                    return result;
-                }
-            }
-
             const uint8_t numBytes = statesArray.size();
 
             // LUT for bit masks (re-using the same pattern as Serializer for consistency)
@@ -177,7 +199,11 @@ namespace Deserializer
 
             for (uint8_t byteIndex = 0; byteIndex < numBytes && actuatorIndex < Actuators::totalActuators; ++byteIndex)
             {
-                const uint8_t packedByte = statesArray[byteIndex].as<uint8_t>();
+                uint8_t packedByte = 0U;
+                if (!tryGetPackedStateByte(statesArray[byteIndex], packedByte))
+                {
+                    return result;
+                }
                 for (uint8_t bitIndex = 0; bitIndex < 8 && actuatorIndex < Actuators::totalActuators; ++bitIndex)
                 {
                     const bool state = (packedByte & BIT_MASK_8[bitIndex]) != 0;
