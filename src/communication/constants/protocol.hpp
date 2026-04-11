@@ -32,10 +32,10 @@ namespace LSH
          */
         enum class Command : uint8_t
         {
-            DEVICE_DETAILS = 1, //!< Device details payload with handshake-only protocol major.
+            DEVICE_DETAILS = 1, //!< Device details payload with handshake-only protocol major used for wire compatibility checks.
             ACTUATORS_STATE = 2, //!< Bitpacked actuator state payload.
             NETWORK_CLICK_REQUEST = 3, //!< Network click request with correlation ID.
-            BOOT = 4, //!< Controller boot notification and re-sync trigger.
+            BOOT = 4, //!< Controller boot notification and re-sync trigger. Does not carry version metadata.
             PING_ = 5, //!< Ping or heartbeat payload.
             REQUEST_DETAILS = 10, //!< Request device details.
             REQUEST_STATE = 11, //!< Request current state.
