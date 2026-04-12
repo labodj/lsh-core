@@ -27,7 +27,7 @@ The firmware is intentionally strict about a few invariants:
 - The real cardinality is the number of successful `addActuator()`, `addClickable()`, and `addIndicator()` registrations performed by `Configurator::configure()`.
 - Device IDs exposed on the wire are positive non-zero `uint8_t` values and must stay unique within their domain.
 - `BOOT` is the re-synchronization trigger used to invalidate cached models in the bridge and force a fresh `details + state` cycle.
-- Serial framing depends on the selected transport codec: JSON uses newline-delimited frames, while MsgPack uses a 16-bit little-endian payload-length prefix.
+- Serial transport depends on the selected codec: JSON uses newline-delimited frames, while MsgPack writes raw payload bytes directly on the link.
 - The protocol assumes a trusted environment. Authentication, encryption, and hostile-peer hardening are intentionally out of scope.
 
 ## Navigation

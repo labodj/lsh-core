@@ -64,6 +64,18 @@ namespace Deserializer
             return true;
         }
 
+        [[nodiscard]] auto tryGetBinaryState(const JsonVariantConst &value, bool &out) -> bool
+        {
+            uint8_t rawState = 0U;
+            if (!tryGetPackedStateByte(value, rawState) || rawState > 1U)
+            {
+                return false;
+            }
+
+            out = rawState == 1U;
+            return true;
+        }
+
         /**
          * @brief Processes payloads for network click acknowledgements and failovers.
          * @details This helper function handles the shared logic for both NETWORK_CLICK_ACK
@@ -130,6 +142,9 @@ namespace Deserializer
      * It directly calls functions in other modules (Serializer, Actuators, NetworkClicks)
      * to execute the command. This avoids intermediate state storage (like ResultsHolder)
      * and multiple switch statements in the main loop, maximizing performance.
+     * The ESP bridge is intentionally semi-transparent and may raw-forward payloads it
+     * does not need to optimize locally, so this dispatcher is also the final semantic
+     * validation boundary for inbound LSH commands.
      * The validation relies on a "validation by convention" approach, where a value of 0
      * for IDs or commands is treated as invalid, eliminating the need for
      * `containsKey` checks.
@@ -151,17 +166,11 @@ namespace Deserializer
         case Command::SET_SINGLE_ACTUATOR:
             // Get values from Json
             {
-                const JsonVariantConst jsonState = doc[KEY_STATE];
-                if (jsonState.isNull() || !jsonState.is<uint8_t>())
+                bool state = false;
+                if (!tryGetBinaryState(doc[KEY_STATE], state))
                 {
                     break; // Wrong or missing jsonState
                 }
-                const auto stateValue = jsonState.as<uint8_t>();
-                if (stateValue > 1U)
-                {
-                    break;
-                }
-                const auto state = stateValue == 1U;
 
                 const auto id = doc[KEY_ID].as<uint8_t>();
                 uint8_t actuatorIndex = 0U;

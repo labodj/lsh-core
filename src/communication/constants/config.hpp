@@ -67,22 +67,23 @@ namespace constants
                 static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = (CONFIG_COM_SERIAL_FLUSH_AFTER_SEND != 0);
 #endif // CONFIG_COM_SERIAL_FLUSH_AFTER_SEND
 
+                constexpr uint16_t PACKED_STATE_BYTES = static_cast<uint16_t>((CONFIG_MAX_ACTUATORS + 7U) / 8U); //!< Number of bytes required to represent all actuator states on wire.
+
                 /*
                 Received Json Document Size, the size is computed here https://arduinojson.org/v6/assistant/
                 Processor: AVR, Mode: Deserialize, Input Type: Stream
                 {"p":10} -> min: 10, recommended: 24
                               -> (JSON_OBJECT_SIZE(1) + number of strings + string characters number)
                               -> (8 + 2 + 6 = 16)
-                {"p":12,"s":[0,1,0,1,0,...]} -> min: JSON_ARRAY_SIZE(N) + JSON_OBJECT_SIZE(2) + number of strings + string characters number
-                                                    -> (N actuator) (JSON_ARRAY_SIZE(N) + JSON_OBJECT_SIZE(2) + 2 + 2)
-                                                    -> 0 actuators: 20 | 10 actuators: 100
+                {"p":12,"s":[90,3]} -> min: JSON_ARRAY_SIZE(ceil(CONFIG_MAX_ACTUATORS / 8)) + JSON_OBJECT_SIZE(2) + 4
+                                      because `SET_STATE` uses packed state bytes, not one JSON element per actuator.
                 {"p":17,"t":2,"i":255,"c":255} -> min: JSON_OBJECT_SIZE(4)
                 {"p":13,"i":5,"s":0} -> min: 30, recommended: 48
                                                      -> (JSON_OBJECT_SIZE(3) + number of strings + string characters number)
                                                      -> (24 + 3 + 3 = 30)
                 We can use 48 as base minimum size
                 */
-                constexpr uint16_t RECEIVED_DOC_MIN_SIZE = etl::bit_ceil(JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2) + 4U); //!< Calculated minimum size for the JSON document received from the bridge.
+                constexpr uint16_t RECEIVED_DOC_MIN_SIZE = etl::bit_ceil(JSON_ARRAY_SIZE(PACKED_STATE_BYTES) + JSON_OBJECT_SIZE(2) + 4U); //!< Calculated minimum size for the JSON document received from the bridge.
                 constexpr uint16_t RECEIVED_DOC_SIZE = RECEIVED_DOC_MIN_SIZE <= 48U ? 48U : RECEIVED_DOC_MIN_SIZE;                          //!< Final allocated size for the received JSON document, ensuring a minimum of 48 bytes.
                 static_assert(RECEIVED_DOC_SIZE >= JSON_OBJECT_SIZE(4), "RECEIVED_DOC_SIZE must fit network click responses with correlation ID.");
 
@@ -92,61 +93,13 @@ namespace constants
                 constexpr uint16_t RAW_INPUT_BUFFER_MIN_SIZE = etl::bit_ceil(31U); //!< Minimum buffer size for the longest fixed JSON command plus null terminator: {"p":17,"t":2,"i":255,"c":255}\0
 
                 /**
-                 * @brief Calculated size for the longest variable-length command ({"p":12,"s":[0,1,0,1,0,...]})
+                 * @brief Calculated size for the longest variable-length JSON command (packed `SET_STATE`).
                  */
-                constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = (CONFIG_MAX_ACTUATORS > 0U)
-                                                                            ? etl::bit_ceil(16U + (2U * CONFIG_MAX_ACTUATORS)) // {"p":12,"s":[0,1,0,1,0,...]} -> 16 + CONFIG_MAX_ACTUATORS *2
-                                                                            : etl::bit_ceil(17U);                              // Special case for 0 actuators. ({"p":12,"s":[]} -> 15 +1 for '\n' +1 for '\0' )
+                constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = etl::bit_ceil(17U + (4U * PACKED_STATE_BYTES)); //!< Conservative worst case for {"p":12,"s":[255,...]}\n\0
 
                 constexpr uint16_t RAW_INPUT_BUFFER_SIZE = RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_MIN_SIZE ? RAW_INPUT_BUFFER_MIN_SIZE : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE; //!< Final allocated size for the raw serial input buffer.
                 static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size click/failover commands plus null terminator.");
 
-                /**
-                 * @brief Returns the worst-case MessagePack array header size for the given element count.
-                 *
-                 * The serial transport uses a dedicated length-prefixed framing for MessagePack.
-                 * This helper sizes only the raw payload body, not the 2-byte transport header.
-                 */
-                [[nodiscard]] constexpr auto msgPackArrayHeaderSize(uint16_t elementCount) -> uint16_t
-                {
-                        return elementCount <= 15U ? 1U : 3U; // fixarray vs array16
-                }
-
-                /**
-                 * @brief Maximum number of packed actuator-state bytes accepted from the bridge.
-                 */
-                constexpr uint16_t MSGPACK_STATE_ARRAY_BYTES = static_cast<uint16_t>((CONFIG_MAX_ACTUATORS + 7U) / 8U);
-
-                /**
-                 * @brief Maximum MessagePack payload size accepted from the bridge for `SET_STATE`.
-                 *
-                 * Worst case:
-                 * - fixmap(2)                -> 1
-                 * - key "p" + value         -> 2 + 1
-                 * - key "s"                 -> 2
-                 * - array header            -> 1 or 3
-                 * - each packed byte        -> 2 (uint8 worst case)
-                 */
-                constexpr uint16_t MSGPACK_SET_STATE_MAX_SIZE =
-                    static_cast<uint16_t>(6U + msgPackArrayHeaderSize(MSGPACK_STATE_ARRAY_BYTES) + (2U * MSGPACK_STATE_ARRAY_BYTES));
-
-                /**
-                 * @brief Maximum MessagePack payload size accepted from the bridge.
-                 *
-                 * `SET_STATE` is the largest command that the core can receive from the bridge.
-                 */
-                constexpr uint16_t MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE =
-                    etl::bit_ceil(MSGPACK_SET_STATE_MAX_SIZE > 15U ? MSGPACK_SET_STATE_MAX_SIZE : 15U);
-
-                /**
-                 * @brief MessagePack serial transport framing header size.
-                 *
-                 * MessagePack frames are transported as:
-                 *   [len_lo][len_hi][payload...]
-                 * where `len` is the raw payload size in bytes.
-                 */
-                constexpr uint16_t MSGPACK_FRAME_HEADER_SIZE = 2U;
-                static_assert(MSGPACK_RECEIVED_PAYLOAD_MAX_SIZE <= 0xFFFFU, "MessagePack serial framing uses a 16-bit payload length.");
                 /*
                 Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings and values strings are const char *
@@ -159,10 +112,11 @@ namespace constants
                 /*
                 Sent state Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
                 IMPORTANT: We are assuming that all keys strings are const char * but not values
-                {"p":2,"s":[0,1,0,1,...]}-> JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2)
-                The bare minimum is 16 with no actuators
+                {"p":2,"s":[90,3]} -> JSON_ARRAY_SIZE(ceil(CONFIG_MAX_ACTUATORS / 8)) + JSON_OBJECT_SIZE(2)
+                because `ACTUATORS_STATE` is serialized as packed bytes.
+                The bare minimum is 16 with no actuators.
                 */
-                constexpr uint16_t SENT_DOC_STATE_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_OBJECT_SIZE(2); //!< Calculated size for the JSON document sent with actuator states.
+                constexpr uint16_t SENT_DOC_STATE_SIZE = JSON_ARRAY_SIZE(PACKED_STATE_BYTES) + JSON_OBJECT_SIZE(2); //!< Calculated size for the JSON document sent with packed actuator states.
 
                 /*
                 Sent network click Json Document, the size is computed here https://arduinojson.org/v6/assistant/

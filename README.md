@@ -46,7 +46,7 @@ The serial contract between `lsh-core` and `lsh-esp` is intentionally strict:
 - `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
 - A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
 - The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
-- Serial framing is transport-specific: JSON uses newline-delimited frames, while MsgPack uses a 16-bit little-endian payload-length prefix followed by the raw payload bytes.
+- Serial transport is codec-specific: JSON uses newline-delimited frames, while MsgPack is written as raw payload bytes without extra framing.
 
 ### API Documentation
 
@@ -402,8 +402,8 @@ You can set these flags globally for all devices or on a per-device basis in you
 
 - **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from human-readable JSON to the more efficient, binary MessagePack format.
 - **When to use:** Recommended for most production environments. MessagePack significantly reduces the size of the payloads, leading to faster and more reliable serial communication. This also reduces the RAM required for serialization buffers on both the Controllino and the ESP32.
-- **Serial framing:** When this flag is enabled, the serial transport no longer relies on stream timeouts. Each serial frame is encoded as `[len_lo][len_hi][msgpack-payload...]`, where the 16-bit little-endian prefix contains the raw MessagePack payload size. JSON mode continues to use newline-delimited text frames.
-- **Compile-time static frames:** Static control payloads such as `BOOT` and `PING` are generated at compile time already in their final transport form. Runtime prefixing is only used for dynamic payloads whose size is not known until serialization time.
+- **Serial transport:** When this flag is enabled, the controller writes raw MessagePack payload bytes directly on the serial link. JSON mode continues to use newline-delimited text frames.
+- **Compile-time static payloads:** Static control payloads such as `BOOT` and `PING` are generated at compile time already in their final transport form, with no runtime prefixing.
 - **Impact:** Smaller firmware size and lower RAM usage. Requires the `lsh-bridge` firmware to also be configured for MessagePack.
 
 ### I/O Performance
