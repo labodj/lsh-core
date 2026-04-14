@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 
+#include "internal/cpp_features.hpp"
 #include "internal/user_config_bridge.hpp"
 
 /**
@@ -56,7 +57,7 @@ public:
      * @param uniqueId the actuator unique id.
      * @param normalState the default state of the actuator.
      */
-    explicit constexpr Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinNumber(pin), defaultState(normalState), actualState(normalState), id(uniqueId)
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept : pinNumber(pin), defaultState(normalState), actualState(normalState), id(uniqueId)
     {
         pinMode(pin, OUTPUT);                                 // PinMode to Output
         digitalWrite(pin, static_cast<uint8_t>(normalState)); // Set the default state
@@ -94,12 +95,12 @@ public:
     /*  Workaround for https://stackoverflow.com/questions/28788353/clang-wweak-vtables-and-pure-abstract-class
         and https://stackoverflow.com/questions/28786473/clang-no-out-of-line-virtual-method-definitions-pure-abstract-c-class/40550578 */
 
-#if (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#if LSH_USING_CPP17
     Actuator(const Actuator &) = delete;
     Actuator(Actuator &&) = delete;
     auto operator=(const Actuator &) -> Actuator & = delete;
     auto operator=(Actuator &&) -> Actuator & = delete;
-#endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#endif // LSH_USING_CPP17
 
     // Setters
     [[nodiscard]] auto setState(bool state) -> bool; // Sets the new state of the actuator, respecting debounce time.

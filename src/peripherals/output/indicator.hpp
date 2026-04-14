@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 
+#include "internal/cpp_features.hpp"
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/indicatormodes.hpp"
@@ -51,7 +52,7 @@ public:
      * @brief Construct a new Indicator object using standard I/O.
      * @param pin The Arduino pin number for the indicator.
      */
-    explicit constexpr Indicator(uint8_t pin) noexcept : pinNumber(pin)
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Indicator(uint8_t pin) noexcept : pinNumber(pin)
     {
         pinMode(pin, OUTPUT); // PinMode to Output
     }
@@ -72,12 +73,12 @@ public:
     }
 #endif
 
-#if (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#if LSH_USING_CPP17
     Indicator(const Indicator &) = delete;
     Indicator(Indicator &&) = delete;
     auto operator=(const Indicator &) -> Indicator & = delete;
     auto operator=(Indicator &&) -> Indicator & = delete;
-#endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#endif // LSH_USING_CPP17
 
     /**
      * @brief Set the state of the indicator.

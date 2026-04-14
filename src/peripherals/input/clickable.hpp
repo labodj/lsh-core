@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 
+#include "internal/cpp_features.hpp"
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/clickresults.hpp"
@@ -63,14 +64,20 @@ private:
     // Data structures definitions
     struct ClickableConfigFlags
     {
-        uint8_t isShortClickable : 1 = true;             //!< True if the clickable is short clickable
-        uint8_t isLongClickable : 1 = false;             //!< True if the clickable is long clickable
-        uint8_t isSuperLongClickable : 1 = false;        //!< True if the clickable is super long clickable
-        uint8_t isNetworkLongClickable : 1 = false;      //!< True if this clickable has long click network actuators
-        uint8_t isNetworkSuperLongClickable : 1 = false; //!< True if this clickable has super long click network actuators
-        uint8_t isQuickClickable : 1 = false;            //!< Derived flag. True for a short click on press when no long/super-long is configured.
-        uint8_t isValid : 1 = false;                     //!< True if it is either clickable, long clickable or super long clickable
-        uint8_t isChecked : 1 = false;                   //!< True if we checked at least once the clickable validity
+        uint8_t isShortClickable : 1;             //!< True if the clickable is short clickable
+        uint8_t isLongClickable : 1;              //!< True if the clickable is long clickable
+        uint8_t isSuperLongClickable : 1;         //!< True if the clickable is super long clickable
+        uint8_t isNetworkLongClickable : 1;       //!< True if this clickable has long click network actuators
+        uint8_t isNetworkSuperLongClickable : 1;  //!< True if this clickable has super long click network actuators
+        uint8_t isQuickClickable : 1;             //!< Derived flag. True for a short click on press when no long/super-long is configured.
+        uint8_t isValid : 1;                      //!< True if it is either clickable, long clickable or super long clickable
+        uint8_t isChecked : 1;                    //!< True if we checked at least once the clickable validity
+
+        LSH_CONSTEXPR ClickableConfigFlags() noexcept
+            : isShortClickable(true), isLongClickable(false), isSuperLongClickable(false), isNetworkLongClickable(false),
+              isNetworkSuperLongClickable(false), isQuickClickable(false), isValid(false), isChecked(false)
+        {
+        }
     };
 
     // Bitfield for configuration flags to save RAM. "Hot" data, read every detection.
@@ -117,7 +124,7 @@ public:
      * @param pin pin number
      * @param uniqueId unique ID of the clickable.
      */
-    explicit constexpr Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinNumber(pin), id(uniqueId) {}
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinNumber(pin), id(uniqueId) {}
 #else
     /**
      * @brief Construct a new Clickable object, fast IO version.
@@ -129,12 +136,12 @@ public:
 #endif
 
 // Delete copy constructor, copy assignment operator, move constructor and move assignment operator
-#if (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#if LSH_USING_CPP17
     Clickable(const Clickable &) = delete;
     Clickable(Clickable &&) = delete;
     auto operator=(const Clickable &) -> Clickable & = delete;
     auto operator=(Clickable &&) -> Clickable & = delete;
-#endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#endif // LSH_USING_CPP17
 
     /**
      * @brief Get the state of the clickable if configured as INPUT with its external pulldown resistor (PIN -> BUTTON -> +12v/+5V).
