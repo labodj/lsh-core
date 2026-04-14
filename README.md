@@ -10,7 +10,7 @@ This document serves as the official guide for using the `lsh-core` library in y
 
 LSH is a complete, distributed home automation system composed of three distinct, open-source projects:
 
-- **`lsh-core` (This Project):** The heart of the physical layer. This C++23 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
+- **`lsh-core` (This Project):** The heart of the physical layer. This modern C++17 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
 
 - **`lsh-esp` (`lsh-bridge`):** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
 
@@ -97,8 +97,19 @@ Typically, `Serial2` on the Controllino Maxi is used for this communication.
 
    ```ini
     [env:my_device]
+    platform = atmelavr
+    framework = arduino
+    board = controllino_maxi
+    build_unflags = -std=gnu++11 -std=c++11
+    build_flags =
+        -I include
+        -std=gnu++17
     lib_deps = https://github.com/labodj/lsh-core.git
    ```
+
+   If you are building the bundled example inside this repository, keep the local
+   `lsh-core=symlink://../..` dependency used by
+   `examples/multi-device-project/platformio.ini`.
 
 3. Create the following directory structure inside your project:
 
@@ -200,7 +211,7 @@ device_feature_flags =
 
 [env:LivingRoom_release]
 extends = common_release
-src_filter = ${common_base.src_filter} +<configs/living_room_config.cpp>
+build_src_filter = ${common_base.build_src_filter} +<configs/living_room_config.cpp>
 build_flags =
     ${common_release.build_flags}
     ${common_base.default_feature_flags}
