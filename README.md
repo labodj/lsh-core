@@ -74,8 +74,14 @@ When a button is pressed, it closes the circuit, connecting the input pin to `VD
 
 ### Output Wiring
 
-- **High-Voltage Outputs (Relays):** The Controllino's relay outputs are used to switch high-voltage loads like 230V AC for lighting.
-- **Low-Voltage Outputs (Digital Out):** These outputs provide a `VDD` signal and are typically used to power status LEDs on button panels.
+- **Relay Outputs:** The Controllino relay outputs can be used to switch loads at **12 V / 24 V / 115 V / 230 V**, within the limits documented by the official Controllino datasheet and the rest of the installation.
+- **Low-Voltage Outputs (Digital Out):** These outputs provide a `VDD` signal and are typically used to power status LEDs and illuminated push-buttons on button panels.
+
+Typical field-model assumptions in the real installation:
+
+- wall push-buttons stay on the low-voltage side and are fed from the same controller supply (`VDD`)
+- indicator lights also stay at the controller supply voltage
+- the controller owns the direct relationship between field inputs, relays and indicator outputs
 
 ### ESP32 (`lsh-bridge`) Connection
 
@@ -87,6 +93,19 @@ For network functionality, `lsh-core` communicates with an `lsh-bridge` device o
 - **Controllino `RX` pin** → Logic Level Shifter (HV side) → (LV side) → **ESP32 `TX` pin**
 
 Typically, `Serial2` on the Controllino Maxi is used for this communication.
+
+### Local-First Runtime Boundary
+
+`lsh-core` is meant to own the deterministic part of the installation.
+
+- short-click logic, relay ownership and indicator behavior live on the controller
+- network-assisted logic extends the device behavior, but should not be the only thing making the panel usable
+- when Wi-Fi, MQTT or the central logic node are unavailable, local behavior should still remain coherent
+
+This is why the bridge and orchestration layers are treated as additive rather than authoritative over the physical panel.
+
+For a system-level hardware view of the real installation pattern, see the public landing repo:
+[Labo Smart Home hardware overview](https://github.com/labodj/labo-smart-home/blob/main/HARDWARE_OVERVIEW.md)
 
 ## Getting Started: Creating Your Project
 
