@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use or reference lsh-core, please cite it using the metadata below."
+title: "lsh-core"
+type: software
+authors:
+  - family-names: "Labardi"
+    given-names: "Jacopo"
+repository-code: "https://github.com/labodj/lsh-core"
+url: "https://github.com/labodj/lsh-core"
+license: "Apache-2.0"
+abstract: "Core Arduino C++ framework for the LSH smart home ecosystem, designed for Controllino PLCs."
+keywords:
+  - arduino
+  - controllino
+  - embedded
+  - smart-home
+  - firmware
+  - lsh
