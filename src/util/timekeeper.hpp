@@ -3,7 +3,7 @@
  * @author  Jacopo Labardi (labodj)
  * @brief   Declares a utility for consistent time management within the main loop.
  *
- * Copyright 2025 Jacopo Labardi
+ * Copyright 2026 Jacopo Labardi
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

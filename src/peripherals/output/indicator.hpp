@@ -3,7 +3,7 @@
  * @author  Jacopo Labardi (labodj)
  * @brief   Defines the Indicator class, representing an LED or status light.
  *
- * Copyright 2025 Jacopo Labardi
+ * Copyright 2026 Jacopo Labardi
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

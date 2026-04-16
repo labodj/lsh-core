@@ -4,7 +4,7 @@
  * @brief   Implements the logic for handling network click requests, confirmations, and timeouts.
  *
  *
- * Copyright 2025 Jacopo Labardi
+ * Copyright 2026 Jacopo Labardi
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
