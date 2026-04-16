@@ -3,7 +3,6 @@
  * @author  Jacopo Labardi (labodj)
  * @brief   Implements the logic for deserializing and dispatching commands.
  *
- * Copyright 2025 Jacopo Labardi
  * Copyright 2026 Jacopo Labardi
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
