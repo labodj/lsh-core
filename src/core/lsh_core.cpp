@@ -24,6 +24,7 @@
 
 #include "communication/constants/static_payloads.hpp"
 #include "communication/esp_com.hpp"
+#include "communication/bridge_sync.hpp"
 #include "communication/serializer.hpp"
 #include "config/configurator.hpp"
 #include "core/network_clicks.hpp"
@@ -58,9 +59,9 @@ namespace LSH
         EspCom::init();
         Configurator::configure();     // Apply user configuration and register the real runtime topology.
         Configurator::finalizeSetup(); // Finalize setup for the actually registered devices only.
-        // BOOT invalidates the bridge-side model: after any reboot the ESP must re-sync
-        // details and state instead of assuming any previously cached topology.
-        Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT);
+        // After any controller reboot or config change, the bridge must ask for
+        // REQUEST_DETAILS and REQUEST_STATE again before mutating commands are trusted.
+        BridgeSync::begin(timeKeeper::getTime());
         DFM();
     }
 
@@ -73,7 +74,6 @@ namespace LSH
         using constants::ClickResult;
         using constants::ClickType;
         using constants::NoNetworkClickType;
-        using constants::payloads::StaticType;
         using constants::timings::ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS;
         using constants::timings::DELAY_AFTER_RECEIVE_MS;
         using constants::timings::NETWORK_CLICK_CHECK_INTERVAL_MS;
@@ -115,7 +115,7 @@ namespace LSH
         // Clickables checks (and misc...)
         if (now - lastClickablesCheck_ms) // Check approximately every millisecond (high polling rate)
         {
-            Serializer::serializeStaticJson(StaticType::PING_); // Try to send ping to ESP, ~1000Hz for this function is more than enough.
+            BridgeSync::tick(now);
             ClickType clickType = ClickType::NONE;              //!< Temp holder of clickable click type
             lastClickablesCheck_ms = now;
             // Optimization: Iterate using pointers to avoid repeated array indexing calculations

@@ -20,6 +20,7 @@
 
 #include "communication/deserializer.hpp"
 
+#include "communication/bridge_sync.hpp"
 #include "communication/constants/protocol.hpp"
 #include "communication/serializer.hpp"
 #include "core/network_clicks.hpp"
@@ -27,6 +28,7 @@
 #include "device/clickable_manager.hpp"
 #include "peripherals/output/actuator.hpp"
 #include "util/debug/debug.hpp"
+#include "util/timekeeper.hpp"
 
 namespace Deserializer
 {
@@ -164,6 +166,10 @@ namespace Deserializer
         switch (cmd)
         {
         case Command::SET_SINGLE_ACTUATOR:
+            if (!BridgeSync::allowsMutatingCommands())
+            {
+                break;
+            }
             // Get values from Json
             {
                 bool state = false;
@@ -184,6 +190,11 @@ namespace Deserializer
             }
         case Command::SET_STATE:
         {
+            if (!BridgeSync::allowsMutatingCommands())
+            {
+                break;
+            }
+
             const JsonArrayConst statesArray = doc[KEY_STATE];
             if (statesArray.isNull())
             {
@@ -226,20 +237,34 @@ namespace Deserializer
 
         case Command::NETWORK_CLICK_ACK:
         case Command::FAILOVER_CLICK:
+            if (!BridgeSync::allowsMutatingCommands())
+            {
+                break;
+            }
             processNetworkClickResponse(doc, cmd, result);
             break;
 
         case Command::FAILOVER:
+            if (!BridgeSync::allowsMutatingCommands())
+            {
+                break;
+            }
             result.stateChanged = NetworkClicks::checkAllNetworkClicksTimers(true);
             break;
 
         case Command::REQUEST_STATE:
+            if (!BridgeSync::allowsStateRequests())
+            {
+                break;
+            }
             Serializer::serializeActuatorsState();
+            BridgeSync::onRequestStateServed();
             result.stateChanged = false;
             break;
 
         case Command::REQUEST_DETAILS:
             Serializer::serializeDetails();
+            BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
             result.stateChanged = false;
             break;
 

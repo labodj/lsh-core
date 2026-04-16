@@ -49,6 +49,18 @@ namespace constants
                 static constexpr const uint16_t CONNECTION_TIMEOUT_MS = CONFIG_CONNECTION_TIMEOUT_MS; //!< Time for a connection timeout in ms
 #endif // CONFIG_CONNECTION_TIMEOUT_MS
 
+#ifndef CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS
+                static constexpr const uint16_t BRIDGE_BOOT_RETRY_INTERVAL_MS = 250U; //!< Retry interval for BOOT while the bridge has not completed its startup handshake.
+#else
+                static constexpr const uint16_t BRIDGE_BOOT_RETRY_INTERVAL_MS = CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS;
+#endif // CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS
+
+#ifndef CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS
+                static constexpr const uint16_t BRIDGE_AWAIT_STATE_TIMEOUT_MS = 1500U; //!< Maximum time to wait for REQUEST_STATE after REQUEST_DETAILS before restarting the handshake.
+#else
+                static constexpr const uint16_t BRIDGE_AWAIT_STATE_TIMEOUT_MS = CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS;
+#endif // CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS
+
 #ifndef CONFIG_COM_SERIAL_BAUD
                 static constexpr const uint32_t COM_SERIAL_BAUD = 250000U; //!< Default Serial connected with ESP speed in bauds
 #else
