@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_CONFIG_CONFIGURATOR_HPP
-#define LSHCORE_CONFIG_CONFIGURATOR_HPP
+#ifndef LSH_CORE_CONFIG_CONFIGURATOR_HPP
+#define LSH_CORE_CONFIG_CONFIGURATOR_HPP
 
 #include <stdint.h>
 #include "internal/user_config_bridge.hpp"
@@ -37,17 +37,17 @@ class Configurator
 {
 private:
     // Helper functions for leaner config
-    static void addActuator(Actuator *actuator);    // Helper to add an actuator, for leaner config.
-    static void addClickable(Clickable *clickable); // Helper to add a clickable, for leaner config.
-    static void addIndicator(Indicator *indicator); // Helper to add an indicator, for leaner config.
+    static void addActuator(Actuator *actuator);     // Helper to add an actuator, for leaner config.
+    static void addClickable(Clickable *clickable);  // Helper to add a clickable, for leaner config.
+    static void addIndicator(Indicator *indicator);  // Helper to add an indicator, for leaner config.
 
-    static auto getIndex(const Actuator &actuator) -> uint8_t;   // Helper to get an actuator index, for leaner config
-    static auto getIndex(const Clickable &clickable) -> uint8_t; // Helper to get a clickable index, for leaner config
-    static auto getIndex(const Indicator &indicator) -> uint8_t; // Helper to get a indicator index, for leaner config
+    static auto getIndex(const Actuator &actuator) -> uint8_t;    // Helper to get an actuator index, for leaner config
+    static auto getIndex(const Clickable &clickable) -> uint8_t;  // Helper to get a clickable index, for leaner config
+    static auto getIndex(const Indicator &indicator) -> uint8_t;  // Helper to get a indicator index, for leaner config
 
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
-    static void disableRtc(); // Disable Controllino RTC
-    static void disableEth(); // Disable COntrollino Ethernet
+    static void disableRtc();  // Disable Controllino RTC
+    static void disableEth();  // Disable COntrollino Ethernet
 #endif
 
 public:
@@ -60,16 +60,11 @@ public:
     Configurator(Configurator &&) = delete;
     auto operator=(const Configurator &) -> Configurator & = delete;
     auto operator=(Configurator &&) -> Configurator & = delete;
-#endif // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
+#endif  // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
 
-    /**
-     * @brief The main user-defined device configuration function.
-     * @details This function is implemented by the user in their `src/configs/device.cpp` file.
-     *          It is responsible for instantiating all Actuator, Clickable, and Indicator
-     *          objects and defining their relationships and behaviors.
-     */
+    /** @brief User-defined device configuration hook implemented in the project source tree. */
     static void configure();
-    static void finalizeSetup(); // Final steps of configuration, must be called after configuration()
+    static void finalizeSetup();  // Final setup pass executed after configuration registration.
 };
 
-#endif // LSHCORE_CONFIG_CONFIGURATOR_HPP
+#endif  // LSH_CORE_CONFIG_CONFIGURATOR_HPP

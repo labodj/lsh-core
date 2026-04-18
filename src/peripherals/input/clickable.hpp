@@ -18,16 +18,16 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_PERIPHERALS_INPUT_CLICKABLE_HPP
-#define LSHCORE_PERIPHERALS_INPUT_CLICKABLE_HPP
+#ifndef LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP
+#define LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP
 
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
-#include "util/constants/clickresults.hpp"
-#include "util/constants/clicktypes.hpp"
+#include "util/constants/click_results.hpp"
+#include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
 
 /**
@@ -43,10 +43,10 @@ private:
      */
     enum class State : uint8_t
     {
-        IDLE,       //!< The button is not pressed, waiting for a press.
-        DEBOUNCING, //!< A change was detected, waiting for the signal to stabilize.
-        PRESSED,    //!< The press is confirmed and stable. Timing for long/super-long actions.
-        RELEASED    //!< The button was just released. A transient state to determine the final action.
+        IDLE,        //!< The button is not pressed, waiting for a press.
+        DEBOUNCING,  //!< A change was detected, waiting for the signal to stabilize.
+        PRESSED,     //!< The press is confirmed and stable. Timing for long/super-long actions.
+        RELEASED     //!< The button was just released. A transient state to determine the final action.
     };
 
     /**
@@ -73,48 +73,47 @@ private:
         uint8_t isValid : 1;                      //!< True if it is either clickable, long clickable or super long clickable
         uint8_t isChecked : 1;                    //!< True if we checked at least once the clickable validity
 
-        LSH_CONSTEXPR ClickableConfigFlags() noexcept
-            : isShortClickable(true), isLongClickable(false), isSuperLongClickable(false), isNetworkLongClickable(false),
-              isNetworkSuperLongClickable(false), isQuickClickable(false), isValid(false), isChecked(false)
-        {
-        }
+        LSH_CONSTEXPR ClickableConfigFlags() noexcept :
+            isShortClickable(true), isLongClickable(false), isSuperLongClickable(false), isNetworkLongClickable(false),
+            isNetworkSuperLongClickable(false), isQuickClickable(false), isValid(false), isChecked(false)
+        {}
     };
 
     // Bitfield for configuration flags to save RAM. "Hot" data, read every detection.
     ClickableConfigFlags configFlags;
 
 #ifndef CONFIG_USE_FAST_CLICKABLES
-    const uint8_t pinNumber; //!< The pin to which the clickable is connected to, for conventional IO
+    const uint8_t pinNumber;  //!< The pin to which the clickable is connected to, for conventional IO
 #else
-    const uint8_t pinMask;                 //!< Mask of the clickable, for fast IO
-    const volatile uint8_t *const pinPort; //!< Port of the clickable, for fast IO
+    const uint8_t pinMask;                  //!< Mask of the clickable, for fast IO
+    const volatile uint8_t *const pinPort;  //!< Port of the clickable, for fast IO
 #endif
-    uint8_t index = 0U; //!< Clickable index on Clickables namespace Array
-    const uint8_t id;   //!< Unique ID of the clickable (integer)
+    uint8_t index = 0U;  //!< Clickable index on Clickables namespace Array
+    const uint8_t id;    //!< Unique ID of the clickable (integer)
 
     // State variables for the FSM ("hot" data, move to top for <64 byte offset optimization).
-    State currentState = State::IDLE;                //!< The current state of the FSM.
-    uint32_t stateChangeTime = 0U;                   //!< Timestamp of the last state change.
-    ActionFired lastActionFired = ActionFired::NONE; //!< Tracks which timed action has already been triggered.
+    State currentState = State::IDLE;                 //!< The current state of the FSM.
+    uint32_t stateChangeTime = 0U;                    //!< Timestamp of the last state change.
+    ActionFired lastActionFired = ActionFired::NONE;  //!< Tracks which timed action has already been triggered.
 
     // Timings ("hot" configuration, move to top)
-    uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;            //!< Long click time in ms
-    uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS; //!< Super long click time in ms
+    uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;             //!< Long click time in ms
+    uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS;  //!< Super long click time in ms
 protected:
-    uint8_t debounce_ms = constants::timings::CLICKABLE_DEBOUNCE_TIME_MS; //!< Debounce time in ms
+    uint8_t debounce_ms = constants::timings::CLICKABLE_DEBOUNCE_TIME_MS;  //!< Debounce time in ms
 private:
-
     // Non-boolean configuration properties (Cold data, rarely accessed in tight loops)
-    constants::LongClickType longClickType = constants::LongClickType::NONE;                    //!< Long clickability setting
-    constants::NoNetworkClickType longClickFallback = constants::NoNetworkClickType::NONE;      //!< Fallback for long click over network
-    constants::SuperLongClickType superLongClickType = constants::SuperLongClickType::NONE;     //!< Super long clickability setting
-    constants::NoNetworkClickType superLongClickFallback = constants::NoNetworkClickType::NONE; //!< Fallback for super long click over network
+    constants::LongClickType longClickType = constants::LongClickType::NONE;                 //!< Long clickability setting
+    constants::NoNetworkClickType longClickFallback = constants::NoNetworkClickType::NONE;   //!< Fallback for long click over network
+    constants::SuperLongClickType superLongClickType = constants::SuperLongClickType::NONE;  //!< Super long clickability setting
+    constants::NoNetworkClickType superLongClickFallback =
+        constants::NoNetworkClickType::NONE;  //!< Fallback for super long click over network
 
     // Attached actuators (HUGE size due to static storage)
     // Keep at the bottom to avoid pushing hot variables out of the 64-byte displacement range.
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsShort{};     //!< Actuators controlled via short click
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsLong{};      //!< Actuators controlled via long click
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsSuperLong{}; //!< Actuators controlled via super long click
+    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsShort{};      //!< Actuators controlled via short click
+    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsLong{};       //!< Actuators controlled via long click
+    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsSuperLong{};  //!< Actuators controlled via super long click
 
 public:
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -124,7 +123,8 @@ public:
      * @param pin pin number
      * @param uniqueId unique ID of the clickable.
      */
-    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinNumber(pin), id(uniqueId) {}
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinNumber(pin), id(uniqueId)
+    {}
 #else
     /**
      * @brief Construct a new Clickable object, fast IO version.
@@ -132,7 +132,9 @@ public:
      * @param pin pin number
      * @param uniqueId unique ID of the clickable.
      */
-    explicit Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinMask(digitalPinToBitMask(pin)), pinPort(portInputRegister(digitalPinToPort(pin))), id(uniqueId) {}
+    explicit Clickable(uint8_t pin, uint8_t uniqueId) noexcept :
+        pinMask(digitalPinToBitMask(pin)), pinPort(portInputRegister(digitalPinToPort(pin))), id(uniqueId)
+    {}
 #endif
 
 // Delete copy constructor, copy assignment operator, move constructor and move assignment operator
@@ -141,7 +143,7 @@ public:
     Clickable(Clickable &&) = delete;
     auto operator=(const Clickable &) -> Clickable & = delete;
     auto operator=(Clickable &&) -> Clickable & = delete;
-#endif // LSH_USING_CPP17
+#endif  // LSH_USING_CPP17
 
     /**
      * @brief Get the state of the clickable if configured as INPUT with its external pulldown resistor (PIN -> BUTTON -> +12v/+5V).
@@ -158,47 +160,53 @@ public:
 #endif
     }
 
-    void setIndex(uint8_t indexToSet); // Set the Clickable index on Clickables namespace Array
+    void setIndex(uint8_t indexToSet);  // Set the Clickable index on Clickables namespace Array
 
     // Clickability setters
-    auto setClickableShort(bool shortClickable) -> Clickable &; // Set the short clickability of the clickable
+    auto setClickableShort(bool shortClickable) -> Clickable &;  // Set the short clickability of the clickable
     auto setClickableLong(bool longClickable,
                           constants::LongClickType clickType = constants::LongClickType::NORMAL,
                           bool networkClickable = false,
-                          constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK) -> Clickable &; // Set long click network clickability
+                          constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
+        -> Clickable &;  // Set long click network clickability
     auto setClickableSuperLong(bool superLongClickable,
                                constants::SuperLongClickType clickType = constants::SuperLongClickType::NORMAL,
                                bool networkClickable = false,
-                               constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK) -> Clickable &; // Set super long click network clickability
+                               constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
+        -> Clickable &;  // Set super long click network clickability
 
     // Actuators setter
-    auto addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType) -> Clickable &; // Add an actuator
-    auto addActuatorShort(uint8_t actuatorIndex) -> Clickable &;                               // Add a short click actuator
-    auto addActuatorLong(uint8_t actuatorIndex) -> Clickable &;                                // Add a long click actuator
-    auto addActuatorSuperLong(uint8_t actuatorIndex) -> Clickable &;                           // Add a super long click actuator
+    auto addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType) -> Clickable &;  // Add an actuator
+    auto addActuatorShort(uint8_t actuatorIndex) -> Clickable &;                                // Add a short click actuator
+    auto addActuatorLong(uint8_t actuatorIndex) -> Clickable &;                                 // Add a long click actuator
+    auto addActuatorSuperLong(uint8_t actuatorIndex) -> Clickable &;                            // Add a super long click actuator
 
     // Timing setters
-    auto setDebounceTime(uint8_t timeToSet_ms) -> Clickable &;        // Set debounce time in ms (0-255)
-    auto setLongClickTime(uint16_t timeToSet_ms) -> Clickable &;      // Set long click time in ms (0-65535)
-    auto setSuperLongClickTime(uint16_t timeToSet_ms) -> Clickable &; // Set super long click time in ms (0-65535)
+    auto setDebounceTime(uint8_t timeToSet_ms) -> Clickable &;         // Set debounce time in ms (0-255)
+    auto setLongClickTime(uint16_t timeToSet_ms) -> Clickable &;       // Set long click time in ms (0-65535)
+    auto setSuperLongClickTime(uint16_t timeToSet_ms) -> Clickable &;  // Set super long click time in ms (0-65535)
 
     // Getters
-    [[nodiscard]] auto getIndex() const -> uint8_t;                                                               // Get the Clickable index on Clickables namespace Array
-    [[nodiscard]] auto getId() const -> uint8_t;                                                                  // Return unique ID of the clickable
-    [[nodiscard]] auto getActuators(constants::ClickType actuatorType) const -> const etl::ivector<uint8_t> *;    // Returns attached actuators of one kind
-    [[nodiscard]] auto getTotalActuators(constants::ClickType actuatorType) const -> uint8_t;                     // Returns the total number of a kind of actuators
-    [[nodiscard]] auto getLongClickType() const -> constants::LongClickType;                                      // Returns the type of long click
-    [[nodiscard]] auto isNetworkClickable(constants::ClickType clickType) const -> bool;                          // Returns if the clickable is network clickable for long or super long click actions
-    [[nodiscard]] auto getNetworkFallback(constants::ClickType clickType) const -> constants::NoNetworkClickType; // Returns the fallback type for a give network click type
-    [[nodiscard]] auto getSuperLongClickType() const -> constants::SuperLongClickType;                            // Returns the type of super long click
+    [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the Clickable index on Clickables namespace Array
+    [[nodiscard]] auto getId() const -> uint8_t;     // Return unique ID of the clickable
+    [[nodiscard]] auto getActuators(constants::ClickType actuatorType) const
+        -> const etl::ivector<uint8_t> *;  // Returns attached actuators of one kind
+    [[nodiscard]] auto getTotalActuators(constants::ClickType actuatorType) const
+        -> uint8_t;                                                           // Returns the total number of a kind of actuators
+    [[nodiscard]] auto getLongClickType() const -> constants::LongClickType;  // Returns the type of long click
+    [[nodiscard]] auto isNetworkClickable(constants::ClickType clickType) const
+        -> bool;  // Returns if the clickable is network clickable for long or super long click actions
+    [[nodiscard]] auto getNetworkFallback(constants::ClickType clickType) const
+        -> constants::NoNetworkClickType;  // Returns the fallback type for a give network click type
+    [[nodiscard]] auto getSuperLongClickType() const -> constants::SuperLongClickType;  // Returns the type of super long click
 
     // Utilities
-    auto check() -> bool;                                          // Check for clickable coherence, it has to be clickable, it has to be connected to something
-    [[nodiscard]] auto shortClick() const -> bool;                 // Perform a short click action
-    [[nodiscard]] auto longClick() const -> bool;                  // Perform a long click action
-    [[nodiscard]] auto superLongClickSelective() const -> bool;    // Perform a selective super long click;
-    [[nodiscard]] auto clickDetection() -> constants::ClickResult; // Processes input state and determines the click type using an internal Finite State Machine (FSM).
-
+    auto check() -> bool;  // Check for clickable coherence, it has to be clickable, it has to be connected to something
+    [[nodiscard]] auto shortClick() const -> bool;               // Perform a short click action
+    [[nodiscard]] auto longClick() const -> bool;                // Perform a long click action
+    [[nodiscard]] auto superLongClickSelective() const -> bool;  // Perform a selective super long click;
+    [[nodiscard]] auto clickDetection()
+        -> constants::ClickResult;  // Processes input state and determines the click type using an internal Finite State Machine (FSM).
 };
 
-#endif // LSHCORE_PERIPHERALS_INPUT_CLICKABLE_HPP
+#endif  // LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP

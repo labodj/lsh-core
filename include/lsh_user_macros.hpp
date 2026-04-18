@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_LSH_USER_MACROS_HPP
-#define LSHCORE_LSH_USER_MACROS_HPP
+#ifndef LSH_CORE_LSH_USER_MACROS_HPP
+#define LSH_CORE_LSH_USER_MACROS_HPP
 
 // This file provides the user-facing macros. It needs the definitions of the
 // classes it instantiates and the bridge to the user's configuration.
@@ -56,7 +56,6 @@
  * @param var_name The name of the variable to declare (e.g., light0).
  * @param pin The hardware pin for the indicator.
  */
-#define LSH_INDICATOR(var_name, pin) \
-    Indicator var_name((pin))
+#define LSH_INDICATOR(var_name, pin) Indicator var_name((pin))
 
-#endif // LSHCORE_LSH_USER_MACROS_HPP
+#endif  // LSH_CORE_LSH_USER_MACROS_HPP

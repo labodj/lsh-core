@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_UTIL_RESET_HPP
-#define LSHCORE_UTIL_RESET_HPP
+#ifndef LSH_CORE_UTIL_RESET_HPP
+#define LSH_CORE_UTIL_RESET_HPP
 
 #include <avr/wdt.h>
 
@@ -43,4 +43,4 @@
     }
 }
 
-#endif // LSHCORE_UTILS_RESET_HPP
+#endif  // LSH_CORE_UTIL_RESET_HPP

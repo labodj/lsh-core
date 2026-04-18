@@ -18,28 +18,27 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_UTIL_DEBUG_MEMORY_HPP
-#define LSHCORE_UTIL_DEBUG_MEMORY_HPP
+#ifndef LSH_CORE_UTIL_DEBUG_MEMORY_HPP
+#define LSH_CORE_UTIL_DEBUG_MEMORY_HPP
 
 #if (ARDUINO >= 100)
 #include <Arduino.h>
 #else
 #include <WProgram.h>
-#endif // (ARDUINO >= 100)
+#endif  // (ARDUINO >= 100)
 
 // MemoryFree library based on code posted here:
 // https://forum.arduino.cc/index.php?topic=27536.msg204024#msg204024
 // Extended by Matthew Murdoch to include walking of the free list.
 
 #ifdef __cplusplus
-extern "C"
-{
-#endif // __cplusplus
+extern "C" {
+#endif  // __cplusplus
 
-    auto freeMemory() -> size_t;
+auto freeMemory() -> size_t;
 
 #ifdef __cplusplus
 }
-#endif // __cplusplus
+#endif  // __cplusplus
 
-#endif // LSHCORE_UTIL_DEBUG_MEMORY_HPP
+#endif  // LSH_CORE_UTIL_DEBUG_MEMORY_HPP

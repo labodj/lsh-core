@@ -115,7 +115,7 @@ void Configurator::finalizeSetup()
 void Configurator::disableRtc()
 {
     pinMode(CONTROLLINO_RTC_CHIP_SELECT, OUTPUT);
-    digitalWrite(CONTROLLINO_RTC_CHIP_SELECT, LOW); // Disable RTC
+    digitalWrite(CONTROLLINO_RTC_CHIP_SELECT, LOW);  // Disable RTC
 }
 
 /**
@@ -125,6 +125,6 @@ void Configurator::disableRtc()
 void Configurator::disableEth()
 {
     pinMode(CONTROLLINO_ETHERNET_CHIP_SELECT, OUTPUT);
-    digitalWrite(CONTROLLINO_ETHERNET_CHIP_SELECT, HIGH); // Disable Ethernet
+    digitalWrite(CONTROLLINO_ETHERNET_CHIP_SELECT, HIGH);  // Disable Ethernet
 }
-#endif // defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
+#endif  // defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)

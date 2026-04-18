@@ -28,231 +28,230 @@
 
 namespace Actuators
 {
-    using namespace Debug;
-    uint8_t totalActuators = 0U;                                              //!< Device real total Actuators
-    etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators{};                 //!< All device actuators (like relays)
-    etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};          //!< Device actuators map (UUID -> actuator index)
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{}; //!< Indexes of actuators with auto off functionality active
+using namespace Debug;
+uint8_t totalActuators = 0U;                                               //!< Device real total Actuators
+etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators{};                  //!< All device actuators (like relays)
+etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};           //!< Device actuators map (UUID -> actuator index)
+etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{};  //!< Indexes of actuators with auto off functionality active
 
-    namespace
+namespace
+{
+void failWrongActuatorId()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+    delay(10000);
+    deviceReset();
+}
+}  // namespace
+
+/**
+ * @brief Adds an actuator to the system.
+ *
+ * The actuator is stored in the main array and its ID is mapped to its index for fast lookups.
+ * If the maximum number of actuators is exceeded, the device will reset to prevent undefined behavior.
+ *
+ * @param actuator A pointer to the Actuator object to add.
+ */
+void addActuator(Actuator *const actuator)
+{
+    const uint8_t currentIndex = totalActuators;
+    if (currentIndex >= CONFIG_MAX_ACTUATORS)
     {
-        void failWrongActuatorId()
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB();
-            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-            delay(10000);
-            deviceReset();
-        }
-    } // namespace
-
-    /**
-     * @brief Adds an actuator to the system.
-     *
-     * The actuator is stored in the main array and its ID is mapped to its index for fast lookups.
-     * If the maximum number of actuators is exceeded, the device will reset to prevent undefined behavior.
-     *
-     * @param actuator A pointer to the Actuator object to add.
-     */
-    void addActuator(Actuator *const actuator)
-    {
-        const uint8_t currentIndex = totalActuators;
-        if (currentIndex >= CONFIG_MAX_ACTUATORS)
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB(); // Begin serial if not in debug mode
-            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
-            delay(10000);
-            deviceReset();
-        }
-
-        if (actuator->getId() == 0U)
-        {
-            failWrongActuatorId();
-        }
-
-        actuator->setIndex(currentIndex);   // Store current index inside the object, it can be useful
-        actuators[currentIndex] = actuator; // Insert in array of actuators
-        actuatorsMap[actuator->getId()] = currentIndex;
-
-        DPL(FPSTR(dStr::ACTUATOR), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE),
-            actuator->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE),
-            FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
-
-        totalActuators++;
+        using namespace constants::wrongConfigStrings;
+        NDSB();  // Begin serial if not in debug mode
+        CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
+        delay(10000);
+        deviceReset();
     }
 
-    /**
-     * @brief Get a single actuator.
-     *
-     * @param actuatorId actuator UUID.
-     * @return Actuator* a single actuator.
-     */
-    auto getActuator(uint8_t actuatorId) -> Actuator *
+    if (actuator->getId() == 0U)
     {
-        return actuators[actuatorsMap.find(actuatorId)->second];
+        failWrongActuatorId();
     }
 
-    /**
-     * @brief Get a single actuator index (in device vector of actuators).
-     *
-     * @param actuatorId actuator UUID.
-     * @return uint8_t a single actuator index (in device vector of actuators).
-     */
-    auto getIndex(uint8_t actuatorId) -> uint8_t
-    {
-        return actuatorsMap.find(actuatorId)->second;
-    }
+    actuator->setIndex(currentIndex);    // Store current index inside the object, it can be useful
+    actuators[currentIndex] = actuator;  // Insert in array of actuators
+    actuatorsMap[actuator->getId()] = currentIndex;
 
-    /**
-     * @brief Resolves an actuator ID to its dense runtime index with a single map lookup.
-     *
-     * @param actuatorId Actuator UUID.
-     * @param actuatorIndex Output runtime index when the ID exists.
-     * @return true if the actuator exists.
-     * @return false otherwise.
-     */
-    auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool
+    DPL(FPSTR(dStr::ACTUATOR), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), actuator->getId(), FPSTR(dStr::SPACE),
+        FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
+
+    totalActuators++;
+}
+
+/**
+ * @brief Get a single actuator.
+ *
+ * @param actuatorId actuator UUID.
+ * @return Actuator* a single actuator.
+ */
+auto getActuator(uint8_t actuatorId) -> Actuator *
+{
+    return actuators[actuatorsMap.find(actuatorId)->second];
+}
+
+/**
+ * @brief Get a single actuator index (in device vector of actuators).
+ *
+ * @param actuatorId actuator UUID.
+ * @return uint8_t a single actuator index (in device vector of actuators).
+ */
+auto getIndex(uint8_t actuatorId) -> uint8_t
+{
+    return actuatorsMap.find(actuatorId)->second;
+}
+
+/**
+ * @brief Resolves an actuator ID to its dense runtime index with a single map lookup.
+ *
+ * @param actuatorId Actuator UUID.
+ * @param actuatorIndex Output runtime index when the ID exists.
+ * @return true if the actuator exists.
+ * @return false otherwise.
+ */
+auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool
+{
+    const auto it = actuatorsMap.find(actuatorId);
+    if (it == actuatorsMap.end())
     {
-        const auto it = actuatorsMap.find(actuatorId);
-        if (it == actuatorsMap.end())
+        return false;
+    }
+    actuatorIndex = it->second;
+    return true;
+}
+
+/**
+ * @brief Get if the actuator actually exists.
+ *
+ * @param actuatorId Unique ID of the actuator.
+ * @return true if actuator exists.
+ * @return false if actuator doesn't exist.
+ */
+auto actuatorExists(uint8_t actuatorId) -> bool
+{
+    return (actuatorsMap.find(actuatorId) != actuatorsMap.end());
+}
+
+/**
+ * @brief Performs an auto-off timers check for actuators.
+ *
+ * @return true if any actuator has been automatically switched off.
+ * @return false otherwise.
+ */
+auto actuatorsAutoOffTimersCheck() -> bool
+{
+    auto *const local_actuators = actuators.data();  // Cache the pointer to the actuators array
+    bool somethingSwitchedOff = false;
+    for (const auto actuatorIndex : actuatorsWithAutoOffIndexes)
+    {
+        somethingSwitchedOff |= local_actuators[actuatorIndex]->checkAutoOffTimer();
+    }
+    return somethingSwitchedOff;
+}
+
+/**
+ * @brief Turns off all actuators.
+ *
+ * @return true if any actuator performed the switch.
+ * @return false otherwise.
+ */
+auto turnOffAllActuators() -> bool
+{
+    bool anySwitchPerformed = false;
+    for (uint8_t i = 0U; i < totalActuators; ++i)
+    {
+        anySwitchPerformed |= actuators[i]->setState(false);
+    }
+    return anySwitchPerformed;
+}
+
+/**
+ * @brief Turns off all unprotected actuators.
+ *
+ * @return true if any actuator performed the switch.
+ * @return false otherwise.
+ */
+auto turnOffUnprotectedActuators() -> bool
+{
+    bool anySwitchPerformed = false;
+    for (uint8_t i = 0U; i < totalActuators; ++i)
+    {
+        auto *actuator = actuators[i];
+        if (!actuator->hasProtection())
         {
-            return false;
+            anySwitchPerformed |= actuator->setState(false);
         }
-        actuatorIndex = it->second;
-        return true;
+    }
+    return anySwitchPerformed;
+}
+
+/**
+ * @brief Set the state for all actuators.
+ *
+ * @param states An array of boolean states to be set. The size must match the number of actuators.
+ * @return true if any actuator performed the switch.
+ * @return false otherwise.
+ */
+auto setAllActuatorsState(const etl::array<bool, CONFIG_MAX_ACTUATORS> &states) -> bool
+{
+    DP_CONTEXT();
+    bool anySwitchPerformed = false;
+    auto *const actuatorBegin = actuators.data();
+    auto *const actuatorEnd = actuatorBegin + totalActuators;
+    const bool *stateIt = states.data();
+    for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++stateIt)
+    {
+        anySwitchPerformed |= (*currActuator)->setState(*stateIt);
+    }
+    return anySwitchPerformed;
+}
+
+/**
+ * @brief Populates actuatorsWithAutoOffIndexes.
+ *
+ */
+void finalizeSetup()
+{
+    DP_CONTEXT();
+    // If this function has been called actuatorsWithAutoOffIndexes is already full
+    if (!actuatorsWithAutoOffIndexes.empty())
+    {
+        return;
     }
 
-    /**
-     * @brief Get if the actuator actually exists.
-     *
-     * @param actuatorId Unique ID of the actuator.
-     * @return true if actuator exists.
-     * @return false if actuator doesn't exist.
-     */
-    auto actuatorExists(uint8_t actuatorId) -> bool
+    auto *const actuatorBegin = actuators.data();
+    auto *const actuatorEnd = actuatorBegin + totalActuators;
+    uint8_t i = 0U;
+    for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++i)
     {
-        return (actuatorsMap.find(actuatorId) != actuatorsMap.end());
-    }
-
-    /**
-     * @brief Performs an auto-off timers check for actuators.
-     *
-     * @return true if any actuator has been automatically switched off.
-     * @return false otherwise.
-     */
-    auto actuatorsAutoOffTimersCheck() -> bool
-    {
-        auto *const local_actuators = actuators.data(); // Cache the pointer to the actuators array
-        bool somethingSwitchedOff = false;
-        for (const auto actuatorIndex : actuatorsWithAutoOffIndexes)
+        if ((*currActuator)->hasAutoOff())
         {
-            somethingSwitchedOff |= local_actuators[actuatorIndex]->checkAutoOffTimer();
-        }
-        return somethingSwitchedOff;
-    }
-
-    /**
-     * @brief Turns off all actuators.
-     *
-     * @return true if any actuator performed the switch.
-     * @return false otherwise.
-     */
-    auto turnOffAllActuators() -> bool
-    {
-        bool anySwitchPerformed = false;
-        for (uint8_t i = 0U; i < totalActuators; ++i)
-        {
-            anySwitchPerformed |= actuators[i]->setState(false);
-        }
-        return anySwitchPerformed;
-    }
-
-    /**
-     * @brief Turns off all unprotected actuators.
-     *
-     * @return true if any actuator performed the switch.
-     * @return false otherwise.
-     */
-    auto turnOffUnprotectedActuators() -> bool
-    {
-        bool anySwitchPerformed = false;
-        for (uint8_t i = 0U; i < totalActuators; ++i)
-        {
-            auto *actuator = actuators[i];
-            if (!actuator->hasProtection())
-            {
-                anySwitchPerformed |= actuator->setState(false);
-            }
-        }
-        return anySwitchPerformed;
-    }
-
-    /**
-     * @brief Set the state for all actuators.
-     *
-     * @param states An array of boolean states to be set. The size must match the number of actuators.
-     * @return true if any actuator performed the switch.
-     * @return false otherwise.
-     */
-    auto setAllActuatorsState(const etl::array<bool, CONFIG_MAX_ACTUATORS> &states) -> bool
-    {
-        DP_CONTEXT();
-        bool anySwitchPerformed = false;
-        auto *const actuatorBegin = actuators.data();
-        auto *const actuatorEnd = actuatorBegin + totalActuators;
-        const bool *stateIt = states.data();
-        for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++stateIt)
-        {
-            anySwitchPerformed |= (*currActuator)->setState(*stateIt);
-        }
-        return anySwitchPerformed;
-    }
-
-    /**
-     * @brief Populates actuatorsWithAutoOffIndexes.
-     *
-     */
-    void finalizeSetup()
-    {
-        DP_CONTEXT();
-        // If this function has been called actuatorsWithAutoOffIndexes is already full
-        if (!actuatorsWithAutoOffIndexes.empty())
-        {
-            return;
-        }
-
-        auto *const actuatorBegin = actuators.data();
-        auto *const actuatorEnd = actuatorBegin + totalActuators;
-        uint8_t i = 0U;
-        for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++i)
-        {
-            if ((*currActuator)->hasAutoOff())
-            {
-                actuatorsWithAutoOffIndexes.push_back(i);
-            }
-        }
-
-        if (actuatorsMap.size() != totalActuators)
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB(); // Begin serial if not in debug mode
-            CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-            delay(10000);
-            deviceReset();
+            actuatorsWithAutoOffIndexes.push_back(i);
         }
     }
 
-} // namespace Actuators
+    if (actuatorsMap.size() != totalActuators)
+    {
+        using namespace constants::wrongConfigStrings;
+        NDSB();  // Begin serial if not in debug mode
+        CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+        delay(10000);
+        deviceReset();
+    }
+}
+
+}  // namespace Actuators

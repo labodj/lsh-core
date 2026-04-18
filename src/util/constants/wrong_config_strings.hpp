@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP
-#define LSHCORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP
+#ifndef LSH_CORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP
+#define LSH_CORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP
 
 #include <avr/pgmspace.h>
 
@@ -28,22 +28,22 @@
  */
 namespace constants
 {
-    /**
-     * @brief namespace for wrong config static EEPROM strings.
-     *
-     */
-    namespace wrongConfigStrings
-    {
-        constexpr const char SPACE[] PROGMEM = " ";               // NOLINT
-        constexpr const char WRONG[] PROGMEM = "Wrong";           // NOLINT
-        constexpr const char ACTUATORS[] PROGMEM = "actuators";   // NOLINT
-        constexpr const char CLICKABLES[] PROGMEM = "clickables"; // NOLINT
-        constexpr const char INDICATORS[] PROGMEM = "indicators"; // NOLINT
-        constexpr const char NUMBER[] PROGMEM = "number";         // NOLINT
-        constexpr const char DUPLICATE[] PROGMEM = "Duplicate";   // NOLINT
-        constexpr const char ID[] PROGMEM = "ID";                 // NOLINT
-    } // namespace wrongConfigStrings
+/**
+ * @brief namespace for wrong config static EEPROM strings.
+ *
+ */
+namespace wrongConfigStrings
+{
+constexpr const char SPACE[] PROGMEM = " ";                // NOLINT
+constexpr const char WRONG[] PROGMEM = "Wrong";            // NOLINT
+constexpr const char ACTUATORS[] PROGMEM = "actuators";    // NOLINT
+constexpr const char CLICKABLES[] PROGMEM = "clickables";  // NOLINT
+constexpr const char INDICATORS[] PROGMEM = "indicators";  // NOLINT
+constexpr const char NUMBER[] PROGMEM = "number";          // NOLINT
+constexpr const char DUPLICATE[] PROGMEM = "Duplicate";    // NOLINT
+constexpr const char ID[] PROGMEM = "ID";                  // NOLINT
+}  // namespace wrongConfigStrings
 
-} // namespace constants
+}  // namespace constants
 
-#endif // LSHCORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP
+#endif  // LSH_CORE_UTIL_CONSTANTS_WRONG_CONFIG_STRINGS_HPP

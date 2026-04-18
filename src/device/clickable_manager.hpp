@@ -18,17 +18,17 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_DEVICE_CLICKABLE_MANAGER_HPP
-#define LSHCORE_DEVICE_CLICKABLE_MANAGER_HPP
+#ifndef LSH_CORE_DEVICE_CLICKABLE_MANAGER_HPP
+#define LSH_CORE_DEVICE_CLICKABLE_MANAGER_HPP
 
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
 #include "internal/etl_map.hpp"
 #include "internal/user_config_bridge.hpp"
-#include "util/constants/clicktypes.hpp"
+#include "util/constants/click_types.hpp"
 
-class Clickable; //!< Forward declaration
+class Clickable;  //!< Forward declaration
 
 /**
  * @brief Globally stores all clickables (like buttons) and to operates over them.
@@ -36,18 +36,20 @@ class Clickable; //!< Forward declaration
  */
 namespace Clickables
 {
-    extern uint8_t totalClickables;                                         //!< Device real total Clickables
-    extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;       //!< Device clickables
-    extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap; //!< Device clickables map (UUID (numeric)-> clickables index)
+extern uint8_t totalClickables;                                          //!< Device real total Clickables
+extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;        //!< Device clickables
+extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap;  //!< Device clickables map (UUID (numeric)-> clickables index)
 
-    void addClickable(Clickable *clickable);                                                      // Add one clickable to clickables vector and activate it
-    [[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;                          // Returns a single clickable
-    [[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;                                  // Returns a single clickable index
-    [[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool;        // Returns true and writes the clickable index when the ID exists
-    [[nodiscard]] auto clickableExists(uint8_t clickableId) -> bool;                              // Returns true if clickable exists
-    [[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType) -> bool; // Method for all types of clicks, since not all click can be done within clickable class
-    [[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;     // Alternative method for all types of click
-    void finalizeSetup();                                                                         // Resize vectors of all clickables to the actual needed size
-} // namespace Clickables
+void addClickable(Clickable *clickable);                              // Add one clickable to clickables vector and activate it
+[[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable
+[[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;          // Returns a single clickable index
+[[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex)
+    -> bool;                                                      // Returns true and writes the clickable index when the ID exists
+[[nodiscard]] auto clickableExists(uint8_t clickableId) -> bool;  // Returns true if clickable exists
+[[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType)
+    -> bool;  // Method for all types of clicks, since not all click can be done within clickable class
+[[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;  // Alternative method for all types of click
+void finalizeSetup();  // Resize vectors of all clickables to the actual needed size
+}  // namespace Clickables
 
-#endif // LSHCORE_DEVICE_CLICKABLE_MANAGER_HPP
+#endif  // LSH_CORE_DEVICE_CLICKABLE_MANAGER_HPP

@@ -1,7 +1,10 @@
 /**
- * @file    etl_array.hpp
+ * @file    lsh_etl_profile_override.h
  * @author  Jacopo Labardi (labodj)
- * @brief   Safe wrapper for ETL array with Arduino min/max macros neutralized locally.
+ * @brief   Example project-local ETL override hook for the bundled lsh-core example.
+ * @details This header mirrors the historical `lsh-core` ETL policy and
+ *          shows where a consumer project can keep toolchain-specific ETL
+ *          choices without editing the library copy of `etl_profile.h`.
  *
  * Copyright 2026 Jacopo Labardi
  *
@@ -18,11 +21,16 @@
  * limitations under the License.
  */
 
-#ifndef LSH_CORE_INTERNAL_ETL_ARRAY_HPP
-#define LSH_CORE_INTERNAL_ETL_ARRAY_HPP
+#pragma once
 
-#include "internal/etl_minmax_push.hpp"
-#include <etl/array.h>
-#include "internal/etl_minmax_pop.hpp"
+#ifndef ETL_VERBOSE_ERRORS
+#define ETL_VERBOSE_ERRORS
+#endif
 
-#endif  // LSH_CORE_INTERNAL_ETL_ARRAY_HPP
+#ifndef ETL_CHECK_PUSH_POP
+#define ETL_CHECK_PUSH_POP
+#endif
+
+#ifndef ETL_NO_STL
+#define ETL_NO_STL
+#endif

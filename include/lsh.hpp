@@ -18,28 +18,16 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_INCLUDE_LSH_HPP
-#define LSHCORE_INCLUDE_LSH_HPP
+#ifndef LSH_CORE_LSH_HPP
+#define LSH_CORE_LSH_HPP
 
 #include "lsh_user_macros.hpp"
 
-namespace LSH
+namespace lsh::core
 {
-    /**
-     * @brief Initializes the LSH-Core framework.
-     * @details This function must be called once in the Arduino `setup()` function.
-     *          It initializes serial communication, applies the user-defined device
-     *          configuration, and prepares all managers (Actuators, Clickables, Indicators).
-     */
-    void setup();
+void setup();  //!< Initialize the runtime once from Arduino `setup()`.
 
-    /**
-     * @brief The main execution loop for the LSH-Core framework.
-     * @details This function must be called continuously in the Arduino `loop()` function.
-     *          It handles input polling, click detection, network communication,
-     *          and timed events like actuator auto-off timers.
-     */
-    void loop();
-}
+void loop();  //!< Run one firmware iteration from Arduino `loop()`.
+}  // namespace lsh::core
 
-#endif // LSHCORE_INCLUDE_LSH_HPP
+#endif  // LSH_CORE_LSH_HPP

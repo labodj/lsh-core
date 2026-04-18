@@ -24,7 +24,7 @@
 #include <Arduino.h>
 #else
 #include <WProgram.h>
-#endif // (ARDUINO >= 100)
+#endif  // (ARDUINO >= 100)
 
 extern unsigned int __heap_start;
 extern void *__brkval;
@@ -39,12 +39,12 @@ extern void *__brkval;
  */
 struct __freelist
 {
-    size_t sz;             //!< Size of the free block.
-    struct __freelist *nx; //!< Pointer to the next free block.
+    size_t sz;              //!< Size of the free block.
+    struct __freelist *nx;  //!< Pointer to the next free block.
 };
 
 /* The head of the free list structure */
-extern struct __freelist *__flp; //!< Pointer to the head of the free list.
+extern struct __freelist *__flp;  //!< Pointer to the head of the free list.
 
 /* Calculates the size of the free list */
 auto freeListSize() -> size_t

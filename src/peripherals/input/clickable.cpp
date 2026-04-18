@@ -22,11 +22,9 @@
 
 #include "device/actuator_manager.hpp"
 #include "peripherals/output/actuator.hpp"
-#include "util/timekeeper.hpp"
+#include "util/time_keeper.hpp"
 
 using constants::ClickType;
-
-
 
 /**
  * @brief Store the Clickable index on Clickables namespace Array.
@@ -59,7 +57,10 @@ auto Clickable::setClickableShort(bool shortClickable) -> Clickable &
  * @param fallback the fallback type (if network isn't working).
  * @return Clickable& the object instance.
  */
-auto Clickable::setClickableLong(bool longClickable, constants::LongClickType clickType, bool networkClickable, constants::NoNetworkClickType fallback) -> Clickable &
+auto Clickable::setClickableLong(bool longClickable,
+                                 constants::LongClickType clickType,
+                                 bool networkClickable,
+                                 constants::NoNetworkClickType fallback) -> Clickable &
 {
     this->configFlags.isLongClickable = longClickable;
     this->longClickType = clickType;
@@ -77,7 +78,10 @@ auto Clickable::setClickableLong(bool longClickable, constants::LongClickType cl
  * @param fallback the fallback type (if network isn't working).
  * @return Clickable& the object instance.
  */
-auto Clickable::setClickableSuperLong(bool superLongClickable, constants::SuperLongClickType clickType, bool networkClickable, constants::NoNetworkClickType fallback) -> Clickable &
+auto Clickable::setClickableSuperLong(bool superLongClickable,
+                                      constants::SuperLongClickType clickType,
+                                      bool networkClickable,
+                                      constants::NoNetworkClickType fallback) -> Clickable &
 {
     this->configFlags.isSuperLongClickable = superLongClickable;
     this->superLongClickType = clickType;
@@ -107,7 +111,7 @@ auto Clickable::addActuator(uint8_t actuatorIndex, constants::ClickType actuator
         this->actuatorsSuperLong.push_back(actuatorIndex);
         break;
     default:
-        break; // Actuator Type mismatch
+        break;  // Actuator Type mismatch
     }
     return *this;
 }
@@ -221,7 +225,7 @@ auto Clickable::getActuators(constants::ClickType actuatorType) const -> const e
     case ClickType::SUPER_LONG:
         return &this->actuatorsSuperLong;
     default:
-        return nullptr; // Actuator Type mismatch
+        return nullptr;  // Actuator Type mismatch
     }
 }
 
@@ -242,7 +246,7 @@ auto Clickable::getTotalActuators(constants::ClickType actuatorType) const -> ui
     case ClickType::SUPER_LONG:
         return static_cast<uint8_t>(this->actuatorsSuperLong.size());
     default:
-        return 0U; // Actuator Type mismatch
+        return 0U;  // Actuator Type mismatch
     }
 }
 
@@ -317,8 +321,9 @@ auto Clickable::getSuperLongClickType() const -> constants::SuperLongClickType
  */
 auto Clickable::check() -> bool
 {
-    this->configFlags.isChecked = true; // We have checked the clickable
-    this->configFlags.isQuickClickable = (this->configFlags.isShortClickable && !this->configFlags.isLongClickable && !this->configFlags.isSuperLongClickable);
+    this->configFlags.isChecked = true;  // We have checked the clickable
+    this->configFlags.isQuickClickable =
+        (this->configFlags.isShortClickable && !this->configFlags.isLongClickable && !this->configFlags.isSuperLongClickable);
     if (this->configFlags.isShortClickable || this->configFlags.isLongClickable || this->configFlags.isSuperLongClickable)
     {
         // This check ensures a clickable is linked to at least one local actuator.
@@ -379,8 +384,8 @@ auto Clickable::longClick() const -> bool
         return false;
     }
 
-    bool stateToSet = false;      // The state to be set to long actuators
-    uint8_t actuatorsLongOn = 0U; // Number of active long actuators
+    bool stateToSet = false;       // The state to be set to long actuators
+    uint8_t actuatorsLongOn = 0U;  // Number of active long actuators
     auto *const localActuators = Actuators::actuators.data();
 
     switch (this->longClickType)
@@ -407,7 +412,7 @@ auto Clickable::longClick() const -> bool
         stateToSet = false;
         break;
     default:
-        return false; // Not a valid longClickType
+        return false;  // Not a valid longClickType
     }
 
     bool anyActuatorChangedState = false;
@@ -482,7 +487,7 @@ auto Clickable::clickDetection() -> constants::ClickResult
             {
                 // Press confirmed. Transition to PRESSED state.
                 this->currentState = State::PRESSED;
-                this->stateChangeTime = now; // This is the official start time of the press.
+                this->stateChangeTime = now;  // This is the official start time of the press.
                 this->lastActionFired = ActionFired::NONE;
 
                 // If it's a "quick click" button, fire the action on press.
@@ -506,7 +511,8 @@ auto Clickable::clickDetection() -> constants::ClickResult
             const uint32_t pressDuration = now - this->stateChangeTime;
 
             // Check for super long press first (higher priority).
-            if (localFlags.isSuperLongClickable && this->lastActionFired < ActionFired::SUPER_LONG && pressDuration >= this->superLongClick_ms)
+            if (localFlags.isSuperLongClickable && this->lastActionFired < ActionFired::SUPER_LONG &&
+                pressDuration >= this->superLongClick_ms)
             {
                 this->lastActionFired = ActionFired::SUPER_LONG;
                 return ClickResult::SUPER_LONG_CLICK;

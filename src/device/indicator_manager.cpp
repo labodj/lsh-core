@@ -30,57 +30,57 @@ using namespace Debug;
 
 namespace Indicators
 {
-    uint8_t totalIndicators = 0U;                                //!< Device real total indicators
-    etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators{}; //!< Device indicators
+uint8_t totalIndicators = 0U;                                 //!< Device real total indicators
+etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators{};  //!< Device indicators
 
-    /**
-     * @brief Adds an indicator to the system.
-     *
-     * The indicator is stored in the main array. If the maximum number of indicators
-     * is exceeded, the device will reset to prevent undefined behavior.
-     *
-     * @param indicator A pointer to the Indicator object to add.
-     */
-    void addIndicator(Indicator *const indicator)
+/**
+ * @brief Adds an indicator to the system.
+ *
+ * The indicator is stored in the main array. If the maximum number of indicators
+ * is exceeded, the device will reset to prevent undefined behavior.
+ *
+ * @param indicator A pointer to the Indicator object to add.
+ */
+void addIndicator(Indicator *const indicator)
+{
+    const uint8_t currentIndex = totalIndicators;
+    if (currentIndex >= CONFIG_MAX_INDICATORS)
     {
-        const uint8_t currentIndex = totalIndicators;
-        if (currentIndex >= CONFIG_MAX_INDICATORS)
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB(); // Begin serial if not in debug mode
-            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(INDICATORS));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
-            delay(10000UL);
-            deviceReset();
-        }
-        indicator->setIndex(currentIndex); // Store current index inside the object, it can be useful
-        indicators[currentIndex] = indicator;
-        totalIndicators++;
+        using namespace constants::wrongConfigStrings;
+        NDSB();  // Begin serial if not in debug mode
+        CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(INDICATORS));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
+        delay(10000UL);
+        deviceReset();
     }
+    indicator->setIndex(currentIndex);  // Store current index inside the object, it can be useful
+    indicators[currentIndex] = indicator;
+    totalIndicators++;
+}
 
-    /**
-     * @brief Performs a indicator check for indicator set.
-     *
-     */
-    void indicatorsCheck()
+/**
+ * @brief Performs a indicator check for indicator set.
+ *
+ */
+void indicatorsCheck()
+{
+    for (uint8_t i = 0U; i < totalIndicators; ++i)
     {
-        for (uint8_t i = 0U; i < totalIndicators; ++i)
-        {
-            indicators[i]->check();
-        }
+        indicators[i]->check();
     }
+}
 
-    /**
-     * @brief Resize vectors of all indicators to the actual needed size.
-     *
-     */
-    void finalizeSetup()
-    {
-        DP_CONTEXT();
-        // Resize vectors was removed as it is redundant for etl::vector
-    }
+/**
+ * @brief Resize vectors of all indicators to the actual needed size.
+ *
+ */
+void finalizeSetup()
+{
+    DP_CONTEXT();
+    // Resize vectors was removed as it is redundant for etl::vector
+}
 
-} // namespace Indicators
+}  // namespace Indicators

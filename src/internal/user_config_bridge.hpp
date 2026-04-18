@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
-#define LSHCORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
+#ifndef LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
+#define LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
 
 #include "lsh_user_config.hpp"
 
@@ -29,7 +29,7 @@ static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME;
 static constexpr uint8_t CONFIG_MAX_CLICKABLES = LSH_MAX_CLICKABLES;
 static constexpr uint8_t CONFIG_MAX_ACTUATORS = LSH_MAX_ACTUATORS;
 static constexpr uint8_t CONFIG_MAX_INDICATORS = LSH_MAX_INDICATORS;
-static constexpr HardwareSerial *const CONFIG_COM_SERIAL = LSH_COM_SERIAL;     //!< Serial attached to ESP needed for EspCom
-static constexpr HardwareSerial *const CONFIG_DEBUG_SERIAL = LSH_DEBUG_SERIAL; //!< Serial attached to PC needed for debugging
+static constexpr HardwareSerial *const CONFIG_COM_SERIAL = LSH_COM_SERIAL;      //!< Serial port used for the controller-to-bridge link.
+static constexpr HardwareSerial *const CONFIG_DEBUG_SERIAL = LSH_DEBUG_SERIAL;  //!< Serial port used for local debug output.
 
-#endif // LSHCORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
+#endif  // LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP

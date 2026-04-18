@@ -1,5 +1,5 @@
 /**
- * @file    indicatormodes.hpp
+ * @file    indicator_modes.hpp
  * @author  Jacopo Labardi (labodj)
  * @brief   Defines the IndicatorMode enum for indicator light behavior.
  *
@@ -18,27 +18,27 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP
-#define LSHCORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP
+#ifndef LSH_CORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP
+#define LSH_CORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP
 
 #include <stdint.h>
 
 /**
- * @brief namespace for constants.
+ * @brief Namespace that groups firmware constants.
  */
 namespace constants
 {
-    /**
-     * @brief Indicator mode for an indicator.
-     *
-     */
-    enum class IndicatorMode : uint8_t
-    {
-        ANY,     //!< If any controlled actuators is ON turn on the indicator
-        ALL,     //!< If all controlled actuators are ON turn on the indicator
-        MAJORITY //!< If the majority of controlled actuators is ON turn ON the indicator
-    };
+/**
+ * @brief Indicator mode for an indicator.
+ *
+ */
+enum class IndicatorMode : uint8_t
+{
+    ANY,      //!< If any controlled actuators is ON turn on the indicator
+    ALL,      //!< If all controlled actuators are ON turn on the indicator
+    MAJORITY  //!< If the majority of controlled actuators is ON turn ON the indicator
+};
 
-} // namespace constants
+}  // namespace constants
 
-#endif // LSHCORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP
+#endif  // LSH_CORE_UTIL_CONSTANTS_INDICATOR_MODES_HPP

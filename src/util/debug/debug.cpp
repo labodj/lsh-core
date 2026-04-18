@@ -20,7 +20,7 @@
 
 #include "util/debug/debug.hpp"
 
-#ifndef LSH_DEBUG // If not in debug mode
+#ifndef LSH_DEBUG  // If not in debug mode
 bool Debug::details::serialIsActive = false;
 
 void Debug::NDSB()

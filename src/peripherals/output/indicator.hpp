@@ -18,15 +18,15 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
-#define LSHCORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
+#ifndef LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
+#define LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
 
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
-#include "util/constants/indicatormodes.hpp"
+#include "util/constants/indicator_modes.hpp"
 
 /**
  * @brief Represents a state indicator for one or more attached actuators, indicators are normally connected to a digital out.
@@ -36,15 +36,15 @@ class Indicator
 {
 private:
 #ifndef CONFIG_USE_FAST_INDICATORS
-    const uint8_t pinNumber; //!< The pin to which the indicator is connected to, for conventional IO
+    const uint8_t pinNumber;  //!< The pin to which the indicator is connected to, for conventional IO
 #else
-    const uint8_t pinMask;           //!< Mask of the indicator, for fast IO
-    volatile uint8_t *const pinPort; //!< Port of the indicator, for fast IO
+    const uint8_t pinMask;            //!< Mask of the indicator, for fast IO
+    volatile uint8_t *const pinPort;  //!< Port of the indicator, for fast IO
 #endif
-    uint8_t index = 0U;                                               //!< Indicator index on Indicators namespace Array
-    constants::IndicatorMode mode = constants::IndicatorMode::ANY;    //!< Indicator mode
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> controlledActuators{}; //!< Controlled actuators indexes
-    bool actualState = false;                                         //!< Actual state of the indicator
+    uint8_t index = 0U;                                                //!< Indicator index on Indicators namespace Array
+    constants::IndicatorMode mode = constants::IndicatorMode::ANY;     //!< Indicator mode
+    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> controlledActuators{};  //!< Controlled actuators indexes
+    bool actualState = false;                                          //!< Actual state of the indicator
 
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
@@ -54,7 +54,7 @@ public:
      */
     explicit LSH_OPTIONAL_CONSTEXPR_CTOR Indicator(uint8_t pin) noexcept : pinNumber(pin)
     {
-        pinMode(pin, OUTPUT); // PinMode to Output
+        pinMode(pin, OUTPUT);  // PinMode to Output
     }
 #else
     /**
@@ -78,7 +78,7 @@ public:
     Indicator(Indicator &&) = delete;
     auto operator=(const Indicator &) -> Indicator & = delete;
     auto operator=(Indicator &&) -> Indicator & = delete;
-#endif // LSH_USING_CPP17
+#endif  // LSH_USING_CPP17
 
     /**
      * @brief Set the state of the indicator.
@@ -100,12 +100,12 @@ public:
         digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToSet));
 #endif
     }
-    void setIndex(uint8_t indexToSet);                                   // Set the indicator index on Indicators namespace Array
-    auto addActuator(uint8_t actuatorIndex) -> Indicator &;              // Add one actuator to controlled actuators vector
-    auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &; // Set indicator mode
-    void check();                                                        // Perform the actual check
+    void setIndex(uint8_t indexToSet);                                    // Set the indicator index on Indicators namespace Array
+    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Add one actuator to controlled actuators vector
+    auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &;  // Set indicator mode
+    void check();                                                         // Perform the actual check
 
-    [[nodiscard]] auto getIndex() const -> uint8_t;                      // Get the indicator index on Indicators namespace Array
+    [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the indicator index on Indicators namespace Array
 };
 
-#endif // LSHCORE_PERIPHERALS_OUTPUT_INDICATOR_HPP
+#endif  // LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP

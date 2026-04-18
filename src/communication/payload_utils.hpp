@@ -18,51 +18,50 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_COMMUNICATION_PAYLOAD_UTILS_HPP
-#define LSHCORE_COMMUNICATION_PAYLOAD_UTILS_HPP
+#ifndef LSH_CORE_COMMUNICATION_PAYLOAD_UTILS_HPP
+#define LSH_CORE_COMMUNICATION_PAYLOAD_UTILS_HPP
 
 #include "communication/constants/static_payloads.hpp"
 #include "internal/etl_span.hpp"
 
 namespace utils::payloads
 {
-    /**
-     * @brief Gets a span pointing to the correct pre-defined static transport frame.
-     *
-     * JSON payloads include the newline delimiter. MsgPack payloads are emitted
-     * as raw bytes because the serial link no longer adds extra framing.
-     */
-    template <bool IsMsgPack>
-    [[nodiscard]] constexpr auto get(constants::payloads::StaticType type) -> etl::span<const uint8_t>
+/**
+ * @brief Gets a span pointing to the correct pre-defined static transport frame.
+ *
+ * JSON payloads include the newline delimiter. MsgPack payloads are emitted
+ * as raw bytes because the serial link no longer adds extra framing.
+ */
+template <bool IsMsgPack> [[nodiscard]] constexpr auto get(constants::payloads::StaticType type) -> etl::span<const uint8_t>
+{
+    using namespace constants::payloads;
+
+    if constexpr (IsMsgPack)
     {
-        using namespace constants::payloads;
-
-        if constexpr (IsMsgPack)
+        switch (type)
         {
-            switch (type)
-            {
-            case StaticType::BOOT:
-                return MSGPACK_BOOT_BYTES;
-            case StaticType::PING_:
-                return MSGPACK_PING_BYTES;
+        case StaticType::BOOT:
+            return MSGPACK_BOOT_BYTES;
+        case StaticType::PING_:
+            return MSGPACK_PING_BYTES;
 
-            default:
-                return {};
-            }
-        }
-        else // JSON
-        {
-            switch (type)
-            {
-            case StaticType::BOOT:
-                return JSON_BOOT_BYTES;
-            case StaticType::PING_:
-                return JSON_PING_BYTES;
-            default:
-                return {};
-            }
+        default:
+            return {};
         }
     }
-} // namespace utils::payloads
+    else  // JSON
+    {
+        switch (type)
+        {
+        case StaticType::BOOT:
+            return JSON_BOOT_BYTES;
+        case StaticType::PING_:
+            return JSON_PING_BYTES;
+        default:
+            return {};
+        }
+    }
+}
+}  // namespace utils::payloads
 
-#endif // LSHCORE_COMMUNICATION_PAYLOAD_UTILS_HPP
+#endif  // LSH_CORE_COMMUNICATION_PAYLOAD_UTILS_HPP

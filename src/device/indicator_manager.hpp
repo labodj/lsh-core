@@ -18,15 +18,15 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_DEVICE_INDICATOR_MANAGER_HPP
-#define LSHCORE_DEVICE_INDICATOR_MANAGER_HPP
+#ifndef LSH_CORE_DEVICE_INDICATOR_MANAGER_HPP
+#define LSH_CORE_DEVICE_INDICATOR_MANAGER_HPP
 
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
 #include "internal/user_config_bridge.hpp"
 
-class Indicator; //!< Forward declaration
+class Indicator;  //!< Forward declaration
 
 /**
  * @brief Globally stores all indicators and to operates over them.
@@ -34,12 +34,12 @@ class Indicator; //!< Forward declaration
  */
 namespace Indicators
 {
-    extern uint8_t totalIndicators;                                   //!< Device real total Indicators
-    extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators; //!< Device indicators
+extern uint8_t totalIndicators;                                    //!< Device real total Indicators
+extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;  //!< Device indicators
 
-    void addIndicator(Indicator *indicator); // Add one indicator to indicators vector and activate it
-    void indicatorsCheck();                  // Performs an  indicator check for every indicator set
-    void finalizeSetup();                    // Resize vectors of all indicators to the actual needed size
-} // namespace Indicators
+void addIndicator(Indicator *indicator);  // Add one indicator to indicators vector and activate it
+void indicatorsCheck();                   // Performs an  indicator check for every indicator set
+void finalizeSetup();                     // Resize vectors of all indicators to the actual needed size
+}  // namespace Indicators
 
-#endif // LSHCORE_DEVICE_INDICATOR_MANAGER_HPP
+#endif  // LSH_CORE_DEVICE_INDICATOR_MANAGER_HPP

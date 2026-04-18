@@ -1,5 +1,5 @@
 /**
- * @file    timekeeper.cpp
+ * @file    time_keeper.cpp
  * @author  Jacopo Labardi (labodj)
  * @brief   Implements the timekeeper utility.
  *
@@ -18,6 +18,6 @@
  * limitations under the License.
  */
 
-#include "util/timekeeper.hpp"
+#include "util/time_keeper.hpp"
 
 uint32_t timeKeeper::now = 0U;

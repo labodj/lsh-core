@@ -18,12 +18,12 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_CORE_NETWORK_CLICKS_HPP
-#define LSHCORE_CORE_NETWORK_CLICKS_HPP
+#ifndef LSH_CORE_CORE_NETWORK_CLICKS_HPP
+#define LSH_CORE_CORE_NETWORK_CLICKS_HPP
 
 #include <stdint.h>
 
-#include "util/constants/clicktypes.hpp"
+#include "util/constants/click_types.hpp"
 /**
  * @brief "static class" Used to store and check network clicks
  *
@@ -35,16 +35,21 @@
  */
 namespace NetworkClicks
 {
-    // Network clicks
-    void request(uint8_t clickableIndex, constants::ClickType clickType);                                                     // Initiates a network click action.
-    [[nodiscard]] auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool;                               // Confirms a pending network click action after receiving an ACK
-    void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType);                                       // Store click time for a network attached clickable
-    [[nodiscard]] auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId) -> bool; // Returns true if the active click matches the given correlation ID.
-    [[nodiscard]] auto thereAreActiveNetworkClicks() -> bool;                                                                  // Returns if there are active stored network clicks
-    void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType);                                           // Erase a stored network click
-    [[nodiscard]] auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickType) -> bool;                 // Returns true if the timer of the clickable has passed the threshold, false otherwise
-    [[nodiscard]] auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickType, bool failover) -> bool; // Timeout checks for network clicked clickable, if the time it's over it performs local action and resets its timer
-    [[nodiscard]] auto checkAllNetworkClicksTimers(bool failover) -> bool;                                                    // Timeout checks for all network clicked clickables, if the time it's over it performs local action and resets its timer
-} // namespace NetworkClicks
+// Network clicks
+void request(uint8_t clickableIndex, constants::ClickType clickType);  // Initiates a network click action.
+[[nodiscard]] auto confirm(uint8_t clickableIndex, constants::ClickType clickType)
+    -> bool;  // Confirms a pending network click action after receiving an ACK
+void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType);  // Store click time for a network attached clickable
+[[nodiscard]] auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId)
+    -> bool;                                               // Returns true if the active click matches the given correlation ID.
+[[nodiscard]] auto thereAreActiveNetworkClicks() -> bool;  // Returns if there are active stored network clicks
+void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType);  // Erase a stored network click
+[[nodiscard]] auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickType)
+    -> bool;  // Returns true if the timer of the clickable has passed the threshold, false otherwise
+[[nodiscard]] auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickType, bool failover)
+    -> bool;  // Timeout checks for network clicked clickable, if the time it's over it performs local action and resets its timer
+[[nodiscard]] auto checkAllNetworkClicksTimers(bool failover)
+    -> bool;  // Timeout checks for all network clicked clickables, if the time it's over it performs local action and resets its timer
+}  // namespace NetworkClicks
 
-#endif // LSHCORE_CORE_NETWORK_CLICKS_HPP
+#endif  // LSH_CORE_CORE_NETWORK_CLICKS_HPP

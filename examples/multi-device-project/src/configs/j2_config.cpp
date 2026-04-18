@@ -1,37 +1,57 @@
+/**
+ * @file    j2_config.cpp
+ * @author  Jacopo Labardi (labodj)
+ * @brief   Example device configuration for the J2 profile in the multi-device lsh-core sample.
+ *
+ * Copyright 2026 Jacopo Labardi
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <lsh.hpp>
 
 // Anonymous namespace to prevent symbol conflicts between different device configurations.
 namespace
 {
-    // Relays
-    LSH_ACTUATOR(rel0, CONTROLLINO_R0, 1);
-    LSH_ACTUATOR(rel1, CONTROLLINO_R1, 2);
-    LSH_ACTUATOR(rel2, CONTROLLINO_R2, 3);
-    LSH_ACTUATOR(rel3, CONTROLLINO_R3, 4);
-    LSH_ACTUATOR(rel6, CONTROLLINO_R6, 7);
-    LSH_ACTUATOR(rel7, CONTROLLINO_R7, 8);
-    LSH_ACTUATOR(rel8, CONTROLLINO_R8, 9);
-    LSH_ACTUATOR(rel9, CONTROLLINO_R9, 10);
+// Relays
+LSH_ACTUATOR(rel0, CONTROLLINO_R0, 1);
+LSH_ACTUATOR(rel1, CONTROLLINO_R1, 2);
+LSH_ACTUATOR(rel2, CONTROLLINO_R2, 3);
+LSH_ACTUATOR(rel3, CONTROLLINO_R3, 4);
+LSH_ACTUATOR(rel6, CONTROLLINO_R6, 7);
+LSH_ACTUATOR(rel7, CONTROLLINO_R7, 8);
+LSH_ACTUATOR(rel8, CONTROLLINO_R8, 9);
+LSH_ACTUATOR(rel9, CONTROLLINO_R9, 10);
 
-    // Clickables
-    LSH_BUTTON(btn0, CONTROLLINO_A0, 1);
-    LSH_BUTTON(btn1, CONTROLLINO_A1, 2);
-    LSH_BUTTON(btn2, CONTROLLINO_A2, 3);
-    LSH_BUTTON(btn3, CONTROLLINO_A3, 4);
-    LSH_BUTTON(btn6, CONTROLLINO_A6, 7);
-    LSH_BUTTON(btn7, CONTROLLINO_A7, 8);
-    LSH_BUTTON(btn8, CONTROLLINO_A8, 9);
-    LSH_BUTTON(btn9, CONTROLLINO_A9, 10);
+// Clickables
+LSH_BUTTON(btn0, CONTROLLINO_A0, 1);
+LSH_BUTTON(btn1, CONTROLLINO_A1, 2);
+LSH_BUTTON(btn2, CONTROLLINO_A2, 3);
+LSH_BUTTON(btn3, CONTROLLINO_A3, 4);
+LSH_BUTTON(btn6, CONTROLLINO_A6, 7);
+LSH_BUTTON(btn7, CONTROLLINO_A7, 8);
+LSH_BUTTON(btn8, CONTROLLINO_A8, 9);
+LSH_BUTTON(btn9, CONTROLLINO_A9, 10);
 
-    // Special clickables
-    LSH_BUTTON(btn10, CONTROLLINO_IN0, 11);
-    LSH_BUTTON(btn11, CONTROLLINO_IN1, 12);
+// Special clickables
+LSH_BUTTON(btn10, CONTROLLINO_IN0, 11);
+LSH_BUTTON(btn11, CONTROLLINO_IN1, 12);
 
-    // Indicators
-    LSH_INDICATOR(light6, CONTROLLINO_D6);
-    LSH_INDICATOR(light7, CONTROLLINO_D7);
-    LSH_INDICATOR(light8, CONTROLLINO_D8);
-} // namespace
+// Indicators
+LSH_INDICATOR(light6, CONTROLLINO_D6);
+LSH_INDICATOR(light7, CONTROLLINO_D7);
+LSH_INDICATOR(light8, CONTROLLINO_D8);
+}  // namespace
 
 /**
  * @brief This function is the user's entry point to configure the device.
@@ -76,8 +96,8 @@ void Configurator::configure()
 
     // CONFIG RELAYS
     // Auto-Off timer
-    rel7.setAutoOffTimer(3600000); // 1h timer
-    rel8.setAutoOffTimer(1800000); // 30m timer
+    rel7.setAutoOffTimer(3600000);  // 1h timer
+    rel8.setAutoOffTimer(1800000);  // 30m timer
 
     // Protection
     rel6.setProtected(true);
@@ -104,24 +124,16 @@ void Configurator::configure()
     btn2.setClickableLong(true);
     btn3.setClickableLong(true);
     btn9.setClickableLong(true);
-    btn10.setClickableLong(true)
-        .setClickableSuperLong(true);
-    btn11.setClickableLong(true)
-        .setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
+    btn10.setClickableLong(true).setClickableSuperLong(true);
+    btn11.setClickableLong(true).setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
 
     // Secondary actuators
-    btn0.addActuatorLong(getIndex(rel0))
-        .addActuatorLong(getIndex(rel2));
-    btn2.addActuatorLong(getIndex(rel2))
-        .addActuatorLong(getIndex(rel1));
-    btn3.addActuatorLong(getIndex(rel3))
-        .addActuatorLong(getIndex(rel9));
-    btn9.addActuatorLong(getIndex(rel9))
-        .addActuatorLong(getIndex(rel3));
-    btn10.addActuatorLong(getIndex(rel0))
-        .addActuatorLong(getIndex(rel2));
-    btn11.addActuatorLong(getIndex(rel2))
-        .addActuatorLong(getIndex(rel1));
+    btn0.addActuatorLong(getIndex(rel0)).addActuatorLong(getIndex(rel2));
+    btn2.addActuatorLong(getIndex(rel2)).addActuatorLong(getIndex(rel1));
+    btn3.addActuatorLong(getIndex(rel3)).addActuatorLong(getIndex(rel9));
+    btn9.addActuatorLong(getIndex(rel9)).addActuatorLong(getIndex(rel3));
+    btn10.addActuatorLong(getIndex(rel0)).addActuatorLong(getIndex(rel2));
+    btn11.addActuatorLong(getIndex(rel2)).addActuatorLong(getIndex(rel1));
 
     // Indicators
     light6.addActuator(getIndex(rel6));

@@ -31,155 +31,154 @@ using namespace Debug;
 
 namespace Clickables
 {
-    uint8_t totalClickables = 0U;                                      //!< Device real total Clickables
-    etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};       //!< Device clickables
-    etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{}; //!< Device clickables map (UUID -> clickables index)
+uint8_t totalClickables = 0U;                                       //!< Device real total Clickables
+etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};        //!< Device clickables
+etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{};  //!< Device clickables map (UUID -> clickables index)
 
-    namespace
+namespace
+{
+void failWrongClickableId()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+    delay(10000);
+    deviceReset();
+}
+}  // namespace
+
+/**
+ * @brief Adds a clickable to the system.
+ *
+ * The clickable is stored in the main array and its ID is mapped to its index for fast lookups.
+ * If the maximum number of clickables is exceeded, the device will reset to prevent undefined behavior.
+ *
+ * @param clickable A pointer to the Clickable object to add.
+ */
+void addClickable(Clickable *const clickable)
+{
+    const uint8_t currentIndex = totalClickables;
+    if (currentIndex >= CONFIG_MAX_CLICKABLES)
     {
-        void failWrongClickableId()
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB();
-            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-            delay(10000);
-            deviceReset();
-        }
-    } // namespace
-
-    /**
-     * @brief Adds a clickable to the system.
-     *
-     * The clickable is stored in the main array and its ID is mapped to its index for fast lookups.
-     * If the maximum number of clickables is exceeded, the device will reset to prevent undefined behavior.
-     *
-     * @param clickable A pointer to the Clickable object to add.
-     */
-    void addClickable(Clickable *const clickable)
-    {
-        const uint8_t currentIndex = totalClickables;
-        if (currentIndex >= CONFIG_MAX_CLICKABLES)
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB(); // Begin serial if not in debug mode
-            CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
-            delay(10000);
-            deviceReset();
-        }
-
-        if (clickable->getId() == 0U)
-        {
-            failWrongClickableId();
-        }
-
-        clickable->setIndex(currentIndex);                // Store current index inside the object, it can be useful
-        clickables[currentIndex] = clickable;             // Insert in array of clickables
-        clickablesMap[clickable->getId()] = currentIndex; // Insert in map of clickables Map(UUID (integer) -> index in Vector)
-
-        DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE),
-            clickable->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE),
-            FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
-
-        totalClickables++;
+        using namespace constants::wrongConfigStrings;
+        NDSB();  // Begin serial if not in debug mode
+        CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
+        delay(10000);
+        deviceReset();
     }
 
-    /**
-     * @brief Get a single clickable.
-     *
-     * @param clickableId clickable UUID.
-     * @return Clickable* a single clickable.
-     */
-    auto getClickable(uint8_t clickableId) -> Clickable *
+    if (clickable->getId() == 0U)
     {
-        return clickables[clickablesMap.find(clickableId)->second];
+        failWrongClickableId();
     }
 
-    /**
-     * @brief Get a single clickable index (in device vector of clickable).
-     *
-     * @param clickableId clickable UUID.
-     * @return uint8_t a single clickable index (in device vector of clickable).
-     */
-    auto getIndex(uint8_t clickableId) -> uint8_t
-    {
-        return clickablesMap.find(clickableId)->second;
-    }
+    clickable->setIndex(currentIndex);                 // Store current index inside the object, it can be useful
+    clickables[currentIndex] = clickable;              // Insert in array of clickables
+    clickablesMap[clickable->getId()] = currentIndex;  // Insert in map of clickables Map(UUID (integer) -> index in Vector)
 
-    /**
-     * @brief Resolves a clickable ID to its dense runtime index with a single map lookup.
-     *
-     * @param clickableId Clickable UUID.
-     * @param clickableIndex Output runtime index when the ID exists.
-     * @return true if the clickable exists.
-     * @return false otherwise.
-     */
-    auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
+    DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), clickable->getId(), FPSTR(dStr::SPACE),
+        FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
+
+    totalClickables++;
+}
+
+/**
+ * @brief Get a single clickable.
+ *
+ * @param clickableId clickable UUID.
+ * @return Clickable* a single clickable.
+ */
+auto getClickable(uint8_t clickableId) -> Clickable *
+{
+    return clickables[clickablesMap.find(clickableId)->second];
+}
+
+/**
+ * @brief Get a single clickable index (in device vector of clickable).
+ *
+ * @param clickableId clickable UUID.
+ * @return uint8_t a single clickable index (in device vector of clickable).
+ */
+auto getIndex(uint8_t clickableId) -> uint8_t
+{
+    return clickablesMap.find(clickableId)->second;
+}
+
+/**
+ * @brief Resolves a clickable ID to its dense runtime index with a single map lookup.
+ *
+ * @param clickableId Clickable UUID.
+ * @param clickableIndex Output runtime index when the ID exists.
+ * @return true if the clickable exists.
+ * @return false otherwise.
+ */
+auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
+{
+    const auto it = clickablesMap.find(clickableId);
+    if (it == clickablesMap.end())
     {
-        const auto it = clickablesMap.find(clickableId);
-        if (it == clickablesMap.end())
+        return false;
+    }
+    clickableIndex = it->second;
+    return true;
+}
+
+/**
+ * @brief Get if the clickable actually exists.
+ *
+ * @param clickableId Unique ID of the clickable.
+ * @return true if clickable exists.
+ * @return false if clickable doesn't exist.
+ */
+auto clickableExists(uint8_t clickableId) -> bool
+{
+    return (clickablesMap.find(clickableId) != clickablesMap.end());
+}
+
+/**
+ * @brief Perform a click.
+ *
+ * Method for all types of clicks, since not all click can be done within clickable class.
+ *
+ * @param clickable  the clickable to click.
+ * @param clickType  the click type to perform.
+ * @return true if any actuator state has been changed.
+ * @return false otherwise.
+ */
+auto click(const Clickable *const clickable, constants::ClickType clickType) -> bool
+{
+    DP_CONTEXT();
+    using namespace constants;
+    switch (clickType)
+    {
+    case ClickType::SHORT:
+        return clickable->shortClick();
+    case ClickType::LONG:
+        return clickable->longClick();
+    case ClickType::SUPER_LONG:
+        switch (clickable->getSuperLongClickType())
         {
-            return false;
-        }
-        clickableIndex = it->second;
-        return true;
-    }
-
-    /**
-     * @brief Get if the clickable actually exists.
-     *
-     * @param clickableId Unique ID of the clickable.
-     * @return true if clickable exists.
-     * @return false if clickable doesn't exist.
-     */
-    auto clickableExists(uint8_t clickableId) -> bool
-    {
-        return (clickablesMap.find(clickableId) != clickablesMap.end());
-    }
-
-    /**
-     * @brief Perform a click.
-     *
-     * Method for all types of clicks, since not all click can be done within clickable class.
-     *
-     * @param clickable  the clickable to click.
-     * @param clickType  the click type to perform.
-     * @return true if any actuator state has been changed.
-     * @return false otherwise.
-     */
-    auto click(const Clickable *const clickable, constants::ClickType clickType) -> bool
-    {
-        DP_CONTEXT();
-        using namespace constants;
-        switch (clickType)
-        {
-        case ClickType::SHORT:
-            return clickable->shortClick();
-        case ClickType::LONG:
-            return clickable->longClick();
-        case ClickType::SUPER_LONG:
-            switch (clickable->getSuperLongClickType())
-            {
-            case SuperLongClickType::NORMAL:
-                return Actuators::turnOffUnprotectedActuators();
-            case SuperLongClickType::SELECTIVE:
-                return clickable->superLongClickSelective();
-            default:
-                return false;
-            }
+        case SuperLongClickType::NORMAL:
+            return Actuators::turnOffUnprotectedActuators();
+        case SuperLongClickType::SELECTIVE:
+            return clickable->superLongClickSelective();
         default:
             return false;
         }
+    default:
+        return false;
     }
+}
 
-    /** @brief Perform a click action.
+/** @brief Perform a click action.
      *
      * This helper function centralizes all click-related logic...
      *
@@ -188,36 +187,36 @@ namespace Clickables
      * @return true if any actuator state was changed.
      * @return false otherwise.
      */
-    auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
-    {
-        return click(clickables[clickableIndex], clickType);
-    }
+auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
+{
+    return click(clickables[clickableIndex], clickType);
+}
 
-    /**
-     * @brief Resize vectors of all clickables to the actual needed size.
-     *
-     */
-    void finalizeSetup()
+/**
+ * @brief Resize vectors of all clickables to the actual needed size.
+ *
+ */
+void finalizeSetup()
+{
+    DP_CONTEXT();
+    auto *const clickableBegin = clickables.data();
+    auto *const clickableEnd = clickableBegin + totalClickables;
+    for (auto *currentClickable = clickableBegin; currentClickable != clickableEnd; ++currentClickable)
     {
-        DP_CONTEXT();
-        auto *const clickableBegin = clickables.data();
-        auto *const clickableEnd = clickableBegin + totalClickables;
-        for (auto *currClickable = clickableBegin; currClickable != clickableEnd; ++currClickable)
-        {
-            (*currClickable)->check();
-        }
-        if (clickablesMap.size() != totalClickables)
-        {
-            using namespace constants::wrongConfigStrings;
-            NDSB(); // Begin serial if not in debug mode
-            CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-            CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-            CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-            delay(10000);
-            deviceReset();
-        }
+        (*currentClickable)->check();
     }
+    if (clickablesMap.size() != totalClickables)
+    {
+        using namespace constants::wrongConfigStrings;
+        NDSB();  // Begin serial if not in debug mode
+        CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
+        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+        CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+        delay(10000);
+        deviceReset();
+    }
+}
 
-} // namespace Clickables
+}  // namespace Clickables

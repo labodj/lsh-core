@@ -1,7 +1,7 @@
 /**
  * @file    bridge_sync.hpp
  * @author  Jacopo Labardi (labodj)
- * @brief   Tracks whether the ESP bridge has completed the post-boot handshake.
+ * @brief   Tracks whether `lsh-bridge` has completed the post-boot handshake.
  *
  * Copyright 2026 Jacopo Labardi
  *
@@ -18,56 +18,20 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_COMMUNICATION_BRIDGE_SYNC_HPP
-#define LSHCORE_COMMUNICATION_BRIDGE_SYNC_HPP
+#ifndef LSH_CORE_COMMUNICATION_BRIDGE_SYNC_HPP
+#define LSH_CORE_COMMUNICATION_BRIDGE_SYNC_HPP
 
 #include <stdint.h>
 
 namespace BridgeSync
 {
-    /**
-     * @brief Marks the bridge as out-of-sync and sends the initial BOOT.
-     * @details The bridge must subsequently ask for REQUEST_DETAILS and then
-     *          REQUEST_STATE before controller commands are accepted again.
-     */
-    void begin(uint32_t now);
+void begin(uint32_t now);                             // Start a fresh bridge handshake and send the first BOOT.
+void restartFromBridgeBoot(uint32_t now);             // Re-open the handshake after a runtime BOOT request received from the bridge.
+void tick(uint32_t now);                              // Advance the bridge-sync state machine from the hot loop.
+void onRequestDetailsServed(uint32_t now);            // Record that bridge details were served in the current session.
+void onRequestStateServed();                          // Record that bridge state was served in the current session.
+[[nodiscard]] auto allowsStateRequests() -> bool;     // Return true when REQUEST_STATE can be served safely.
+[[nodiscard]] auto allowsMutatingCommands() -> bool;  // Return true when inbound bridge commands may change state.
+}  // namespace BridgeSync
 
-    /**
-     * @brief Drives the bridge sync finite-state machine from the hot 1 ms loop branch.
-     * @details - When synchronized, emits the normal hop-local PING cadence.
-     *          - When waiting for REQUEST_DETAILS, periodically retries BOOT.
-     *          - When waiting for REQUEST_STATE, times out back to BOOT retries.
-     */
-    void tick(uint32_t now);
-
-    /**
-     * @brief Records that REQUEST_DETAILS has just been served to the bridge.
-     * @details Only affects the pending handshake states; when already synced,
-     *          a runtime REQUEST_DETAILS remains a harmless read-only snapshot.
-     */
-    void onRequestDetailsServed(uint32_t now);
-
-    /**
-     * @brief Records that REQUEST_STATE has just been served to the bridge.
-     * @details This closes the pending startup handshake only if the bridge had
-     *          previously requested details in the same pending session.
-     */
-    void onRequestStateServed();
-
-    /**
-     * @brief Returns whether REQUEST_STATE may be served safely right now.
-     * @details State requests are blocked while waiting for the bridge to ask
-     *          for details first, preventing a stale bridge from interpreting a
-     *          fresh state snapshot with an outdated topology.
-     */
-    [[nodiscard]] auto allowsStateRequests() -> bool;
-
-    /**
-     * @brief Returns whether inbound bridge commands may mutate controller state.
-     * @details Mutating commands are ignored until the bridge has completed the
-     *          REQUEST_DETAILS -> REQUEST_STATE handshake after a controller boot.
-     */
-    [[nodiscard]] auto allowsMutatingCommands() -> bool;
-} // namespace BridgeSync
-
-#endif // LSHCORE_COMMUNICATION_BRIDGE_SYNC_HPP
+#endif  // LSH_CORE_COMMUNICATION_BRIDGE_SYNC_HPP

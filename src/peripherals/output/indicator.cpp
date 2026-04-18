@@ -23,7 +23,6 @@
 #include "device/actuator_manager.hpp"
 #include "peripherals/output/actuator.hpp"
 
-
 /**
  * @brief Set the indicator index on Indicators namespace Array.
  *
@@ -63,7 +62,7 @@ auto Indicator::setMode(constants::IndicatorMode indicatorMode) -> Indicator &
         this->mode = indicatorMode;
         break;
     default:
-        break; // Not valid mode
+        break;  // Not valid mode
     }
     return *this;
 }
@@ -132,19 +131,17 @@ void Indicator::check()
     }
     break;
     default:
-        return; // Wrong IndicatorMode config
+        return;  // Wrong IndicatorMode config
     }
 
     // If the state is the same as old one exit
     if (newState == this->actualState)
     {
-        return; // Same state, do nothing
+        return;  // Same state, do nothing
     }
-    this->actualState = newState; // Store new state
-    this->setState(newState);     // Apply new state
+    this->actualState = newState;  // Store new state
+    this->setState(newState);      // Apply new state
 }
-
-
 
 /**
  * @brief Get the indicator index on Indicators namespace Array.

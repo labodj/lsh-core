@@ -21,7 +21,7 @@
 #include "peripherals/output/actuator.hpp"
 
 #include "util/constants/timing.hpp"
-#include "util/timekeeper.hpp"
+#include "util/time_keeper.hpp"
 
 /**
  * @brief Set the new actuator state if the new state can be set.
@@ -56,9 +56,9 @@ auto Actuator::setState(bool state) -> bool
         *this->pinPort |= this->pinMask;
     }
 #else
-    digitalWrite(this->pinNumber, static_cast<uint8_t>(state)); // Perform the switch
+    digitalWrite(this->pinNumber, static_cast<uint8_t>(state));  // Perform the switch
 #endif
-    this->actualState = state; // Store the new state
+    this->actualState = state;  // Store the new state
     this->lastTimeSwitched = now;
     return true;
 }

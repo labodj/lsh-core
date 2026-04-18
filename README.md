@@ -12,7 +12,7 @@ LSH is a complete, distributed home automation system composed of three distinct
 
 - **`lsh-core` (This Project):** The heart of the physical layer. This modern C++17 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
 
-- **`lsh-esp` (`lsh-bridge`):** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
+- **`lsh-bridge`:** A lightweight firmware designed for an ESP32. It acts as a semi-transparent bridge, physically connecting to `lsh-core` via serial and relaying messages to and from your network via MQTT. This isolates the core logic from Wi-Fi and network concerns.
 
 - **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
 
@@ -38,7 +38,7 @@ The three components work together to create a robust and responsive system.
 
 ### Operational Invariants
 
-The serial contract between `lsh-core` and `lsh-esp` is intentionally strict:
+The serial contract between `lsh-core` and `lsh-bridge` is intentionally strict:
 
 - The device topology is built during `Configurator::configure()` and is considered static until the next controller reboot.
 - `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define **maximum accepted capacity**, not the real cardinality of the configured device.
@@ -395,8 +395,8 @@ Understanding the handshake between devices helps clarify when a fallback is tri
 The same bootstrapping contract is used outside of clicks:
 
 - `lsh-core` sends `BOOT` during startup after configuration has been finalized.
-- If the controller reboots while `lsh-esp` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
-- When `lsh-esp` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
+- If the controller reboots while `lsh-bridge` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
+- When `lsh-bridge` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
 - This reboot-driven handshake is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
@@ -462,6 +462,12 @@ These flags replace standard `digitalRead()` and `digitalWrite()` calls with dir
 
 These flags allow you to override the default timing behavior of the framework. You typically don't need to define these unless you have specific hardware or user experience requirements.
 
+#### `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`
+
+- **Default:** `100U` (100 milliseconds)
+- **Description:** Sets the minimum delay between two consecutive switches of the same actuator. This protects relays and other outputs from overly rapid toggling caused by noisy or repeated commands.
+- **Example:** `-D CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=150U`
+
 #### `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`
 
 - **Default:** `20U` (20 milliseconds)
@@ -500,16 +506,70 @@ These flags allow you to override the default timing behavior of the framework. 
 - **Description:** The duration after the last received message from `lsh-bridge` before `lsh-core` considers the connection to be lost.
 - **Example:** `-D CONFIG_CONNECTION_TIMEOUT_MS=15500U`
 
+#### `CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS`
+
+- **Default:** `250U` (250 milliseconds)
+- **Description:** Sets how often `lsh-core` retries the bridge bootstrap handshake after sending `BOOT`, while the bridge has not yet completed its startup sequence.
+- **Example:** `-D CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS=500U`
+
+#### `CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS`
+
+- **Default:** `1500U` (1500 milliseconds)
+- **Description:** Sets how long `lsh-core` waits for the bridge to request the authoritative state after the device details have already been sent. If this timeout expires, the bootstrap handshake restarts from `BOOT`.
+- **Example:** `-D CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS=2000U`
+
+#### `CONFIG_DEBUG_SERIAL_BAUD`
+
+- **Default:** `115200U`
+- **Description:** Sets the baud rate used by the debug serial port when `LSH_DEBUG` is enabled.
+- **Example:** `-D CONFIG_DEBUG_SERIAL_BAUD=500000U`
+
+#### `CONFIG_COM_SERIAL_BAUD`
+
+- **Default:** `250000U`
+- **Description:** Sets the baud rate of the controller-to-bridge serial link used to talk to `lsh-bridge`.
+- **Example:** `-D CONFIG_COM_SERIAL_BAUD=500000U`
+
+#### `CONFIG_COM_SERIAL_TIMEOUT_MS`
+
+- **Default:** `5U` (5 milliseconds)
+- **Description:** Sets the serial read timeout applied to the controller-to-bridge transport.
+- **Example:** `-D CONFIG_COM_SERIAL_TIMEOUT_MS=10U`
+
 #### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`
 
 - **Default:** `1` (`enabled`)
-- **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to the ESP bridge.
+- **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to `lsh-bridge`.
 - **Current status:** The system is currently validated with `flush()` enabled and in this configuration it works correctly and reliably.
 - **Why this exists:** This flag is exposed only to evaluate whether the serial link remains resilient even without `flush()`, potentially reducing blocking time on send.
 - **Recommendation:** Keep it enabled unless you are deliberately benchmarking or stress-testing the serial path without flush.
 - **Examples:**
   - Keep the validated behavior: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=1`
   - Experimental mode without flush: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
+
+#### `CONFIG_DELAY_AFTER_RECEIVE_MS`
+
+- **Default:** `50U` (50 milliseconds)
+- **Description:** Sets the short quiet window used after receiving a bridge-side state-changing payload before `lsh-core` mirrors the new authoritative state back out. This reduces duplicate publish bursts when multiple single-actuator updates arrive close together.
+- **Example:** `-D CONFIG_DELAY_AFTER_RECEIVE_MS=75U`
+
+#### `CONFIG_CONNECTION_CHECK_INTERVAL_MS`
+
+- **Default:** `1000U` (1 second)
+- **Description:** Sets how often `lsh-core` runs its periodic bridge connectivity check.
+- **Example:** `-D CONFIG_CONNECTION_CHECK_INTERVAL_MS=500U`
+
+#### `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`
+
+- **Default:** `50U` (50 milliseconds)
+- **Description:** Sets how often pending network-click requests are revisited to detect ACK timeouts and trigger fallback logic when needed.
+- **Example:** `-D CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS=25U`
+
+#### `CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS`
+
+- **Default:** `1000U` (1 second)
+- **Description:** Sets how often `lsh-core` scans actuators with auto-off timers to decide whether they must be turned off.
+- **Example:** `-D CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS=250U`
 
 ### Benchmarking (for developers)
 
@@ -525,6 +585,41 @@ These flags are intended for development and performance testing of the LSH-Core
 - **Default:** `1000000U` (1 million)
 - **Description:** Sets the number of iterations for the benchmark loop enabled by `CONFIG_LSH_BENCH`.
 - **Example:** `-D CONFIG_BENCH_ITERATIONS=500000U`
+
+### ETL profile override
+
+`lsh-core` ships with a default [etl_profile.h](./include/etl_profile.h) so the
+common Arduino/PlatformIO case works out of the box.
+
+That default profile intentionally sets only the library policy knobs that are
+part of the current project assumptions, while ETL still auto-detects the
+active compiler and language support through `etl/profiles/auto.h`.
+
+If you need a different ETL setup for another target or toolchain, the
+recommended override path is:
+
+1. Create your own small header in the consumer project, for example `include/lsh_etl_profile_override.h`
+2. Pass `-D LSH_ETL_PROFILE_OVERRIDE_HEADER=\"lsh_etl_profile_override.h\"`
+3. In that header, `#undef` and redefine only what you need
+
+Example:
+
+```cpp
+// include/lsh_etl_profile_override.h
+#pragma once
+
+#undef ETL_CHECK_PUSH_POP
+#define ETL_THROW_EXCEPTIONS
+```
+
+If your build system prefers full ownership, you may also provide your own
+project-level `etl_profile.h` earlier in the include path and bypass the one
+shipped by `lsh-core`.
+
+The bundled example project already demonstrates this hook through
+[examples/multi-device-project/include/lsh_etl_profile_override.h](./examples/multi-device-project/include/lsh_etl_profile_override.h)
+and the matching `LSH_ETL_PROFILE_OVERRIDE_HEADER` flag in
+[examples/multi-device-project/platformio.ini](./examples/multi-device-project/platformio.ini).
 
 ## Building and Uploading
 

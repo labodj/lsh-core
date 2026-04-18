@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef LSHCORE_INTERNAL_LSH_CONFIG_TYPES_HPP
-#define LSHCORE_INTERNAL_LSH_CONFIG_TYPES_HPP
+#ifndef LSH_CORE_INTERNAL_LSH_CONFIG_TYPES_HPP
+#define LSH_CORE_INTERNAL_LSH_CONFIG_TYPES_HPP
 
 // This file acts as a bridge for hardware types.
 // Its sole responsibility is to include the hardware library
@@ -35,4 +35,4 @@
 #include <Arduino.h>
 #endif
 
-#endif // LSHCORE_INTERNAL_LSH_CONFIG_TYPES_HPP
+#endif  // LSH_CORE_INTERNAL_LSH_CONFIG_TYPES_HPP
