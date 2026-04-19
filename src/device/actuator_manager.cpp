@@ -29,9 +29,14 @@
 namespace Actuators
 {
 using namespace Debug;
-uint8_t totalActuators = 0U;                                               //!< Device real total Actuators
-etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators{};                  //!< All device actuators (like relays)
-etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};           //!< Device actuators map (UUID -> actuator index)
+uint8_t totalActuators = 0U;                               //!< Device real total Actuators
+etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators{};  //!< All device actuators (like relays)
+#if CONFIG_USE_ACTUATOR_ID_LUT
+etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U> actuatorIndexById{};  //!< Device actuators lookup (UUID -> actuator index + 1)
+static_assert(CONFIG_MAX_ACTUATOR_ID > 0U, "CONFIG_MAX_ACTUATOR_ID must be greater than zero when the actuator ID LUT is enabled.");
+#else
+etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};  //!< Device actuators map (UUID -> actuator index)
+#endif
 etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{};  //!< Indexes of actuators with auto off functionality active
 
 namespace
@@ -48,6 +53,21 @@ void failWrongActuatorId()
     delay(10000);
     deviceReset();
 }
+
+#if CONFIG_USE_ACTUATOR_ID_LUT
+void failDuplicateActuatorId()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+    delay(10000);
+    deviceReset();
+}
+#endif
 }  // namespace
 
 /**
@@ -79,9 +99,24 @@ void addActuator(Actuator *const actuator)
         failWrongActuatorId();
     }
 
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    if (actuator->getId() > CONFIG_MAX_ACTUATOR_ID)
+    {
+        failWrongActuatorId();
+    }
+    if (actuatorIndexById[actuator->getId()] != 0U)
+    {
+        failDuplicateActuatorId();
+    }
+#endif
+
     actuator->setIndex(currentIndex);    // Store current index inside the object, it can be useful
     actuators[currentIndex] = actuator;  // Insert in array of actuators
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    actuatorIndexById[actuator->getId()] = static_cast<uint8_t>(currentIndex + 1U);
+#else
     actuatorsMap[actuator->getId()] = currentIndex;
+#endif
 
     DPL(FPSTR(dStr::ACTUATOR), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), actuator->getId(), FPSTR(dStr::SPACE),
         FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
@@ -97,7 +132,11 @@ void addActuator(Actuator *const actuator)
  */
 auto getActuator(uint8_t actuatorId) -> Actuator *
 {
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    return actuators[static_cast<uint8_t>(actuatorIndexById[actuatorId] - 1U)];
+#else
     return actuators[actuatorsMap.find(actuatorId)->second];
+#endif
 }
 
 /**
@@ -108,7 +147,11 @@ auto getActuator(uint8_t actuatorId) -> Actuator *
  */
 auto getIndex(uint8_t actuatorId) -> uint8_t
 {
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    return static_cast<uint8_t>(actuatorIndexById[actuatorId] - 1U);
+#else
     return actuatorsMap.find(actuatorId)->second;
+#endif
 }
 
 /**
@@ -121,12 +164,26 @@ auto getIndex(uint8_t actuatorId) -> uint8_t
  */
 auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool
 {
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    if (actuatorId > CONFIG_MAX_ACTUATOR_ID)
+    {
+        return false;
+    }
+
+    const uint8_t encodedIndex = actuatorIndexById[actuatorId];
+    if (encodedIndex == 0U)
+    {
+        return false;
+    }
+    actuatorIndex = static_cast<uint8_t>(encodedIndex - 1U);
+#else
     const auto it = actuatorsMap.find(actuatorId);
     if (it == actuatorsMap.end())
     {
         return false;
     }
     actuatorIndex = it->second;
+#endif
     return true;
 }
 
@@ -139,7 +196,11 @@ auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex) -> bool
  */
 auto actuatorExists(uint8_t actuatorId) -> bool
 {
+#if CONFIG_USE_ACTUATOR_ID_LUT
+    return (actuatorId <= CONFIG_MAX_ACTUATOR_ID && actuatorIndexById[actuatorId] != 0U);
+#else
     return (actuatorsMap.find(actuatorId) != actuatorsMap.end());
+#endif
 }
 
 /**
@@ -240,6 +301,7 @@ void finalizeSetup()
         }
     }
 
+#if !CONFIG_USE_ACTUATOR_ID_LUT
     if (actuatorsMap.size() != totalActuators)
     {
         using namespace constants::wrongConfigStrings;
@@ -252,6 +314,7 @@ void finalizeSetup()
         delay(10000);
         deviceReset();
     }
+#endif
 }
 
 }  // namespace Actuators

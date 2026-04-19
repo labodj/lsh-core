@@ -74,13 +74,15 @@ void indicatorsCheck()
 }
 
 /**
- * @brief Resize vectors of all indicators to the actual needed size.
+ * @brief Finalize shared storage for all indicators.
+ * @details Indicators now use one compact shared pool for actuator links. This
+ *          setup hook closes that pool before the runtime starts reading it.
  *
  */
 void finalizeSetup()
 {
     DP_CONTEXT();
-    // Resize vectors was removed as it is redundant for etl::vector
+    finalizeActuatorLinkStorage();
 }
 
 }  // namespace Indicators

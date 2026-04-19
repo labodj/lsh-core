@@ -24,7 +24,9 @@
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
+#if !CONFIG_USE_CLICKABLE_ID_LUT
 #include "internal/etl_map.hpp"
+#endif
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/click_types.hpp"
 
@@ -36,9 +38,14 @@ class Clickable;  //!< Forward declaration
  */
 namespace Clickables
 {
-extern uint8_t totalClickables;                                          //!< Device real total Clickables
-extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;        //!< Device clickables
+extern uint8_t totalClickables;                                    //!< Device real total Clickables
+extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;  //!< Device clickables
+#if CONFIG_USE_CLICKABLE_ID_LUT
+extern etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U>
+    clickableIndexById;  //!< One-based lookup table (UUID -> clickable index + 1, 0 means missing).
+#else
 extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap;  //!< Device clickables map (UUID (numeric)-> clickables index)
+#endif
 
 void addClickable(Clickable *clickable);                              // Add one clickable to clickables vector and activate it
 [[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable
@@ -49,7 +56,8 @@ void addClickable(Clickable *clickable);                              // Add one
 [[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType)
     -> bool;  // Method for all types of clicks, since not all click can be done within clickable class
 [[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;  // Alternative method for all types of click
-void finalizeSetup();  // Resize vectors of all clickables to the actual needed size
+void finalizeActuatorLinkStorage();  //!< Sorts the shared clickable-to-actuator pools and stores final slice offsets.
+void finalizeSetup();                //!< Finalizes compact storage and validates every registered clickable.
 }  // namespace Clickables
 
 #endif  // LSH_CORE_DEVICE_CLICKABLE_MANAGER_HPP

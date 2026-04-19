@@ -34,12 +34,13 @@ using namespace Debug;
 
 namespace NetworkClicks
 {
+#if CONFIG_USE_NETWORK_CLICKS
 namespace
 {
-etl::array<uint32_t, CONFIG_MAX_CLICKABLES>
-    longClickedNetworkClickTimes{};  //!< Stored times for active long clicks, indexed by clickable index.
-etl::array<uint32_t, CONFIG_MAX_CLICKABLES>
-    superLongClickedNetworkClickTimes{};  //!< Stored times for active super-long clicks, indexed by clickable index.
+etl::array<uint16_t, CONFIG_MAX_CLICKABLES>
+    longClickedNetworkClickAges_ms{};  //!< Elapsed ages for active long clicks, indexed by clickable index.
+etl::array<uint16_t, CONFIG_MAX_CLICKABLES>
+    superLongClickedNetworkClickAges_ms{};  //!< Elapsed ages for active super-long clicks, indexed by clickable index.
 etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
     longClickedCorrelationIds{};  //!< Correlation IDs for active long clicks, indexed by clickable index.
 etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
@@ -47,16 +48,17 @@ etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
 uint8_t activeLongClickedNetworkClicks = 0U;       //!< Number of pending long-click transactions.
 uint8_t activeSuperLongClickedNetworkClicks = 0U;  //!< Number of pending super-long-click transactions.
 uint8_t nextCorrelationId = 0U;                    //!< Monotonic 8-bit generator. 0 is reserved as "missing/invalid".
+uint32_t lastTimersUpdateTime_ms = 0U;             //!< Last cached time used to advance active network-click ages.
 
-auto getTimeStorage(constants::ClickType clickType) -> etl::array<uint32_t, CONFIG_MAX_CLICKABLES> *
+auto getAgeStorage(constants::ClickType clickType) -> etl::array<uint16_t, CONFIG_MAX_CLICKABLES> *
 {
     using constants::ClickType;
     switch (clickType)
     {
     case ClickType::LONG:
-        return &longClickedNetworkClickTimes;
+        return &longClickedNetworkClickAges_ms;
     case ClickType::SUPER_LONG:
-        return &superLongClickedNetworkClickTimes;
+        return &superLongClickedNetworkClickAges_ms;
     default:
         return nullptr;
     }
@@ -126,6 +128,26 @@ auto isNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType
 }
 
 /**
+ * @brief Add elapsed milliseconds to a 16-bit age counter without wrapping.
+ * @details Network click ages only need to stay monotonic until they exceed the
+ *          timeout threshold. Saturating avoids the AVR cost of 32-bit per-slot
+ *          timers while keeping expiry checks stable after long loop stalls.
+ *
+ * @param currentAge_ms Age already accumulated for the pending click.
+ * @param elapsed_ms Additional elapsed time to accumulate.
+ * @return uint16_t Updated age, saturated at 65535 ms.
+ */
+auto addElapsedTimeSaturated(uint16_t currentAge_ms, uint16_t elapsed_ms) -> uint16_t
+{
+    const uint16_t updatedAge_ms = static_cast<uint16_t>(currentAge_ms + elapsed_ms);
+    if (updatedAge_ms < currentAge_ms)
+    {
+        return UINT16_MAX;
+    }
+    return updatedAge_ms;
+}
+
+/**
  * @brief Bumps the active counter only when a click slot becomes active.
  */
 void markNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType)
@@ -152,6 +174,68 @@ void markNetworkClickInactive(uint8_t clickableIndex, constants::ClickType click
 }
 
 /**
+ * @brief Advance every active network-click timer of the specified type.
+ * @details Full scans are acceptable here because network clicks are rare and
+ *          this work only runs while at least one transaction is pending.
+ *
+ * @param clickType Pending click type to age.
+ * @param elapsed_ms Milliseconds elapsed since the last aging pass.
+ */
+void ageActiveTimers(constants::ClickType clickType, uint16_t elapsed_ms)
+{
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage == nullptr || elapsed_ms == 0U)
+    {
+        return;
+    }
+
+    for (uint8_t clickableIndex = 0U; clickableIndex < Clickables::totalClickables; ++clickableIndex)
+    {
+        if (!isNetworkClickActive(clickableIndex, clickType))
+        {
+            continue;
+        }
+        (*ageStorage)[clickableIndex] = addElapsedTimeSaturated((*ageStorage)[clickableIndex], elapsed_ms);
+    }
+}
+
+/**
+ * @brief Bring all active network-click timers up to the current cached time.
+ * @details This keeps per-clickable storage at 16 bits while preserving the
+ *          old semantics where ACK handling and timeout sweeps both observe
+ *          fresh timer values. Only one 32-bit delta is paid for the whole
+ *          module, instead of one 32-bit timestamp per clickable slot.
+ *
+ * @param now Cached current time from the main loop or dispatcher.
+ */
+void advanceActiveTimersTo(uint32_t now)
+{
+    if (activeLongClickedNetworkClicks == 0U && activeSuperLongClickedNetworkClicks == 0U)
+    {
+        lastTimersUpdateTime_ms = now;
+        return;
+    }
+
+    const uint32_t elapsedSinceLastUpdate_ms = now - lastTimersUpdateTime_ms;
+    if (elapsedSinceLastUpdate_ms == 0U)
+    {
+        return;
+    }
+
+    lastTimersUpdateTime_ms = now;
+    const uint16_t elapsed_ms = (elapsedSinceLastUpdate_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastUpdate_ms);
+
+    if (activeLongClickedNetworkClicks != 0U)
+    {
+        ageActiveTimers(constants::ClickType::LONG, elapsed_ms);
+    }
+    if (activeSuperLongClickedNetworkClicks != 0U)
+    {
+        ageActiveTimers(constants::ClickType::SUPER_LONG, elapsed_ms);
+    }
+}
+
+/**
  * @brief Timeout checks for every pending click of the specified type.
  *
  * @details The storage stays array-based to minimise RAM. Full scans are
@@ -159,21 +243,20 @@ void markNetworkClickInactive(uint8_t clickableIndex, constants::ClickType click
  * which keeps the steady-state cost near zero for a feature that is used
  * very rarely in normal installations.
  * @param clickType The click type to sweep (LONG or SUPER_LONG).
- * @param now Cached current time for this sweep.
  * @param failover If true, forces the fallback action for all pending clicks of that type, ignoring their timers.
  * @return true if any timer expired (or was forced by failover) and at least one local fallback action was performed.
  * @return false otherwise.
  */
-auto checkAllNetworkClicksTimers(constants::ClickType clickType, uint32_t now, bool failover) -> bool
+auto checkAllNetworkClicksTimers(constants::ClickType clickType, bool failover) -> bool
 {
     DP_CONTEXT();
     using constants::NoNetworkClickType;
     using constants::timings::LCNB_TIMEOUT_MS;
     bool localFallbackPerformed = false;  // True if a network click expired and a local click has been performed
 
-    auto *const timeStorage = getTimeStorage(clickType);
+    auto *const ageStorage = getAgeStorage(clickType);
     auto *const activeCount = getActiveCountStorage(clickType);
-    if (timeStorage == nullptr || activeCount == nullptr || *activeCount == 0U)
+    if (ageStorage == nullptr || activeCount == nullptr || *activeCount == 0U)
     {
         return false;
     }
@@ -185,7 +268,7 @@ auto checkAllNetworkClicksTimers(constants::ClickType clickType, uint32_t now, b
             continue;
         }
 
-        if (failover || now - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // If expired or failover
+        if (failover || (*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // If expired or failover
         {
             DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX),
                 FPSTR(dStr::COLON_SPACE), clickableIndex);
@@ -256,14 +339,15 @@ void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickTyp
         FPSTR(dStr::COLON_SPACE), clickableIndex, FPSTR(dStr::SPACE), FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::CLICK),
         FPSTR(dStr::SPACE), FPSTR(dStr::TYPE), FPSTR(dStr::COLON_SPACE), static_cast<int8_t>(clickType));
 
-    auto *const timeStorage = getTimeStorage(clickType);
-    if (timeStorage == nullptr)
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage == nullptr)
     {
         return;
     }
 
+    advanceActiveTimersTo(timeKeeper::getTime());
     markNetworkClickActive(clickableIndex, clickType);
-    (*timeStorage)[clickableIndex] = timeKeeper::getTime();
+    (*ageStorage)[clickableIndex] = 0U;
     auto *const correlationStorage = getCorrelationStorage(clickType);
     if (correlationStorage != nullptr)
     {
@@ -300,13 +384,13 @@ auto thereAreActiveNetworkClicks() -> bool
 void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType)
 {
     DP_CONTEXT();
-    auto *const timeStorage = getTimeStorage(clickType);
-    if (timeStorage == nullptr)
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage == nullptr)
     {
         return;
     }
     markNetworkClickInactive(clickableIndex, clickType);
-    (*timeStorage)[clickableIndex] = 0U;
+    (*ageStorage)[clickableIndex] = 0U;
     clearCorrelationId(clickableIndex, clickType);
 }
 
@@ -323,8 +407,8 @@ auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickTyp
 {
     DP_CONTEXT();
     using constants::timings::LCNB_TIMEOUT_MS;
-    auto *const timeStorage = getTimeStorage(clickType);
-    if (timeStorage == nullptr)
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage == nullptr)
     {
         return true;  // Clickable type is not valid, so it's "expired"
     }
@@ -333,7 +417,9 @@ auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickTyp
     {
         return true;
     }
-    if (timeKeeper::getTime() - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // It's expired
+
+    advanceActiveTimersTo(timeKeeper::getTime());
+    if ((*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // It's expired
     {
         eraseNetworkClick(clickableIndex, clickType);
         return true;
@@ -359,17 +445,18 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
     using constants::NoNetworkClickType;
     using constants::timings::LCNB_TIMEOUT_MS;
 
-    auto *const timeStorage = getTimeStorage(clickType);
-    if (timeStorage == nullptr)
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage == nullptr)
     {
         return false;
     }
 
     bool localFallbackPerformed = false;  // True if a network click expired and a local click has been performed
 
+    advanceActiveTimersTo(timeKeeper::getTime());
     if (isNetworkClickActive(clickableIndex, clickType))
     {
-        if (failover || timeKeeper::getTime() - (*timeStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // expired
+        if (failover || (*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // expired
         {
             auto *const clickable = Clickables::clickables[clickableIndex];
             if (clickable->getNetworkFallback(clickType) == NoNetworkClickType::LOCAL_FALLBACK)
@@ -396,18 +483,109 @@ auto checkAllNetworkClicksTimers(bool failover) -> bool
     // DP_CONTEXT(); pollutes serial
     bool localFallbackPerformed = false;  // True if any network click expired and any local click has been performed
     const auto now = timeKeeper::getTime();
+    advanceActiveTimersTo(now);
 
     if (activeLongClickedNetworkClicks != 0U)
     {
         DPL(FPSTR(dStr::LONG), " ", FPSTR(dStr::CLICKED), FPSTR(dStr::NET_BUTTONS_NOT_EMPTY));
-        localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::LONG, now, failover);
+        localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::LONG, failover);
     }
     if (activeSuperLongClickedNetworkClicks != 0U)
     {
         DPL(FPSTR(dStr::SUPER_LONG), " ", FPSTR(dStr::CLICKED), FPSTR(dStr::NET_BUTTONS_NOT_EMPTY));
-        localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::SUPER_LONG, now, failover);
+        localFallbackPerformed |= checkAllNetworkClicksTimers(ClickType::SUPER_LONG, failover);
     }
     return localFallbackPerformed;
 }
 
+#else
+/**
+ * @brief Stubbed request path used when network clicks are compiled out.
+ * @details Keeping the symbol available preserves the public API while making
+ *          the generated firmware pay effectively zero runtime state for a
+ *          feature the consumer does not use.
+ */
+void request(uint8_t clickableIndex, constants::ClickType clickType)
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+}
+
+/**
+ * @brief Stubbed confirmation path used when network clicks are compiled out.
+ */
+auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    return false;
+}
+
+/**
+ * @brief Stubbed timer-start path used when network clicks are compiled out.
+ */
+void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType)
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+}
+
+/**
+ * @brief Stubbed correlation matcher used when network clicks are compiled out.
+ */
+auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId) -> bool
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    static_cast<void>(correlationId);
+    return false;
+}
+
+/**
+ * @brief Reports no pending network clicks when the feature is compiled out.
+ */
+auto thereAreActiveNetworkClicks() -> bool
+{
+    return false;
+}
+
+/**
+ * @brief Stubbed erase path used when network clicks are compiled out.
+ */
+void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType)
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+}
+
+/**
+ * @brief Reports every network click as expired when the feature is compiled out.
+ */
+auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickType) -> bool
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    return true;
+}
+
+/**
+ * @brief Stubbed single-timer checker used when network clicks are compiled out.
+ */
+auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickType, bool failover) -> bool
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    static_cast<void>(failover);
+    return false;
+}
+
+/**
+ * @brief Stubbed timeout sweep used when network clicks are compiled out.
+ */
+auto checkAllNetworkClicksTimers(bool failover) -> bool
+{
+    static_cast<void>(failover);
+    return false;
+}
+#endif
 }  // namespace NetworkClicks

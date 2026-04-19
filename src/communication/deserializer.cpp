@@ -77,6 +77,7 @@ namespace
     return true;
 }
 
+#if CONFIG_USE_NETWORK_CLICKS
 /**
  * @brief Processes payloads for network click acknowledgements and failovers.
  * @details This helper function handles the shared logic for both NETWORK_CLICK_ACK
@@ -134,6 +135,7 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
         }
     }
 }
+#endif
 }  // namespace
 
 /**
@@ -236,19 +238,27 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 
     case Command::NETWORK_CLICK_ACK:
     case Command::FAILOVER_CLICK:
+#if CONFIG_USE_NETWORK_CLICKS
         if (!BridgeSync::allowsMutatingCommands())
         {
             break;
         }
         processNetworkClickResponse(doc, cmd, result);
+#else
+        // When network clicks are compiled out, these commands become harmless no-ops.
+#endif
         break;
 
     case Command::FAILOVER:
+#if CONFIG_USE_NETWORK_CLICKS
         if (!BridgeSync::allowsMutatingCommands())
         {
             break;
         }
         result.stateChanged = NetworkClicks::checkAllNetworkClicksTimers(true);
+#else
+        // Failover has no local meaning if the whole network-click subsystem was removed.
+#endif
         break;
 
     case Command::REQUEST_STATE:

@@ -24,7 +24,9 @@
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
+#if !CONFIG_USE_ACTUATOR_ID_LUT
 #include "internal/etl_map.hpp"
+#endif
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 class Actuator;  //!< Forward declaration
@@ -35,9 +37,14 @@ class Actuator;  //!< Forward declaration
  */
 namespace Actuators
 {
-extern uint8_t totalActuators;                                                  //!< Device real total Actuators
-extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;                  //!< All device actuators (like relays)
-extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;           //!< Device actuators map (UUID (integer) -> actuator index)
+extern uint8_t totalActuators;                                  //!< Device real total Actuators
+extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;  //!< All device actuators (like relays)
+#if CONFIG_USE_ACTUATOR_ID_LUT
+extern etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U>
+    actuatorIndexById;  //!< One-based lookup table (UUID -> actuator index + 1, 0 means missing).
+#else
+extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;  //!< Device actuators map (UUID (integer) -> actuator index)
+#endif
 extern etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes;  //!< Indexes of actuators with auto off functionality active
 
 void addActuator(Actuator *actuator);                              // Add one actuator to actuators vector and activate it

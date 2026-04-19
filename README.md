@@ -160,6 +160,59 @@ Important capacity rule:
 - The real number of registered devices can be lower than the declared maximum.
 - For best RAM/code efficiency you will often set the maximum equal to the real count, but this is an optimization choice, not a functional requirement.
 
+Optional bounded-ID lookup optimization:
+
+- By default, `lsh-core` keeps actuator and clickable ID lookups in `etl::map`.
+- If your IDs are numeric and stay inside a small, dense range, you can enable fixed O(1) lookup tables by also defining:
+  - `LSH_MAX_ACTUATOR_ID`
+  - `LSH_MAX_CLICKABLE_ID`
+- If your IDs are strictly dense (`1..LSH_MAX_ACTUATORS` and `1..LSH_MAX_CLICKABLES` with no gaps), you can use the shorter opt-in flags instead:
+  - `LSH_ASSUME_DENSE_ACTUATOR_IDS`
+  - `LSH_ASSUME_DENSE_CLICKABLE_IDS`
+- When these macros are present, `lsh-core` stores `index + 1` in a fixed ETL array sized to the declared maximum ID (`0` still means "missing").
+- `LSH_MAX_*_ID` takes precedence over `LSH_ASSUME_DENSE_*_IDS`, so explicit max-ID declarations always win when both are present.
+- This stays fully static and heap-free, but it is only RAM-efficient when the maximum ID is reasonably close to the real IDs you use. Sparse ID ranges should keep the default `etl::map`.
+
+Optional compact actuator-link pools:
+
+- By default, `lsh-core` reserves the worst-case link capacity for local logic:
+  - every clickable short-click list can grow up to `LSH_MAX_ACTUATORS`
+  - every clickable long-click list can grow up to `LSH_MAX_ACTUATORS`
+  - every clickable super-long-click list can grow up to `LSH_MAX_ACTUATORS`
+  - every indicator list can grow up to `LSH_MAX_ACTUATORS`
+- If your real configuration uses far fewer links, you can reduce RAM by defining the actual total number of link entries used by the whole device:
+  - `LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS`
+  - `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`
+  - `LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS`
+  - `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
+- These values count real link entries, not devices. For example, one button with three long-click actuators contributes `3` to `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`.
+- Count exactly what the configuration code appends:
+  - every `addActuatorShort(...)` contributes `1` to `LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS`
+  - every `addActuatorLong(...)` contributes `1` to `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`
+  - every `addActuatorSuperLong(...)` contributes `1` to `LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS`
+  - every `Indicator::addActuator(...)` contributes `1` to `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
+- Duplicates count too. If one clickable intentionally adds the same actuator twice, the pool must reserve two entries because the runtime stores exactly what the configuration asked for.
+- Network-only clicks do not contribute local link entries by themselves. If a `setClickableLong(..., true, ...)` or `setClickableSuperLong(..., true, ...)` has no matching local `addActuatorLong(...)` or `addActuatorSuperLong(...)`, the local pool count for that click type stays unchanged.
+- The storage stays static and heap-free. If you undersize one of these totals, setup fails loudly with a clear wrong-config reset instead of silently corrupting memory.
+- The bundled examples show both sides:
+  - `J1` uses compact pools and disables network clicks completely
+  - `J2` uses compact pools but keeps network clicks enabled
+
+Optional network-click exclusion:
+
+- If a device never uses network clicks, define `LSH_DISABLE_NETWORK_CLICKS`.
+- This removes the network-click runtime state from the firmware instead of keeping dead arrays and timeout logic around.
+- A device is a good candidate for this macro when no call to `setClickableLong(...)` or `setClickableSuperLong(...)` passes `networkClickable = true`.
+- If a clickable is still marked as network-clickable while the feature is disabled, the runtime treats the network path as unavailable:
+  - local fallback still runs when configured
+  - otherwise the network-only action is skipped
+
+Important registration-order rule:
+
+- Register every `Clickable` with `addClickable(...)` before calling any `addActuatorShort(...)`, `addActuatorLong(...)`, or `addActuatorSuperLong(...)` on it.
+- Register every `Indicator` with `addIndicator(...)` before calling `Indicator::addActuator(...)`.
+- The compact pools store links using the dense runtime index assigned at registration time. If the registration order is wrong, setup now fails loudly instead of silently writing corrupted link data.
+
 ```cpp
 // GOOD: Connects the button to the actuator using its safe index.
 btn0.addActuatorShort(getIndex(rel0));
@@ -185,11 +238,32 @@ Create `include/lsh_configs/living_room_config.hpp`. This file defines the hardw
 #define LSH_MAX_CLICKABLES   8
 #define LSH_MAX_ACTUATORS    6
 #define LSH_MAX_INDICATORS   2
+#define LSH_MAX_CLICKABLE_ID 8
+#define LSH_MAX_ACTUATOR_ID  6
+#define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS      8
+#define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS       4
+#define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 2
+#define LSH_MAX_INDICATOR_ACTUATOR_LINKS        3
 #define LSH_COM_SERIAL       &Serial1
 #define LSH_DEBUG_SERIAL     &Serial
 
 #endif
 ```
+
+If that device used dense IDs (`1..8` for clickables and `1..6` for actuators), the same optimization could be enabled with the shorter form:
+
+```cpp
+#define LSH_ASSUME_DENSE_CLICKABLE_IDS 1
+#define LSH_ASSUME_DENSE_ACTUATOR_IDS  1
+```
+
+If that device had no network-click logic at all, it could also opt out completely:
+
+```cpp
+#define LSH_DISABLE_NETWORK_CLICKS 1
+```
+
+Those link totals are not guessed. They are meant to be derived from the real configuration source file that belongs to the same profile.
 
 **Step 2: Create the Device Logic File (`.cpp`)**
 Create `src/configs/living_room_config.cpp`. This is where you define your objects (relays, buttons) and their behavior.

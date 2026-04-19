@@ -95,7 +95,9 @@ void loop()
     using constants::NoNetworkClickType;
     using constants::timings::ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS;
     using constants::timings::DELAY_AFTER_RECEIVE_MS;
+#if CONFIG_USE_NETWORK_CLICKS
     using constants::timings::NETWORK_CLICK_CHECK_INTERVAL_MS;
+#endif
 
     timeKeeper::update();
     const auto now = timeKeeper::getTime();
@@ -125,18 +127,24 @@ void loop()
 
     // These flags persist across loop iterations so the runtime can defer bridge I/O
     // without losing the fact that a state refresh or timeout scan is still required.
-    static bool mustTransmitStateToBridge = false;     //!< True when the bridge must receive a fresh actuator snapshot.
+    static bool mustTransmitStateToBridge = false;  //!< True when the bridge must receive a fresh actuator snapshot.
+#if CONFIG_USE_NETWORK_CLICKS
     static bool mustPollNetworkClickTimeouts = false;  //!< True while at least one network click transaction still needs timeout handling.
-    static uint32_t lastClickableScanTime_ms = 0U;     //!< Timestamp of the last input scan pass.
+#endif
+    static uint32_t lastClickableScanTime_ms = 0U;  //!< Timestamp of the last input scan pass.
 
     // Scan local inputs at high frequency. The `if (now - lastClickableScanTime_ms)`
     // idiom keeps the loop branch-light while still limiting this block to roughly
     // one execution per millisecond.
-    if (now - lastClickableScanTime_ms)
+    const uint32_t elapsedSinceLastClickableScan_ms = now - lastClickableScanTime_ms;
+    if (elapsedSinceLastClickableScan_ms != 0U)
     {
-        BridgeSync::tick(now);
         ClickType detectedClickType = ClickType::NONE;  //!< Temporary holder for the click currently being processed.
         lastClickableScanTime_ms = now;
+        const uint16_t clickableElapsed_ms =
+            (elapsedSinceLastClickableScan_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastClickableScan_ms);
+        BridgeSerial::tickSendIdleTimer(clickableElapsed_ms);
+        BridgeSync::tick(now);
 
         // `Clickables::clickables` is a contiguous ETL array. Iterating through raw
         // pointers avoids repeated index arithmetic in one of the hottest paths.
@@ -147,7 +155,7 @@ void loop()
         {
             auto *const currentClickable = *clickableIt;
 
-            switch (currentClickable->clickDetection())
+            switch (currentClickable->clickDetection(clickableElapsed_ms))
             {
             case ClickResult::SHORT_CLICK:
             case ClickResult::SHORT_CLICK_QUICK:
@@ -166,6 +174,7 @@ void loop()
                 detectedClickType = ClickType::LONG;
                 if (currentClickable->isNetworkClickable(detectedClickType))
                 {
+#if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
                         NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
@@ -177,6 +186,12 @@ void loop()
                     {
                         mustTransmitStateToBridge |= currentClickable->longClick();
                     }
+#else
+                    if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    {
+                        mustTransmitStateToBridge |= currentClickable->longClick();
+                    }
+#endif
                 }
                 else
                 {
@@ -192,6 +207,7 @@ void loop()
                 detectedClickType = ClickType::SUPER_LONG;
                 if (currentClickable->isNetworkClickable(detectedClickType))
                 {
+#if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
                         NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
@@ -201,6 +217,12 @@ void loop()
                     {
                         mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
                     }
+#else
+                    if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    {
+                        mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                    }
+#endif
                 }
                 else
                 {
@@ -220,9 +242,12 @@ void loop()
     {
         const auto dispatchResult = BridgeSerial::receiveAndDispatch();
         mustTransmitStateToBridge |= dispatchResult.stateChanged;
+#if CONFIG_USE_NETWORK_CLICKS
         mustPollNetworkClickTimeouts |= dispatchResult.networkClickHandled;
+#endif
     }
 
+#if CONFIG_USE_NETWORK_CLICKS
     // Timeout checks for long/super long network clicked clickables
     if (mustPollNetworkClickTimeouts)
     {
@@ -234,6 +259,7 @@ void loop()
             mustPollNetworkClickTimeouts = NetworkClicks::thereAreActiveNetworkClicks();
         }
     }
+#endif
 
     // Check actuators auto OFF timer
     static uint32_t lastAutoOffCheckTime_ms = 0U;  //!< Stores last time actuators auto off timer check has been executed

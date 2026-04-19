@@ -24,9 +24,13 @@
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
-#include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/indicator_modes.hpp"
+
+namespace Indicators
+{
+void finalizeActuatorLinkStorage();  //!< Sorts the shared indicator-to-actuator pool and stores final slice offsets.
+}
 
 /**
  * @brief Represents a state indicator for one or more attached actuators, indicators are normally connected to a digital out.
@@ -41,10 +45,11 @@ private:
     const uint8_t pinMask;            //!< Mask of the indicator, for fast IO
     volatile uint8_t *const pinPort;  //!< Port of the indicator, for fast IO
 #endif
-    uint8_t index = 0U;                                                //!< Indicator index on Indicators namespace Array
-    constants::IndicatorMode mode = constants::IndicatorMode::ANY;     //!< Indicator mode
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> controlledActuators{};  //!< Controlled actuators indexes
-    bool actualState = false;                                          //!< Actual state of the indicator
+    uint8_t index = 0U;                                             //!< Indicator index on Indicators namespace Array
+    constants::IndicatorMode mode = constants::IndicatorMode::ANY;  //!< Indicator mode
+    uint16_t controlledActuatorsOffset = 0U;  //!< Offset of the first controlled actuator link inside the shared pool.
+    uint8_t controlledActuatorsCount = 0U;    //!< Number of actuators attached to this indicator.
+    bool actualState = false;                 //!< Actual state of the indicator
 
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
@@ -101,11 +106,12 @@ public:
 #endif
     }
     void setIndex(uint8_t indexToSet);                                    // Set the indicator index on Indicators namespace Array
-    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Add one actuator to controlled actuators vector
+    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Adds one actuator link after indicator registration
     auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &;  // Set indicator mode
     void check();                                                         // Perform the actual check
 
-    [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the indicator index on Indicators namespace Array
+    [[nodiscard]] auto getIndex() const -> uint8_t;           // Get the indicator index on Indicators namespace Array
+    void setControlledActuatorsOffset(uint16_t offsetToSet);  // Stores the compact shared-pool offset for the controlled actuators list.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP

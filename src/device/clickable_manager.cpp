@@ -31,9 +31,14 @@ using namespace Debug;
 
 namespace Clickables
 {
-uint8_t totalClickables = 0U;                                       //!< Device real total Clickables
-etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};        //!< Device clickables
+uint8_t totalClickables = 0U;                                 //!< Device real total Clickables
+etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};  //!< Device clickables
+#if CONFIG_USE_CLICKABLE_ID_LUT
+etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U> clickableIndexById{};  //!< Device clickables lookup (UUID -> clickable index + 1)
+static_assert(CONFIG_MAX_CLICKABLE_ID > 0U, "CONFIG_MAX_CLICKABLE_ID must be greater than zero when the clickable ID LUT is enabled.");
+#else
 etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{};  //!< Device clickables map (UUID -> clickables index)
+#endif
 
 namespace
 {
@@ -49,6 +54,21 @@ void failWrongClickableId()
     delay(10000);
     deviceReset();
 }
+
+#if CONFIG_USE_CLICKABLE_ID_LUT
+void failDuplicateClickableId()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
+    delay(10000);
+    deviceReset();
+}
+#endif
 }  // namespace
 
 /**
@@ -80,9 +100,24 @@ void addClickable(Clickable *const clickable)
         failWrongClickableId();
     }
 
-    clickable->setIndex(currentIndex);                 // Store current index inside the object, it can be useful
-    clickables[currentIndex] = clickable;              // Insert in array of clickables
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    if (clickable->getId() > CONFIG_MAX_CLICKABLE_ID)
+    {
+        failWrongClickableId();
+    }
+    if (clickableIndexById[clickable->getId()] != 0U)
+    {
+        failDuplicateClickableId();
+    }
+#endif
+
+    clickable->setIndex(currentIndex);     // Store current index inside the object, it can be useful
+    clickables[currentIndex] = clickable;  // Insert in array of clickables
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    clickableIndexById[clickable->getId()] = static_cast<uint8_t>(currentIndex + 1U);
+#else
     clickablesMap[clickable->getId()] = currentIndex;  // Insert in map of clickables Map(UUID (integer) -> index in Vector)
+#endif
 
     DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), clickable->getId(), FPSTR(dStr::SPACE),
         FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
@@ -98,7 +133,11 @@ void addClickable(Clickable *const clickable)
  */
 auto getClickable(uint8_t clickableId) -> Clickable *
 {
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    return clickables[static_cast<uint8_t>(clickableIndexById[clickableId] - 1U)];
+#else
     return clickables[clickablesMap.find(clickableId)->second];
+#endif
 }
 
 /**
@@ -109,7 +148,11 @@ auto getClickable(uint8_t clickableId) -> Clickable *
  */
 auto getIndex(uint8_t clickableId) -> uint8_t
 {
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    return static_cast<uint8_t>(clickableIndexById[clickableId] - 1U);
+#else
     return clickablesMap.find(clickableId)->second;
+#endif
 }
 
 /**
@@ -122,12 +165,26 @@ auto getIndex(uint8_t clickableId) -> uint8_t
  */
 auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
 {
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    {
+        return false;
+    }
+
+    const uint8_t encodedIndex = clickableIndexById[clickableId];
+    if (encodedIndex == 0U)
+    {
+        return false;
+    }
+    clickableIndex = static_cast<uint8_t>(encodedIndex - 1U);
+#else
     const auto it = clickablesMap.find(clickableId);
     if (it == clickablesMap.end())
     {
         return false;
     }
     clickableIndex = it->second;
+#endif
     return true;
 }
 
@@ -140,7 +197,11 @@ auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
  */
 auto clickableExists(uint8_t clickableId) -> bool
 {
+#if CONFIG_USE_CLICKABLE_ID_LUT
+    return (clickableId <= CONFIG_MAX_CLICKABLE_ID && clickableIndexById[clickableId] != 0U);
+#else
     return (clickablesMap.find(clickableId) != clickablesMap.end());
+#endif
 }
 
 /**
@@ -193,18 +254,23 @@ auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 }
 
 /**
- * @brief Resize vectors of all clickables to the actual needed size.
+ * @brief Finalize shared storage and validate the configured clickables.
+ * @details The shared pools must be compacted before `Clickable::check()` runs,
+ *          because validation and runtime both rely on the final `offset + count`
+ *          view of each link list.
  *
  */
 void finalizeSetup()
 {
     DP_CONTEXT();
+    finalizeActuatorLinkStorage();
     auto *const clickableBegin = clickables.data();
     auto *const clickableEnd = clickableBegin + totalClickables;
     for (auto *currentClickable = clickableBegin; currentClickable != clickableEnd; ++currentClickable)
     {
         (*currentClickable)->check();
     }
+#if !CONFIG_USE_CLICKABLE_ID_LUT
     if (clickablesMap.size() != totalClickables)
     {
         using namespace constants::wrongConfigStrings;
@@ -217,6 +283,7 @@ void finalizeSetup()
         delay(10000);
         deviceReset();
     }
+#endif
 }
 
 }  // namespace Clickables

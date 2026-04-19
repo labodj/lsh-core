@@ -33,7 +33,7 @@
  */
 namespace BridgeSerial
 {
-extern uint32_t lastSentPayloadTime_ms;      //!< Timestamp of the last payload transmitted to the bridge.
+extern uint16_t sendIdleAge_ms;              //!< Elapsed idle time since the last payload transmitted to the bridge, saturated at 65535 ms.
 extern uint32_t lastReceivedPayloadTime_ms;  //!< Timestamp of the last valid payload received from the bridge.
 extern bool firstValidPayloadReceived;       //!< True after the first valid bridge payload has been received.
 #ifndef CONFIG_MSG_PACK
@@ -45,8 +45,9 @@ extern bool discardUntilNewline;   //!< True while the JSON codec is discarding 
 void init();                                                // Initialize the hardware serial link used by the bridge.
 void sendJson(const JsonDocument &documentToSend);          // Send one payload to the bridge using the active codec.
 auto receiveAndDispatch() -> Deserializer::DispatchResult;  // Receive and dispatch one bridge payload, if available.
+void tickSendIdleTimer(uint16_t elapsed_ms);                // Advance the ping idle timer using the elapsed loop time.
 [[nodiscard]] auto canPing() -> bool;                       // Return true when another heartbeat may be emitted.
-void updateLastSentTime();                                  // Refresh `lastSentPayloadTime_ms` with the current loop time.
+void updateLastSentTime();                                  // Reset the ping idle timer after a payload transmission.
 [[nodiscard]] auto isConnected() -> bool;                   // Return true when the bridge is still considered online.
 }  // namespace BridgeSerial
 

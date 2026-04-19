@@ -39,7 +39,8 @@ extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;  //!< Device i
 
 void addIndicator(Indicator *indicator);  // Add one indicator to indicators vector and activate it
 void indicatorsCheck();                   // Performs an  indicator check for every indicator set
-void finalizeSetup();                     // Resize vectors of all indicators to the actual needed size
+void finalizeActuatorLinkStorage();       //!< Sorts the shared indicator-to-actuator pool and stores final slice offsets.
+void finalizeSetup();                     //!< Finalizes the shared indicator pool after configuration is complete.
 }  // namespace Indicators
 
 #endif  // LSH_CORE_DEVICE_INDICATOR_MANAGER_HPP

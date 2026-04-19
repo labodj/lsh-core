@@ -24,11 +24,58 @@
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
-#include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/click_results.hpp"
 #include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
+
+namespace Clickables
+{
+void finalizeActuatorLinkStorage();  //!< Sorts the shared clickable-to-actuator pools and stores final slice offsets.
+}
+
+struct ClickableActuatorLinkEntry;  //!< One compact clickable-to-actuator link record stored inside the shared pools.
+
+/**
+ * @brief Lightweight read-only view over one clickable actuator-link list.
+ *
+ * The clickable runtime stores actuator links in compact shared pools to avoid
+ * reserving three full `etl::vector` buffers inside every Clickable object.
+ * This view exposes the final per-clickable slice as a small iterable object
+ * without leaking the internal pool layout to callers.
+ */
+class ClickableActuatorLinksView
+{
+public:
+    /**
+     * @brief Iterator that walks the compact actuator-link entries.
+     */
+    class Iterator
+    {
+    public:
+        explicit Iterator(const ClickableActuatorLinkEntry *entry = nullptr) noexcept;
+
+        [[nodiscard]] auto operator*() const -> uint8_t;
+        auto operator++() -> Iterator &;
+        [[nodiscard]] auto operator==(const Iterator &other) const -> bool;
+        [[nodiscard]] auto operator!=(const Iterator &other) const -> bool;
+
+    private:
+        const ClickableActuatorLinkEntry *currentEntry = nullptr;
+    };
+
+    ClickableActuatorLinksView() = default;
+    ClickableActuatorLinksView(const ClickableActuatorLinkEntry *entriesBegin, uint8_t linkCount) noexcept;
+
+    [[nodiscard]] auto begin() const -> Iterator;
+    [[nodiscard]] auto end() const -> Iterator;
+    [[nodiscard]] auto empty() const -> bool;
+    [[nodiscard]] auto size() const -> uint8_t;
+
+private:
+    const ClickableActuatorLinkEntry *entries = nullptr;
+    uint8_t count = 0U;
+};
 
 /**
  * @brief A class that represents a clickable object, like a button, and its associated logic.
@@ -93,7 +140,7 @@ private:
 
     // State variables for the FSM ("hot" data, move to top for <64 byte offset optimization).
     State currentState = State::IDLE;                 //!< The current state of the FSM.
-    uint32_t stateChangeTime = 0U;                    //!< Timestamp of the last state change.
+    uint16_t stateAge_ms = 0U;                        //!< Elapsed time spent in the current non-idle state, saturated at 65535 ms.
     ActionFired lastActionFired = ActionFired::NONE;  //!< Tracks which timed action has already been triggered.
 
     // Timings ("hot" configuration, move to top)
@@ -109,11 +156,14 @@ private:
     constants::NoNetworkClickType superLongClickFallback =
         constants::NoNetworkClickType::NONE;  //!< Fallback for super long click over network
 
-    // Attached actuators (HUGE size due to static storage)
-    // Keep at the bottom to avoid pushing hot variables out of the 64-byte displacement range.
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsShort{};      //!< Actuators controlled via short click
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsLong{};       //!< Actuators controlled via long click
-    etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsSuperLong{};  //!< Actuators controlled via super long click
+    // Compact actuator-link metadata.
+    // The real link entries live in shared pools managed by clickable.cpp.
+    uint16_t shortLinksOffset = 0U;      //!< Offset of the first short-click actuator link inside the shared pool.
+    uint16_t longLinksOffset = 0U;       //!< Offset of the first long-click actuator link inside the shared pool.
+    uint16_t superLongLinksOffset = 0U;  //!< Offset of the first super-long-click actuator link inside the shared pool.
+    uint8_t shortLinksCount = 0U;        //!< Number of short-click actuator links attached to this clickable.
+    uint8_t longLinksCount = 0U;         //!< Number of long-click actuator links attached to this clickable.
+    uint8_t superLongLinksCount = 0U;    //!< Number of super-long-click actuator links attached to this clickable.
 
 public:
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -176,10 +226,11 @@ public:
         -> Clickable &;  // Set super long click network clickability
 
     // Actuators setter
-    auto addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType) -> Clickable &;  // Add an actuator
-    auto addActuatorShort(uint8_t actuatorIndex) -> Clickable &;                                // Add a short click actuator
-    auto addActuatorLong(uint8_t actuatorIndex) -> Clickable &;                                 // Add a long click actuator
-    auto addActuatorSuperLong(uint8_t actuatorIndex) -> Clickable &;                            // Add a super long click actuator
+    auto addActuator(uint8_t actuatorIndex,
+                     constants::ClickType actuatorType) -> Clickable &;  // Adds one actuator link after clickable registration
+    auto addActuatorShort(uint8_t actuatorIndex) -> Clickable &;         // Add a short click actuator
+    auto addActuatorLong(uint8_t actuatorIndex) -> Clickable &;          // Add a long click actuator
+    auto addActuatorSuperLong(uint8_t actuatorIndex) -> Clickable &;     // Add a super long click actuator
 
     // Timing setters
     auto setDebounceTime(uint8_t timeToSet_ms) -> Clickable &;         // Set debounce time in ms (0-255)
@@ -190,7 +241,7 @@ public:
     [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the Clickable index on Clickables namespace Array
     [[nodiscard]] auto getId() const -> uint8_t;     // Return unique ID of the clickable
     [[nodiscard]] auto getActuators(constants::ClickType actuatorType) const
-        -> const etl::ivector<uint8_t> *;  // Returns attached actuators of one kind
+        -> ClickableActuatorLinksView;  // Returns the read-only view over one attached actuator-link list
     [[nodiscard]] auto getTotalActuators(constants::ClickType actuatorType) const
         -> uint8_t;                                                           // Returns the total number of a kind of actuators
     [[nodiscard]] auto getLongClickType() const -> constants::LongClickType;  // Returns the type of long click
@@ -205,8 +256,10 @@ public:
     [[nodiscard]] auto shortClick() const -> bool;               // Perform a short click action
     [[nodiscard]] auto longClick() const -> bool;                // Perform a long click action
     [[nodiscard]] auto superLongClickSelective() const -> bool;  // Perform a selective super long click;
-    [[nodiscard]] auto clickDetection()
-        -> constants::ClickResult;  // Processes input state and determines the click type using an internal Finite State Machine (FSM).
+    [[nodiscard]] auto clickDetection(uint16_t elapsed_ms)
+        -> constants::ClickResult;  // Advances the click FSM using the elapsed scan time and returns the detected click type.
+    void setActuatorLinksOffset(constants::ClickType actuatorType,
+                                uint16_t offsetToSet);  // Stores the compact shared-pool offset for one actuator-link list.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP

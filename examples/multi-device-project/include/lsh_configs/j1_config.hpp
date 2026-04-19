@@ -29,6 +29,15 @@
 #define LSH_MAX_CLICKABLES 10
 #define LSH_MAX_ACTUATORS 9
 #define LSH_MAX_INDICATORS 1
+#define LSH_MAX_CLICKABLE_ID 11
+#define LSH_MAX_ACTUATOR_ID 10
+// These totals are derived from the real configure() body for this profile.
+#define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS 10
+#define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS 12
+#define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 2
+#define LSH_MAX_INDICATOR_ACTUATOR_LINKS 1
+// J1 never requests bridge-assisted network clicks.
+#define LSH_DISABLE_NETWORK_CLICKS 1
 #define LSH_COM_SERIAL &Serial2
 #define LSH_DEBUG_SERIAL &Serial
 

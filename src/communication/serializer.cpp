@@ -191,6 +191,15 @@ void serializeActuatorsState()
 void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm, uint8_t correlationId)
 {
     DP_CONTEXT();
+#if !CONFIG_USE_NETWORK_CLICKS
+    // Keep the call site compileable even when a consumer strips the feature.
+    // The whole payload is intentionally dropped at compile time in that case.
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    static_cast<void>(confirm);
+    static_cast<void>(correlationId);
+    return;
+#else
     using namespace lsh::core::protocol;
 
     serializationDoc.clear();
@@ -217,6 +226,7 @@ void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickTyp
 
     // Send the Json
     BridgeSerial::sendJson(serializationDoc);
+#endif
 }
 
 }  // namespace Serializer
