@@ -1,6 +1,6 @@
 {
   "name": "lsh-core",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "LSH-Core: A robust and efficient C++ framework for Arduino-based home automation nodes, designed for Controllino PLCs.",
   "keywords": [
     "home automation",

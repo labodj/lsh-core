@@ -37,6 +37,25 @@ using namespace lsh::core::protocol;
 namespace
 {
 /**
+ * @brief Validate one JSON scalar as an exact uint8_t.
+ *
+ * @param value JSON value to validate.
+ * @param out Output byte written only when validation succeeds.
+ * @return true if the value is an integer in the `[0, 255]` range.
+ * @return false otherwise.
+ */
+[[nodiscard]] auto tryGetUint8Scalar(const JsonVariantConst &value, uint8_t &out) -> bool
+{
+    if (!value.is<uint8_t>())
+    {
+        return false;
+    }
+
+    out = value.as<uint8_t>();
+    return true;
+}
+
+/**
  * @brief Validate one JSON scalar as a packed actuator-state byte.
  *
  * @param value JSON value to validate.
@@ -46,18 +65,7 @@ namespace
  */
 [[nodiscard]] auto tryGetPackedStateByte(const JsonVariantConst &value, uint8_t &out) -> bool
 {
-    // ArduinoJson stores integers and floats with different internal tags.
-    // `is<uint8_t>()` therefore accepts only true integer payloads that fit
-    // exactly in one byte and rejects floats such as `1.0` or `1.5` before
-    // any conversion happens. This keeps the validation strict while avoiding
-    // the AVR flash cost of the floating-point helpers pulled by `as<double>()`.
-    if (!value.is<uint8_t>())
-    {
-        return false;
-    }
-
-    out = value.as<uint8_t>();
-    return true;
+    return tryGetUint8Scalar(value, out);
 }
 
 /**
@@ -83,11 +91,10 @@ namespace
 #if CONFIG_USE_NETWORK_CLICKS
 /**
  * @brief Processes payloads for network click acknowledgements and failovers.
- * @details This helper function handles the shared logic for both NETWORK_CLICK_ACK
- * and FAILOVER_CLICK commands. It extracts the button ID and click type from the
- * JSON document and calls the appropriate function in the NetworkClicks module.
- * It uses a "validation by convention" approach, where an ID of 0 is treated as
- * invalid, implicitly handling missing or null JSON keys.
+ * @details This helper function handles the shared logic for both
+ *          `NETWORK_CLICK_ACK` and `FAILOVER_CLICK`. Every scalar is validated
+ *          explicitly so malformed bridge payloads are rejected at the final
+ *          semantic boundary instead of being coerced into integer defaults.
  *
  * @param doc The const JsonDocument containing the payload.
  * @param cmd The specific command (either NETWORK_CLICK_ACK or FAILOVER_CLICK).
@@ -95,10 +102,14 @@ namespace
  */
 void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::Command cmd, DispatchResult &result)
 {
-    // Directly get numeric values..as<uint8_t>() returns 0 if key is missing / null.
-    const auto jsonClickType = doc[KEY_TYPE].as<uint8_t>();
-    const auto clickableId = doc[KEY_ID].as<uint8_t>();
-    const auto correlationId = doc[KEY_CORRELATION_ID].as<uint8_t>();
+    uint8_t jsonClickType = 0U;
+    uint8_t clickableId = 0U;
+    uint8_t correlationId = 0U;
+    if (!tryGetUint8Scalar(doc[KEY_TYPE], jsonClickType) || !tryGetUint8Scalar(doc[KEY_ID], clickableId) ||
+        !tryGetUint8Scalar(doc[KEY_CORRELATION_ID], correlationId))
+    {
+        return;
+    }
 
     constants::ClickType clickType = constants::ClickType::NONE;
     switch (static_cast<lsh::core::protocol::ProtocolClickType>(jsonClickType))
@@ -152,9 +163,9 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
  * The bridge runtime is intentionally semi-transparent and may raw-forward payloads it
  * does not need to optimize locally, so this dispatcher is also the final semantic
  * validation boundary for inbound LSH commands.
- * The validation relies on a "validation by convention" approach, where a value of 0
- * for IDs or commands is treated as invalid, eliminating the need for
- * `containsKey` checks.
+ * Every scalar that matters semantically is validated explicitly so malformed
+ * bridge payloads are rejected here instead of being silently coerced by
+ * ArduinoJson conversions.
  *
  * @param doc A const reference to the parsed JsonDocument from BridgeSerial.
  * @return DispatchResult A struct indicating the side-effects of the command,
@@ -165,8 +176,13 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 {
     DispatchResult result;  // Default: { false, false }
 
-    // Directly cast. If "p" is missing, cmd will be 0, caught by switch's default.
-    const auto cmd = static_cast<Command>(doc[KEY_PAYLOAD].as<uint8_t>());
+    uint8_t rawCommand = 0U;
+    if (!tryGetUint8Scalar(doc[KEY_PAYLOAD], rawCommand))
+    {
+        return result;
+    }
+
+    const auto cmd = static_cast<Command>(rawCommand);
 
     switch (cmd)
     {
@@ -183,7 +199,11 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
                 break;  // Wrong or missing jsonState
             }
 
-            const auto id = doc[KEY_ID].as<uint8_t>();
+            uint8_t id = 0U;
+            if (!tryGetUint8Scalar(doc[KEY_ID], id))
+            {
+                break;
+            }
             uint8_t actuatorIndex = 0U;
             if (!Actuators::tryGetIndex(id, actuatorIndex))
             {
@@ -269,15 +289,19 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         {
             break;
         }
-        Serializer::serializeActuatorsState();
-        BridgeSync::onRequestStateServed();
-        result.stateChanged = false;
+        if (Serializer::serializeActuatorsState())
+        {
+            BridgeSync::onRequestStateServed();
+            result.stateChanged = false;
+        }
         break;
 
     case Command::REQUEST_DETAILS:
-        Serializer::serializeDetails();
-        BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
-        result.stateChanged = false;
+        if (Serializer::serializeDetails())
+        {
+            BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
+            result.stateChanged = false;
+        }
         break;
 
     case Command::BOOT:
@@ -286,11 +310,15 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         // Re-open the bridge-sync gate first so this resync is reflected by the same
         // state machine that guards later mutating commands.
         BridgeSync::restartFromBridgeBoot(timeKeeper::getTime());
-        Serializer::serializeDetails();
-        BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
-        Serializer::serializeActuatorsState();
-        BridgeSync::onRequestStateServed();
-        result.stateChanged = false;
+        if (Serializer::serializeDetails())
+        {
+            BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
+            if (Serializer::serializeActuatorsState())
+            {
+                BridgeSync::onRequestStateServed();
+                result.stateChanged = false;
+            }
+        }
         break;
 
     case Command::PING_:

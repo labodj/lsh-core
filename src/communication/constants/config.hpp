@@ -89,8 +89,11 @@ static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
 static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP =
     4U;  //!< Upper bound for fully dispatched bridge payloads in one controller loop iteration.
 #else
+static_assert(CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP > 0U, "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must be greater than zero.");
+static_assert(CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP <= UINT8_MAX, "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must fit in uint8_t.");
 static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP = CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP;
 #endif  // CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP
+static_assert(COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP > 0U, "COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must be greater than zero.");
 
 #ifndef CONFIG_COM_SERIAL_FLUSH_AFTER_SEND
 static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = true;  //!< Conservative default: flush after every payload send.
@@ -154,6 +157,7 @@ constexpr uint16_t RAW_INPUT_BUFFER_FIXED_CMD_SIZE = 13U;
  *          - packed state bytes: `PACKED_STATE_BYTES`
  */
 constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = 6U + PACKED_STATE_MSGPACK_ARRAY_HEADER_SIZE + PACKED_STATE_BYTES;
+
 #else
 /**
  * @brief Minimum JSON-line buffer size required by the widest fixed-width command.
@@ -174,6 +178,14 @@ constexpr uint16_t RAW_INPUT_BUFFER_SIZE =
         : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE;  //!< Final allocated size for the raw serial input buffer used by the active codec.
 
 #ifdef CONFIG_MSG_PACK
+/**
+ * @brief Worst-case on-wire size of one framed MsgPack command.
+ * @details The SLIP-like transport adds an opening delimiter, a closing
+ *          delimiter, and may escape every payload byte into a two-byte
+ *          sequence.
+ */
+constexpr uint16_t MSGPACK_SERIAL_MAX_FRAME_SIZE = static_cast<uint16_t>(2U + (RAW_INPUT_BUFFER_SIZE * 2U));
+
 static_assert(RAW_INPUT_BUFFER_SIZE >= 13U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size network click commands in MsgPack mode.");
 #else
 static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size click/failover commands plus null terminator.");
@@ -181,7 +193,11 @@ static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixe
 
 #ifndef CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP
 static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
+#ifdef CONFIG_MSG_PACK
+    MSGPACK_SERIAL_MAX_FRAME_SIZE;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
+#else
     RAW_INPUT_BUFFER_SIZE;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
+#endif
 #else
 static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
     CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.

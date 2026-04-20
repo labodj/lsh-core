@@ -55,12 +55,12 @@ using lsh::core::protocol::KEY_PAYLOAD;
  *
  * @param payloadType type of the payload.
  */
-void serializeStaticJson(constants::payloads::StaticType payloadType)
+auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool
 {
     using constants::payloads::StaticType;
     if (payloadType == StaticType::PING_ && !BridgeSerial::canPing())
     {
-        return;
+        return false;
     }
 
 #ifdef CONFIG_MSG_PACK
@@ -76,20 +76,23 @@ void serializeStaticJson(constants::payloads::StaticType payloadType)
         const size_t writtenBytes = CONFIG_COM_SERIAL->write(payloadToSend.data(), payloadToSend.size());
         if (writtenBytes != payloadToSend.size())
         {
-            return;
+            return false;
         }
         if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
         {
             CONFIG_COM_SERIAL->flush();
         }
         BridgeSerial::updateLastSentTime();
+        return true;
     }
+
+    return false;
 }
 
 /**
  * @brief Prepare and send json details payload (eg: {"p":1,"v":3,"n":"c1","a":[1,2,...],"b":[1,3,...]}).
  */
-void serializeDetails()
+auto serializeDetails() -> bool
 {
     DP_CONTEXT();
     using namespace lsh::core::protocol;
@@ -117,7 +120,7 @@ void serializeDetails()
     }
 
     // Send the Json
-    BridgeSerial::sendJson(serializationDoc);
+    return BridgeSerial::sendJson(serializationDoc);
 }
 
 namespace
@@ -143,7 +146,7 @@ constexpr uint8_t BIT_MASK_8[8] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x8
  *          Each byte contains 8 actuator states (bit 0 = first actuator in byte).
  *          Example: 12 actuators → {"p":2,"s":[90,15]} (2 bytes vs 12 array elements)
  */
-void serializeActuatorsState()
+auto serializeActuatorsState() -> bool
 {
     DP_CONTEXT();
     using namespace lsh::core::protocol;
@@ -179,7 +182,7 @@ void serializeActuatorsState()
     }
 
     // Send the Json
-    BridgeSerial::sendJson(serializationDoc);
+    return BridgeSerial::sendJson(serializationDoc);
 }
 
 /**
@@ -192,7 +195,7 @@ void serializeActuatorsState()
  * @param confirm Set to true to confirm the action after an ACK has been received.
  * @param correlationId The correlation ID that ties request, ack, failover and confirm together.
  */
-void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm, uint8_t correlationId)
+auto serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickType, bool confirm, uint8_t correlationId) -> bool
 {
     DP_CONTEXT();
 #if !CONFIG_USE_NETWORK_CLICKS
@@ -202,7 +205,7 @@ void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickTyp
     static_cast<void>(clickType);
     static_cast<void>(confirm);
     static_cast<void>(correlationId);
-    return;
+    return false;
 #else
     using namespace lsh::core::protocol;
 
@@ -222,14 +225,14 @@ void serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickTyp
             static_cast<uint8_t>(lsh::core::protocol::ProtocolClickType::SUPER_LONG);  // "t":2  (Click Type: Super Long)
         break;
     default:
-        return;  // Not valid click type
+        return false;  // Not valid click type
     }
 
     serializationDoc[KEY_ID] = Clickables::clickables[clickableIndex]->getId();  // "i":7 (Button ID: 7)
     serializationDoc[KEY_CORRELATION_ID] = correlationId;                        // "c":42 (Correlation ID)
 
     // Send the Json
-    BridgeSerial::sendJson(serializationDoc);
+    return BridgeSerial::sendJson(serializationDoc);
 #endif
 }
 

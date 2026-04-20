@@ -79,26 +79,36 @@ void init()
  * timestamp bookkeeping.
  *
  * @param documentToSend JsonDocument to be sent.
+ * @return true if the full payload and any required transport delimiters were
+ *         accepted by the UART.
+ * @return false if serialization produced no payload bytes or if the UART
+ *         accepted only part of the frame.
  */
-void sendJson(const JsonDocument &documentToSend)
+auto sendJson(const JsonDocument &documentToSend) -> bool
 {
     DP_CONTEXT();
 #ifdef CONFIG_MSG_PACK
+    const size_t expectedPayloadBytes = measureMsgPack(documentToSend);
     MsgPackFrameWriter framedWriter(*CONFIG_COM_SERIAL);
     if (!framedWriter.beginFrame())
     {
-        return;
+        return false;
     }
 
     const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, framedWriter);
     const bool frameEnded = framedWriter.endFrame();
-    if (writtenPayloadBytes == 0U || !frameEnded)
+    if (writtenPayloadBytes == 0U || writtenPayloadBytes != expectedPayloadBytes || !frameEnded)
     {
-        return;
+        return false;
     }
 #else
-    serializeJson(documentToSend, *CONFIG_COM_SERIAL);
-    CONFIG_COM_SERIAL->write("\n", 1);  // Add a newline character after sending the JSON payload.
+    const size_t expectedPayloadBytes = measureJson(documentToSend);
+    const size_t writtenPayloadBytes = serializeJson(documentToSend, *CONFIG_COM_SERIAL);
+    const size_t writtenDelimiterBytes = CONFIG_COM_SERIAL->write("\n", 1);  // Add a newline character after sending the JSON payload.
+    if (writtenPayloadBytes != expectedPayloadBytes || writtenDelimiterBytes != 1U)
+    {
+        return false;
+    }
 #endif  // CONFIG_MSG_PACK
     if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
     {
@@ -110,6 +120,7 @@ void sendJson(const JsonDocument &documentToSend)
     DP(FPSTR(dStr::JSON_SENT), FPSTR(dStr::COLON_SPACE));
     DPJ(documentToSend);
     updateLastSentTime();
+    return true;
 }
 
 /**
@@ -241,12 +252,12 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
 
 /**
  * @brief Advance the ping idle timer used by `canPing()`.
- * @details The main loop already computes the elapsed scan time for the
- *          clickable hot path. Reusing that delta here avoids another 32-bit
- *          timestamp comparison in `canPing()` while preserving the same
- *          "wait until the line stayed idle long enough" semantics.
+ * @details The main loop computes one cached elapsed time for bridge
+ *          housekeeping and feeds it here. Reusing that delta avoids another
+ *          32-bit timestamp comparison in `canPing()` while keeping bridge-link
+ *          liveness independent from the clickable scan policy.
  *
- * @param elapsed_ms Milliseconds elapsed since the previous clickable scan.
+ * @param elapsed_ms Milliseconds elapsed since the previous bridge housekeeping pass.
  */
 void tickSendIdleTimer(uint16_t elapsed_ms)
 {
@@ -287,7 +298,11 @@ void updateLastSentTime()
 /**
  * @brief Check whether the bridge is still considered connected.
  * @details The bridge is considered online only after the first valid payload
- *          has been received and only while the receive timeout window stays open.
+ *          has been received and only while the receive timeout window stays
+ *          open. The receive timestamp stores the real completion time of the
+ *          last accepted payload, so the liveness check must use the same
+ *          real-time clock to avoid cached-time underflow inside the current
+ *          controller loop iteration.
  *
  * @return true if the bridge answered recently enough.
  * @return false if the bridge never answered or timed out.
@@ -296,7 +311,7 @@ auto isConnected() -> bool
 {
     DP_CONTEXT();
     using constants::bridgeSerial::CONNECTION_TIMEOUT_MS;
-    return (firstValidPayloadReceived && ((timeKeeper::getTime() - lastReceivedPayloadTime_ms) < CONNECTION_TIMEOUT_MS));
+    return (firstValidPayloadReceived && ((timeKeeper::getRealTime() - lastReceivedPayloadTime_ms) < CONNECTION_TIMEOUT_MS));
 }
 
 }  // namespace BridgeSerial

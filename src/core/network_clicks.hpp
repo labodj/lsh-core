@@ -31,12 +31,24 @@
  * usage low on embedded targets, this module stores pending click metadata in
  * fixed arrays indexed by clickable index and only keeps small active counters.
  * Timeout sweeps scan the clickable prefix only while at least one click of the
- * corresponding type is pending.
+ * corresponding type is pending. Each clickable/type pair can hold at most one
+ * in-flight network transaction at a time. Callers must inspect the returned
+ * `RequestResult`: only `TransportRejected` means the network path is
+ * unavailable for this click, while `AlreadyPending` means the press was
+ * intentionally ignored because the previous transaction is still open.
  */
 namespace NetworkClicks
 {
+enum class RequestResult : uint8_t
+{
+    Accepted,          //!< The request frame has been accepted by the UART and the timeout is now active.
+    AlreadyPending,    //!< The same clickable/clickType pair already has one in-flight transaction.
+    TransportRejected  //!< The UART rejected the outgoing request frame.
+};
+
 // Network clicks
-void request(uint8_t clickableIndex, constants::ClickType clickType);  // Initiates a network click action.
+[[nodiscard]] auto request(uint8_t clickableIndex, constants::ClickType clickType)
+    -> RequestResult;  // Initiates a network click action and reports whether the transaction was accepted, already pending, or rejected.
 [[nodiscard]] auto confirm(uint8_t clickableIndex, constants::ClickType clickType)
     -> bool;  // Confirms a pending network click action after receiving an ACK
 void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType);  // Store click time for a network attached clickable

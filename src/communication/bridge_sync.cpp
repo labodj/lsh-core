@@ -37,10 +37,12 @@ enum class State : uint8_t
     Synced = 2U,
 };
 
+constexpr uint32_t BOOT_NOT_SENT_YET = UINT32_MAX;  //!< Sentinel meaning that no controller BOOT has been accepted by the UART yet.
+
 /** @brief Current controller-side handshake phase with the bridge runtime. */
 State syncState = State::AwaitBridgeDetails;
 /** @brief Cached timestamp of the last BOOT payload emitted while waiting for bridge details. */
-uint32_t lastBootSentTime_ms = 0U;
+uint32_t lastBootSentTime_ms = BOOT_NOT_SENT_YET;
 /** @brief Cached timestamp captured when the controller started waiting for `REQUEST_STATE`. */
 uint32_t awaitingStateSince_ms = 0U;
 
@@ -49,10 +51,15 @@ uint32_t awaitingStateSince_ms = 0U;
  *
  * @param now Current loop timestamp used to seed the BOOT retry timer.
  */
-void sendBoot(uint32_t now)
+auto sendBoot(uint32_t now) -> bool
 {
-    Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT);
+    if (!Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT))
+    {
+        return false;
+    }
+
     lastBootSentTime_ms = now;
+    return true;
 }
 }  // namespace
 
@@ -68,7 +75,8 @@ void begin(uint32_t now)
 {
     syncState = State::AwaitBridgeDetails;
     awaitingStateSince_ms = 0U;
-    sendBoot(now);
+    lastBootSentTime_ms = BOOT_NOT_SENT_YET;
+    (void)sendBoot(now);
 }
 
 /**
@@ -103,13 +111,17 @@ void tick(uint32_t now)
     switch (syncState)
     {
     case State::Synced:
-        Serializer::serializeStaticJson(constants::payloads::StaticType::PING_);
+        if (!Serializer::serializeStaticJson(constants::payloads::StaticType::PING_))
+        {
+            // Either the heartbeat is still throttled or the UART rejected the
+            // frame. In both cases the next tick will re-evaluate normally.
+        }
         break;
 
     case State::AwaitBridgeDetails:
-        if ((now - lastBootSentTime_ms) >= BRIDGE_BOOT_RETRY_INTERVAL_MS)
+        if (lastBootSentTime_ms == BOOT_NOT_SENT_YET || (now - lastBootSentTime_ms) >= BRIDGE_BOOT_RETRY_INTERVAL_MS)
         {
-            sendBoot(now);
+            (void)sendBoot(now);
         }
         break;
 
@@ -118,7 +130,7 @@ void tick(uint32_t now)
         {
             syncState = State::AwaitBridgeDetails;
             awaitingStateSince_ms = 0U;
-            sendBoot(now);
+            (void)sendBoot(now);
         }
         break;
     }

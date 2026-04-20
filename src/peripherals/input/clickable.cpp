@@ -801,8 +801,8 @@ auto Clickable::longClick() const -> bool
             actuatorsLongOn += static_cast<uint8_t>(localActuators[actuatorIndex]->getState());
         }
         /*
-        Less than half of attached secondary actuators are OFF -> stateToSet = true
-        More or equal than half of attached long actuators are OFF -> stateToSet = false
+        Less than half of attached long actuators are ON -> stateToSet = true
+        More or equal than half of attached long actuators are ON -> stateToSet = false
         The formula is(Long actuators ON < Total actuators / 2)
         To avoid float arithmetics and to speed things up use shift operator and swap the division with a multiplication
         (Long actuators ON x 2 < Total actuators)

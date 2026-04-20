@@ -45,11 +45,11 @@ extern uint16_t sendIdleAge_ms;
 extern uint32_t lastReceivedPayloadTime_ms;
 extern bool firstValidPayloadReceived;
 
-void init();                                        // Initialize the hardware serial link used by the bridge.
-void sendJson(const JsonDocument &documentToSend);  // Send one payload to the bridge using the active codec.
+void init();                                                              // Initialize the hardware serial link used by the bridge.
+[[nodiscard]] auto sendJson(const JsonDocument &documentToSend) -> bool;  // Send one payload to the bridge using the active codec.
 auto receiveAndDispatch(uint16_t maxBytesToConsume)
     -> ReceiveResult;                         // Consume up to N bytes and dispatch at most one complete bridge payload.
-void tickSendIdleTimer(uint16_t elapsed_ms);  // Advance the ping idle timer using the elapsed loop time.
+void tickSendIdleTimer(uint16_t elapsed_ms);  // Advance the ping idle timer using the elapsed bridge-housekeeping time.
 [[nodiscard]] auto canPing() -> bool;         // Return true when another heartbeat may be emitted.
 void updateLastSentTime();                    // Reset the ping idle timer after a payload transmission.
 [[nodiscard]] auto isConnected() -> bool;     // Return true when the bridge is still considered online.

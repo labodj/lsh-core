@@ -45,7 +45,10 @@ etl::array<uint16_t, CONFIG_MAX_CLICKABLES>
 etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
     longClickedCorrelationIds{};  //!< Correlation IDs for active long clicks, indexed by clickable index.
 etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
-    superLongClickedCorrelationIds{};              //!< Correlation IDs for active super-long clicks, indexed by clickable index.
+    superLongClickedCorrelationIds{};  //!< Correlation IDs for active super-long clicks, indexed by clickable index.
+etl::array<uint8_t, CONFIG_MAX_CLICKABLES> longClickedAckedFlags{};  //!< Non-zero once the bridge ACK has been accepted for a long click.
+etl::array<uint8_t, CONFIG_MAX_CLICKABLES>
+    superLongClickedAckedFlags{};                  //!< Non-zero once the bridge ACK has been accepted for a super-long click.
 uint8_t activeLongClickedNetworkClicks = 0U;       //!< Number of pending long-click transactions.
 uint8_t activeSuperLongClickedNetworkClicks = 0U;  //!< Number of pending super-long-click transactions.
 uint8_t nextCorrelationId = 0U;                    //!< Monotonic 8-bit generator. 0 is reserved as "missing/invalid".
@@ -74,6 +77,20 @@ auto getCorrelationStorage(constants::ClickType clickType) -> etl::array<uint8_t
         return &longClickedCorrelationIds;
     case ClickType::SUPER_LONG:
         return &superLongClickedCorrelationIds;
+    default:
+        return nullptr;
+    }
+}
+
+auto getAckedStorage(constants::ClickType clickType) -> etl::array<uint8_t, CONFIG_MAX_CLICKABLES> *
+{
+    using constants::ClickType;
+    switch (clickType)
+    {
+    case ClickType::LONG:
+        return &longClickedAckedFlags;
+    case ClickType::SUPER_LONG:
+        return &superLongClickedAckedFlags;
     default:
         return nullptr;
     }
@@ -154,6 +171,32 @@ auto getStoredCorrelationId(uint8_t clickableIndex, constants::ClickType clickTy
 auto isNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 {
     return getStoredCorrelationId(clickableIndex, clickType) != 0U;
+}
+
+/**
+ * @brief Return whether one pending slot has already accepted the remote ACK.
+ */
+auto isNetworkClickAcked(uint8_t clickableIndex, constants::ClickType clickType) -> bool
+{
+    auto *const ackedStorage = getAckedStorage(clickType);
+    if (ackedStorage == nullptr)
+    {
+        return false;
+    }
+    return (*ackedStorage)[clickableIndex] != 0U;
+}
+
+/**
+ * @brief Mark one pending slot as acknowledged by the bridge.
+ */
+void markNetworkClickAcked(uint8_t clickableIndex, constants::ClickType clickType)
+{
+    auto *const ackedStorage = getAckedStorage(clickType);
+    if (ackedStorage == nullptr)
+    {
+        return;
+    }
+    (*ackedStorage)[clickableIndex] = 1U;
 }
 
 /**
@@ -276,6 +319,31 @@ auto checkAllNetworkClicksTimers(constants::ClickType clickType, bool failover) 
             continue;
         }
 
+        if (isNetworkClickAcked(clickableIndex, clickType))
+        {
+            if ((*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)
+            {
+                DPL("Dropping acknowledged network click after confirm retry timeout.");
+                eraseNetworkClick(clickableIndex, clickType);
+                if (*activeCount == 0U)
+                {
+                    break;
+                }
+                continue;
+            }
+
+            const uint8_t correlationId = getStoredCorrelationId(clickableIndex, clickType);
+            if (correlationId != 0U && Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId))
+            {
+                eraseNetworkClick(clickableIndex, clickType);
+                if (*activeCount == 0U)
+                {
+                    break;
+                }
+            }
+            continue;
+        }
+
         if (failover || (*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // If expired or failover
         {
             DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX),
@@ -300,22 +368,47 @@ using constants::ClickType;
 
 /**
  * @brief Initiates a network click action.
- * @details Sends the initial network click request and starts the fallback timer.
- *          This function does not return a value; the caller is responsible
- *          for managing any necessary state changes.
+ * @details Sends the initial network click request and keeps the pending
+ *          timeout active only if the frame is accepted by the UART. If the
+ *          serial transport rejects the request, the pending click is removed
+ *          immediately so the caller can decide whether to execute a local
+ *          fallback action instead of silently losing the press.
  * @param clickableIndex The index of the clickable that was pressed.
  * @param clickType The type of click (LONG or SUPER_LONG).
+ * @return RequestResult::Accepted if the request frame has been accepted by
+ *         the UART and the pending timeout should remain active.
+ * @return RequestResult::AlreadyPending if the same clickable/type pair still
+ *         has one unresolved transaction and this press should be ignored.
+ * @return RequestResult::TransportRejected if the UART rejected the request
+ *         and the caller may decide to execute a local fallback instead.
  */
-void request(uint8_t clickableIndex, constants::ClickType clickType)
+auto request(uint8_t clickableIndex, constants::ClickType clickType) -> RequestResult
 {
     DP_CONTEXT();
+    if (isNetworkClickActive(clickableIndex, clickType))
+    {
+        DPL("Rejecting new network click because the same clickable and click type still have one pending transaction.");
+        return RequestResult::AlreadyPending;
+    }
+
     storeNetworkClickTime(clickableIndex, clickType);
-    Serializer::serializeNetworkClick(clickableIndex, clickType, false, getStoredCorrelationId(clickableIndex, clickType));
+    if (!Serializer::serializeNetworkClick(clickableIndex, clickType, false, getStoredCorrelationId(clickableIndex, clickType)))
+    {
+        eraseNetworkClick(clickableIndex, clickType);
+        return RequestResult::TransportRejected;
+    }
+    return RequestResult::Accepted;
 }
 
 /**
  * @brief Confirms a pending network click action after receiving an ACK.
- * @details Sends the final confirmation message and removes the click from the pending list.
+ * @details Once the ACK has been accepted from the bridge, the local timeout
+ *          must stop immediately or the click could later trigger a spurious
+ *          local fallback even though the network path already succeeded. The
+ *          slot therefore stays active but moves into an "ACKed" sub-state:
+ *          no local fallback is allowed anymore, and the loop retries
+ *          `NETWORK_CLICK_CONFIRM` until the UART accepts it or a bounded
+ *          cleanup timeout expires.
  * @param clickableIndex The index of the clickable to confirm.
  * @param clickType The type of click to confirm.
  * @return true if there are still other active network clicks pending, false otherwise.
@@ -329,8 +422,15 @@ auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
         return thereAreActiveNetworkClicks();
     }
 
-    Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId);
-    eraseNetworkClick(clickableIndex, clickType);
+    markNetworkClickAcked(clickableIndex, clickType);
+    if (Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId))
+    {
+        eraseNetworkClick(clickableIndex, clickType);
+    }
+    else
+    {
+        DPL("Keeping acknowledged network click pending until NETWORK_CLICK_CONFIRM is accepted by the UART.");
+    }
     return thereAreActiveNetworkClicks();
 }
 
@@ -356,6 +456,11 @@ void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickTyp
     advanceActiveTimersTo(timeKeeper::getTime());
     markNetworkClickActive(clickableIndex, clickType);
     (*ageStorage)[clickableIndex] = 0U;
+    auto *const ackedStorage = getAckedStorage(clickType);
+    if (ackedStorage != nullptr)
+    {
+        (*ackedStorage)[clickableIndex] = 0U;
+    }
     auto *const correlationStorage = getCorrelationStorage(clickType);
     if (correlationStorage != nullptr)
     {
@@ -408,6 +513,11 @@ void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType)
     }
     markNetworkClickInactive(clickableIndex, clickType);
     (*ageStorage)[clickableIndex] = 0U;
+    auto *const ackedStorage = getAckedStorage(clickType);
+    if (ackedStorage != nullptr)
+    {
+        (*ackedStorage)[clickableIndex] = 0U;
+    }
     clearCorrelationId(clickableIndex, clickType);
 }
 
@@ -433,6 +543,17 @@ auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickTyp
     if (!isNetworkClickActive(clickableIndex, clickType))
     {
         return true;
+    }
+
+    if (isNetworkClickAcked(clickableIndex, clickType))
+    {
+        advanceActiveTimersTo(timeKeeper::getTime());
+        if ((*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)
+        {
+            eraseNetworkClick(clickableIndex, clickType);
+            return true;
+        }
+        return false;
     }
 
     advanceActiveTimersTo(timeKeeper::getTime());
@@ -473,6 +594,22 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
     advanceActiveTimersTo(timeKeeper::getTime());
     if (isNetworkClickActive(clickableIndex, clickType))
     {
+        if (isNetworkClickAcked(clickableIndex, clickType))
+        {
+            if ((*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)
+            {
+                eraseNetworkClick(clickableIndex, clickType);
+                return false;
+            }
+
+            const uint8_t correlationId = getStoredCorrelationId(clickableIndex, clickType);
+            if (correlationId != 0U && Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId))
+            {
+                eraseNetworkClick(clickableIndex, clickType);
+            }
+            return false;
+        }
+
         if (failover || (*ageStorage)[clickableIndex] > LCNB_TIMEOUT_MS)  // expired
         {
             auto *const clickable = Clickables::clickables[clickableIndex];
@@ -522,10 +659,11 @@ auto checkAllNetworkClicksTimers(bool failover) -> bool
  *          the generated firmware pay effectively zero runtime state for a
  *          feature the consumer does not use.
  */
-void request(uint8_t clickableIndex, constants::ClickType clickType)
+auto request(uint8_t clickableIndex, constants::ClickType clickType) -> RequestResult
 {
     static_cast<void>(clickableIndex);
     static_cast<void>(clickType);
+    return RequestResult::TransportRejected;
 }
 
 /**

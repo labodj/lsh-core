@@ -132,7 +132,60 @@ void loop()
 #if CONFIG_USE_NETWORK_CLICKS
     static bool mustPollNetworkClickTimeouts = false;  //!< True while at least one network click transaction still needs timeout handling.
 #endif
-    static uint32_t lastClickableScanTime_ms = 0U;  //!< Timestamp of the last input scan pass.
+    static uint32_t lastBridgeHousekeepingTime_ms = 0U;  //!< Timestamp of the last bridge housekeeping pass.
+    static uint32_t lastClickableScanTime_ms = 0U;       //!< Timestamp of the last input scan pass.
+    uint8_t receivedPayloadsThisLoop = 0U;               //!< Number of bridge payloads already dispatched in this loop iteration.
+    uint16_t receivedBytesThisLoop = 0U;                 //!< Raw UART bytes already consumed in this loop iteration.
+
+    auto drainBridgeRx = [&](uint8_t maxPayloadsToDispatch, uint16_t maxBytesToConsume)
+    {
+        while (receivedPayloadsThisLoop < maxPayloadsToDispatch && receivedBytesThisLoop < maxBytesToConsume &&
+               CONFIG_COM_SERIAL->available())
+        {
+            const uint16_t remainingByteBudget = static_cast<uint16_t>(maxBytesToConsume - receivedBytesThisLoop);
+            const auto receiveResult = BridgeSerial::receiveAndDispatch(remainingByteBudget);
+            if (receiveResult.consumedBytes == 0U)
+            {
+                break;
+            }
+
+            receivedBytesThisLoop = static_cast<uint16_t>(receivedBytesThisLoop + receiveResult.consumedBytes);
+            mustTransmitStateToBridge |= receiveResult.dispatch.stateChanged;
+#if CONFIG_USE_NETWORK_CLICKS
+            mustPollNetworkClickTimeouts |= receiveResult.dispatch.networkClickHandled;
+#endif
+            if (receiveResult.payloadDispatched)
+            {
+                ++receivedPayloadsThisLoop;
+            }
+        }
+    };
+
+    const uint32_t elapsedSinceLastBridgeHousekeeping_ms = now - lastBridgeHousekeepingTime_ms;
+    if (elapsedSinceLastBridgeHousekeeping_ms > 0U)
+    {
+        lastBridgeHousekeepingTime_ms = now;
+        const uint16_t bridgeHousekeepingElapsed_ms = (elapsedSinceLastBridgeHousekeeping_ms > UINT16_MAX)
+                                                          ? UINT16_MAX
+                                                          : static_cast<uint16_t>(elapsedSinceLastBridgeHousekeeping_ms);
+        // Bridge heartbeat pacing and handshake retries intentionally use their
+        // own elapsed-time gate. This keeps controller-link liveness
+        // independent from the clickable scan policy while still avoiding extra
+        // timestamp work on raw Arduino `loop()` iterations that happened
+        // inside the same cached millisecond.
+        BridgeSerial::tickSendIdleTimer(bridgeHousekeepingElapsed_ms);
+        BridgeSync::tick(now);
+    }
+
+    // Rescue one pending inbound payload before deciding whether the bridge is
+    // alive for long/super-long click routing. Without this bounded pre-drain,
+    // a valid frame already waiting in the UART could only refresh liveness on
+    // the next loop iteration and a network-clickable press could spuriously
+    // fall back to the local action on the timeout edge.
+    if (!BridgeSerial::isConnected() && CONFIG_COM_SERIAL->available())
+    {
+        drainBridgeRx(1U, constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP);
+    }
 
     // Scan local inputs only after the configured interval elapsed.
     // The loop still passes the full accumulated delta to the clickable FSM, so
@@ -145,11 +198,6 @@ void loop()
         lastClickableScanTime_ms = now;
         const uint16_t clickableElapsed_ms =
             (elapsedSinceLastClickableScan_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastClickableScan_ms);
-        // Bridge housekeeping intentionally shares the same pacing gate as the
-        // clickable scan. This keeps the hot path single-paced and avoids paying
-        // extra timestamp checks on every raw Arduino `loop()` iteration.
-        BridgeSerial::tickSendIdleTimer(clickableElapsed_ms);
-        BridgeSync::tick(now);
 
         // `Clickables::clickables` is a contiguous ETL array. Iterating through raw
         // pointers avoids repeated index arithmetic in one of the hottest paths.
@@ -182,8 +230,16 @@ void loop()
 #if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
-                        NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
-                        mustPollNetworkClickTimeouts = true;
+                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
+                        if (requestResult == NetworkClicks::RequestResult::Accepted)
+                        {
+                            mustPollNetworkClickTimeouts = true;
+                        }
+                        else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
+                                 currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                        {
+                            mustTransmitStateToBridge |= currentClickable->longClick();
+                        }
                     }
                     // If the bridge path is unavailable and the device was configured with
                     // local fallback, execute the local action instead of dropping the press.
@@ -215,8 +271,16 @@ void loop()
 #if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
-                        NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
-                        mustPollNetworkClickTimeouts = true;
+                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
+                        if (requestResult == NetworkClicks::RequestResult::Accepted)
+                        {
+                            mustPollNetworkClickTimeouts = true;
+                        }
+                        else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
+                                 currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                        {
+                            mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                        }
                     }
                     else if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
@@ -245,28 +309,7 @@ void loop()
     // If there is something in the serial buffer try to deserialize it.
     // The per-loop cap prevents bridge bursts from monopolising the controller
     // for too many consecutive payloads in one iteration.
-    uint8_t receivedPayloadsThisLoop = 0U;
-    uint16_t receivedBytesThisLoop = 0U;
-    while (receivedPayloadsThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP &&
-           receivedBytesThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP && CONFIG_COM_SERIAL->available())
-    {
-        const uint16_t remainingByteBudget = constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP - receivedBytesThisLoop;
-        const auto receiveResult = BridgeSerial::receiveAndDispatch(remainingByteBudget);
-        if (receiveResult.consumedBytes == 0U)
-        {
-            break;
-        }
-
-        receivedBytesThisLoop = static_cast<uint16_t>(receivedBytesThisLoop + receiveResult.consumedBytes);
-        mustTransmitStateToBridge |= receiveResult.dispatch.stateChanged;
-#if CONFIG_USE_NETWORK_CLICKS
-        mustPollNetworkClickTimeouts |= receiveResult.dispatch.networkClickHandled;
-#endif
-        if (receiveResult.payloadDispatched)
-        {
-            ++receivedPayloadsThisLoop;
-        }
-    }
+    drainBridgeRx(constants::bridgeSerial::COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP, constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP);
 
 #if CONFIG_USE_NETWORK_CLICKS
     // Timeout checks for long/super long network clicked clickables
@@ -297,9 +340,11 @@ void loop()
         const uint32_t nowForTransmit_ms = timeKeeper::getRealTime();
         if (nowForTransmit_ms - BridgeSerial::lastReceivedPayloadTime_ms > DELAY_AFTER_RECEIVE_MS)
         {
-            Serializer::serializeActuatorsState();
-            Indicators::indicatorsCheck();
-            mustTransmitStateToBridge = false;
+            if (Serializer::serializeActuatorsState())
+            {
+                Indicators::indicatorsCheck();
+                mustTransmitStateToBridge = false;
+            }
         }
     }
 

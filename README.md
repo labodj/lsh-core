@@ -565,6 +565,7 @@ These flags allow you to override the default timing behavior of the framework. 
 - **Default:** `1U` (1 millisecond)
 - **Description:** Sets the minimum elapsed time between two input scan passes. With the default value, the historical policy remains approximately `~1000 Hz` when the main loop is otherwise free to run.
 - **Behavior note:** This is a scan policy knob, not a hard real-time guarantee. If the controller is busy, `lsh-core` passes the whole accumulated elapsed time to the clickable state machine so debounce and long-click timing stay coherent.
+- **Bridge note:** Bridge heartbeat pacing and handshake retries use their own elapsed-time gate and are not paced by this input scan interval.
 - **When to tune:** Increase it only after measuring the real hardware tradeoff between button latency, serial fairness and CPU headroom.
 - **Example:** `-D CONFIG_CLICKABLE_SCAN_INTERVAL_MS=2U`
 
@@ -639,7 +640,7 @@ These flags allow you to override the default timing behavior of the framework. 
 
 #### `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP`
 
-- **Default:** `RAW_INPUT_BUFFER_SIZE`
+- **Default:** `RAW_INPUT_BUFFER_SIZE` in JSON mode, `MSGPACK_SERIAL_MAX_FRAME_SIZE` in MsgPack mode
 - **Description:** Bounds the total number of raw UART bytes that `lsh-core` may drain in one `loop()` iteration before returning to local input scanning and logic.
 - **When to tune:** Raise it only if the bridge regularly delivers bursts that should be drained faster and hardware tests confirm that button latency stays acceptable.
 - **Example:** `-D CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP=48U`
