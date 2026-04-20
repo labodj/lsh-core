@@ -51,7 +51,7 @@ using lsh::core::protocol::Command;
 using lsh::core::protocol::KEY_PAYLOAD;
 
 /**
- * @brief Send a compile-time pre-serialized static payload.
+ * @brief Send one compile-time pre-serialized static control payload.
  *
  * @param payloadType type of the payload.
  */
@@ -69,11 +69,15 @@ void serializeStaticJson(constants::payloads::StaticType payloadType)
     constexpr bool useMsgPack = false;
 #endif
 
-    const auto payloadToSend = utils::payloads::get<useMsgPack>(payloadType);
+    const auto payloadToSend = utils::payloads::getSerial<useMsgPack>(payloadType);
 
     if (!payloadToSend.empty())
     {
-        CONFIG_COM_SERIAL->write(payloadToSend.data(), payloadToSend.size());
+        const size_t writtenBytes = CONFIG_COM_SERIAL->write(payloadToSend.data(), payloadToSend.size());
+        if (writtenBytes != payloadToSend.size())
+        {
+            return;
+        }
         if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
         {
             CONFIG_COM_SERIAL->flush();

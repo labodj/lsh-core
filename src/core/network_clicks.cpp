@@ -28,6 +28,7 @@
 #include "peripherals/input/clickable.hpp"
 #include "util/constants/timing.hpp"
 #include "util/debug/debug.hpp"
+#include "util/saturating_time.hpp"
 #include "util/time_keeper.hpp"
 
 using namespace Debug;
@@ -156,26 +157,6 @@ auto isNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType
 }
 
 /**
- * @brief Add elapsed milliseconds to a 16-bit age counter without wrapping.
- * @details Network click ages only need to stay monotonic until they exceed the
- *          timeout threshold. Saturating avoids the AVR cost of 32-bit per-slot
- *          timers while keeping expiry checks stable after long loop stalls.
- *
- * @param currentAge_ms Age already accumulated for the pending click.
- * @param elapsed_ms Additional elapsed time to accumulate.
- * @return uint16_t Updated age, saturated at 65535 ms.
- */
-auto addElapsedTimeSaturated(uint16_t currentAge_ms, uint16_t elapsed_ms) -> uint16_t
-{
-    const uint16_t updatedAge_ms = static_cast<uint16_t>(currentAge_ms + elapsed_ms);
-    if (updatedAge_ms < currentAge_ms)
-    {
-        return UINT16_MAX;
-    }
-    return updatedAge_ms;
-}
-
-/**
  * @brief Bumps the active counter only when a click slot becomes active.
  */
 void markNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType)
@@ -223,7 +204,7 @@ void ageActiveTimers(constants::ClickType clickType, uint16_t elapsed_ms)
         {
             continue;
         }
-        (*ageStorage)[clickableIndex] = addElapsedTimeSaturated((*ageStorage)[clickableIndex], elapsed_ms);
+        (*ageStorage)[clickableIndex] = timeUtils::addElapsedTimeSaturated((*ageStorage)[clickableIndex], elapsed_ms);
     }
 }
 

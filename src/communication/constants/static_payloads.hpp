@@ -1,7 +1,7 @@
 /**
  * @file    static_payloads.hpp
  * @author  Jacopo Labardi (labodj)
- * @brief Defines target-specific pre-serialized static payload bytes.
+ * @brief Defines target-specific pre-serialized static payload bytes for raw and serial transports.
  * @note Do not edit manually. Run tools/generate_lsh_protocol.py instead.
  *
  * Copyright 2026 Jacopo Labardi
@@ -34,12 +34,16 @@ namespace constants::payloads
     };
 
     // --- BOOT ---
-    inline constexpr etl::array<uint8_t, 8> JSON_BOOT_BYTES = {'{', '"', 'p', '"', ':', '4', '}', '\n'};
-    inline constexpr etl::array<uint8_t, 4> MSGPACK_BOOT_BYTES = {0x81, 0xA1, 0x70, 0x04};
+    inline constexpr etl::array<uint8_t, 7> JSON_RAW_BOOT_BYTES = {'{', '"', 'p', '"', ':', '4', '}'};
+    inline constexpr etl::array<uint8_t, 8> JSON_SERIAL_BOOT_BYTES = {'{', '"', 'p', '"', ':', '4', '}', '\n'};
+    inline constexpr etl::array<uint8_t, 4> MSGPACK_RAW_BOOT_BYTES = {0x81, 0xA1, 0x70, 0x04};
+    inline constexpr etl::array<uint8_t, 6> MSGPACK_SERIAL_BOOT_BYTES = {0xC0, 0x81, 0xA1, 0x70, 0x04, 0xC0};
 
     // --- PING ---
-    inline constexpr etl::array<uint8_t, 8> JSON_PING_BYTES = {'{', '"', 'p', '"', ':', '5', '}', '\n'};
-    inline constexpr etl::array<uint8_t, 4> MSGPACK_PING_BYTES = {0x81, 0xA1, 0x70, 0x05};
+    inline constexpr etl::array<uint8_t, 7> JSON_RAW_PING_BYTES = {'{', '"', 'p', '"', ':', '5', '}'};
+    inline constexpr etl::array<uint8_t, 8> JSON_SERIAL_PING_BYTES = {'{', '"', 'p', '"', ':', '5', '}', '\n'};
+    inline constexpr etl::array<uint8_t, 4> MSGPACK_RAW_PING_BYTES = {0x81, 0xA1, 0x70, 0x05};
+    inline constexpr etl::array<uint8_t, 6> MSGPACK_SERIAL_PING_BYTES = {0xC0, 0x81, 0xA1, 0x70, 0x05, 0xC0};
 
 } // namespace constants::payloads
 

@@ -32,8 +32,13 @@
 #define LSH_MAX_CLICKABLE_ID 12
 #define LSH_MAX_ACTUATOR_ID 10
 // These totals are derived from the real configure() body for this profile.
+// Keeping them explicit matters on AVR because the fallback reserves the full
+// worst-case pool budget in static RAM. These numbers instead describe the
+// real link counts that `configure()` appends for this device.
 #define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS 10
 #define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS 12
+// Zero is intentional here: this profile configures no local super-long links,
+// so the firmware keeps only the clamped minimal storage slot for that pool.
 #define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 0
 #define LSH_MAX_INDICATOR_ACTUATOR_LINKS 3
 #define LSH_COM_SERIAL &Serial2

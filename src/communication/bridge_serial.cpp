@@ -21,65 +21,62 @@
 #include "communication/bridge_serial.hpp"
 
 #include "communication/deserializer.hpp"
+#include "communication/msgpack_serial_framing.hpp"
 #include "communication/constants/config.hpp"
 #include "communication/constants/protocol.hpp"
 #include "util/debug/debug.hpp"
+#include "util/saturating_time.hpp"
 #include "util/time_keeper.hpp"
 
 namespace BridgeSerial
 {
 using namespace Debug;
+#ifdef CONFIG_MSG_PACK
+using lsh::core::transport::MsgPackFrameConsumeResult;
+using lsh::core::transport::MsgPackFrameWriter;
+#endif
 
 uint16_t sendIdleAge_ms = UINT16_MAX;      //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
 uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Real-time instant at which the last valid payload finished deserializing.
 bool firstValidPayloadReceived = false;    //!< True after the first valid payload has been received.
-#ifndef CONFIG_MSG_PACK
-char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];  //!< Raw buffer for incoming serial data.
+
+namespace
+{
+// Keep the receive-side storage in namespace scope instead of function-local
+// statics. On AVR this avoids the extra guard variable and the one-time
+// initialization check emitted for local static objects in `receiveAndDispatch()`.
+StaticJsonDocument<constants::bridgeSerial::RECEIVED_DOC_SIZE>
+    receivedDocument;  //!< Reusable receive-side JSON/MsgPack document owned by the bridge RX path.
+#ifdef CONFIG_MSG_PACK
+char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];  //!< Raw payload buffer for one complete deframed MsgPack payload.
+lsh::core::transport::MsgPackFrameReceiver
+    msgPackFrameReceiver(rawInputBuffer,
+                         static_cast<uint16_t>(sizeof(rawInputBuffer)));  //!< Incremental deframer used by the MsgPack serial transport.
+#else
+char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];  //!< Raw line buffer for newline-delimited JSON payloads.
 size_t bufferedBytesCount = 0U;                                       //!< Number of bytes currently stored in `rawInputBuffer`.
 bool discardUntilNewline = false;                                     //!< True after an overflow until the trailing newline is consumed.
 #endif
 
-namespace
-{
-/**
- * @brief Add elapsed milliseconds to a 16-bit idle timer without wrapping.
- * @details Ping throttling only needs a monotonic elapsed time up to the
- *          configured interval. Saturating instead of wrapping guarantees that a
- *          long loop stall cannot make the timer appear younger than it really is.
- *
- * @param currentAge_ms Current idle time already accumulated.
- * @param elapsed_ms Additional milliseconds measured by the main loop.
- * @return uint16_t Updated idle time, saturated at 65535 ms.
- */
-auto addElapsedTimeSaturated(uint16_t currentAge_ms, uint16_t elapsed_ms) -> uint16_t
-{
-    const uint16_t updatedAge_ms = static_cast<uint16_t>(currentAge_ms + elapsed_ms);
-    if (updatedAge_ms < currentAge_ms)
-    {
-        return UINT16_MAX;
-    }
-    return updatedAge_ms;
-}
 }  // namespace
 
 /**
  * @brief Initialize the serial port used to talk with `lsh-bridge`.
  * @details The controller and the bridge share one hardware serial link.
- *          This helper applies the configured baud rate and read timeout once
- *          during startup so every later send/receive path can assume the port
- *          is already configured correctly.
+ *          This helper applies the configured baud rate once during startup so
+ *          every later send/receive path can assume the port is already ready.
  */
 void init()
 {
     CONFIG_COM_SERIAL->begin(constants::bridgeSerial::COM_SERIAL_BAUD, SERIAL_8N1);
-    CONFIG_COM_SERIAL->setTimeout(constants::bridgeSerial::COM_SERIAL_TIMEOUT_MS);
 }
 
 /**
  * @brief Send one JSON document to the bridge.
  *
  * This helper centralizes the actual wire write so every payload goes through
- * the same codec selection, optional flush policy and timestamp bookkeeping.
+ * the same codec selection, optional framing, optional flush policy and
+ * timestamp bookkeeping.
  *
  * @param documentToSend JsonDocument to be sent.
  */
@@ -87,7 +84,18 @@ void sendJson(const JsonDocument &documentToSend)
 {
     DP_CONTEXT();
 #ifdef CONFIG_MSG_PACK
-    serializeMsgPack(documentToSend, *CONFIG_COM_SERIAL);
+    MsgPackFrameWriter framedWriter(*CONFIG_COM_SERIAL);
+    if (!framedWriter.beginFrame())
+    {
+        return;
+    }
+
+    const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, framedWriter);
+    const bool frameEnded = framedWriter.endFrame();
+    if (writtenPayloadBytes == 0U || !frameEnded)
+    {
+        return;
+    }
 #else
     serializeJson(documentToSend, *CONFIG_COM_SERIAL);
     CONFIG_COM_SERIAL->write("\n", 1);  // Add a newline character after sending the JSON payload.
@@ -105,43 +113,72 @@ void sendJson(const JsonDocument &documentToSend)
 }
 
 /**
- * @brief Reads from the communication serial port, processes complete messages, and dispatches commands.
- * @details This function handles both MsgPack and JSON-newline protocols based on compilation flags.
- *          For JSON, it buffers incoming bytes until a newline is detected, then parses the message.
- *          For MsgPack, it relies on ArduinoJson stream deserialization directly on the serial stream.
- *          The controller therefore keeps the serial timeout intentionally low
- *          and the main loop limits how many payloads are drained per iteration,
- *          so one burst from the bridge cannot starve local inputs forever.
- *          Upon receiving a valid message, it calls Deserializer::deserializeAndDispatch to execute the command.
- * @return Deserializer::DispatchResult A struct indicating if the command changed the device state.
+ * @brief Consume a bounded amount of serial input and dispatch at most one payload.
+ * @details This helper is intentionally bounded both by bytes and by payload count.
+ *          The caller can therefore keep the controller loop fair even if the UART
+ *          is carrying noise, truncated frames or a long burst of valid commands.
+ *
+ * @param maxBytesToConsume Maximum number of raw UART bytes this call may drain.
+ * @return ReceiveResult Byte-consumption and dispatch information for this receive attempt.
  */
-auto receiveAndDispatch() -> Deserializer::DispatchResult
+auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
 {
-    static StaticJsonDocument<constants::bridgeSerial::RECEIVED_DOC_SIZE> receivedDocument;
+    ReceiveResult receiveResult;
+    if (maxBytesToConsume == 0U)
+    {
+        return receiveResult;
+    }
+
 #ifdef CONFIG_MSG_PACK
-    if (!CONFIG_COM_SERIAL->available())
-    {
-        return {};
-    }
+    const uint32_t nowRealTime_ms = timeKeeper::getRealTime();
+    msgPackFrameReceiver.resetIfIdle(nowRealTime_ms, constants::bridgeSerial::COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS);
 
-    receivedDocument.clear();
-    const DeserializationError deserializationError = deserializeMsgPack(receivedDocument, *CONFIG_COM_SERIAL);
-    if (deserializationError != DeserializationError::Ok)
+    while (CONFIG_COM_SERIAL->available() && receiveResult.consumedBytes < maxBytesToConsume)
     {
-        DPL(deserializationError.f_str());
-        return {};
-    }
+        const int rawByte = CONFIG_COM_SERIAL->read();
+        if (rawByte < 0)
+        {
+            break;
+        }
+        ++receiveResult.consumedBytes;
 
-    DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
-    DPJ(receivedDocument);
-    firstValidPayloadReceived = true;
-    lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
-    return Deserializer::deserializeAndDispatch(receivedDocument);
+        const auto consumeResult = msgPackFrameReceiver.consumeByte(static_cast<uint8_t>(rawByte), nowRealTime_ms);
+        if (consumeResult == MsgPackFrameConsumeResult::FrameDiscarded)
+        {
+            DPL(F("Discarded malformed framed MsgPack bridge payload."));
+            return receiveResult;
+        }
+
+        if (consumeResult != MsgPackFrameConsumeResult::FrameComplete)
+        {
+            continue;
+        }
+
+        receivedDocument.clear();
+        const DeserializationError deserializationError =
+            deserializeMsgPack(receivedDocument, msgPackFrameReceiver.frameData(), msgPackFrameReceiver.frameLength());
+        msgPackFrameReceiver.reset();
+        if (deserializationError != DeserializationError::Ok)
+        {
+            DPL(deserializationError.f_str());
+            return receiveResult;
+        }
+
+        DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
+        DPJ(receivedDocument);
+        firstValidPayloadReceived = true;
+        lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
+        receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
+        receiveResult.payloadDispatched = true;
+        return receiveResult;
+    }
+    return receiveResult;
 
 #else
-    while (CONFIG_COM_SERIAL->available())
+    while (CONFIG_COM_SERIAL->available() && receiveResult.consumedBytes < maxBytesToConsume)
     {
         const char receivedChar = CONFIG_COM_SERIAL->read();
+        ++receiveResult.consumedBytes;
 
         if (discardUntilNewline)
         {
@@ -170,11 +207,14 @@ auto receiveAndDispatch() -> Deserializer::DispatchResult
                     DPJ(receivedDocument);
                     firstValidPayloadReceived = true;
                     lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
-                    return Deserializer::deserializeAndDispatch(receivedDocument);
+                    receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
+                    receiveResult.payloadDispatched = true;
+                    return receiveResult;
                 }
                 else
                 {
                     DPL(deserializationError.f_str());
+                    return receiveResult;
                 }
             }
             // If we receive a newline with an empty buffer, just ignore it and continue.
@@ -195,7 +235,7 @@ auto receiveAndDispatch() -> Deserializer::DispatchResult
             discardUntilNewline = true;
         }
     }
-    return {};  // No complete message received in this cycle
+    return receiveResult;  // No complete message received in this cycle
 #endif
 }
 
@@ -214,7 +254,7 @@ void tickSendIdleTimer(uint16_t elapsed_ms)
     {
         return;
     }
-    sendIdleAge_ms = addElapsedTimeSaturated(sendIdleAge_ms, elapsed_ms);
+    sendIdleAge_ms = timeUtils::addElapsedTimeSaturated(sendIdleAge_ms, elapsed_ms);
 }
 
 /**

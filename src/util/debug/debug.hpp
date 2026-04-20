@@ -76,7 +76,7 @@ __attribute__((always_inline)) inline void DSB()
  */
 template <typename T> __attribute__((always_inline)) constexpr inline void DPJ(const T &json)
 {
-    serializeJson(json, Serial);
+    serializeJson(json, *CONFIG_DEBUG_SERIAL);
     DPL();
 }
 

@@ -94,6 +94,7 @@ void loop()
     using constants::ClickType;
     using constants::NoNetworkClickType;
     using constants::timings::ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS;
+    using constants::timings::CLICKABLE_SCAN_INTERVAL_MS;
     using constants::timings::DELAY_AFTER_RECEIVE_MS;
 #if CONFIG_USE_NETWORK_CLICKS
     using constants::timings::NETWORK_CLICK_CHECK_INTERVAL_MS;
@@ -133,16 +134,20 @@ void loop()
 #endif
     static uint32_t lastClickableScanTime_ms = 0U;  //!< Timestamp of the last input scan pass.
 
-    // Scan local inputs at high frequency. The `if (now - lastClickableScanTime_ms)`
-    // idiom keeps the loop branch-light while still limiting this block to roughly
-    // one execution per millisecond.
+    // Scan local inputs only after the configured interval elapsed.
+    // The loop still passes the full accumulated delta to the clickable FSM, so
+    // debounce and long-click timing stay correct even when the scan policy is
+    // slower than the historical ~1 kHz default or when the MCU is briefly busy.
     const uint32_t elapsedSinceLastClickableScan_ms = now - lastClickableScanTime_ms;
-    if (elapsedSinceLastClickableScan_ms != 0U)
+    if (elapsedSinceLastClickableScan_ms >= CLICKABLE_SCAN_INTERVAL_MS)
     {
         ClickType detectedClickType = ClickType::NONE;  //!< Temporary holder for the click currently being processed.
         lastClickableScanTime_ms = now;
         const uint16_t clickableElapsed_ms =
             (elapsedSinceLastClickableScan_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastClickableScan_ms);
+        // Bridge housekeeping intentionally shares the same pacing gate as the
+        // clickable scan. This keeps the hot path single-paced and avoids paying
+        // extra timestamp checks on every raw Arduino `loop()` iteration.
         BridgeSerial::tickSendIdleTimer(clickableElapsed_ms);
         BridgeSync::tick(now);
 
@@ -241,14 +246,26 @@ void loop()
     // The per-loop cap prevents bridge bursts from monopolising the controller
     // for too many consecutive payloads in one iteration.
     uint8_t receivedPayloadsThisLoop = 0U;
-    while (receivedPayloadsThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP && CONFIG_COM_SERIAL->available())
+    uint16_t receivedBytesThisLoop = 0U;
+    while (receivedPayloadsThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP &&
+           receivedBytesThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP && CONFIG_COM_SERIAL->available())
     {
-        const auto dispatchResult = BridgeSerial::receiveAndDispatch();
-        mustTransmitStateToBridge |= dispatchResult.stateChanged;
+        const uint16_t remainingByteBudget = constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP - receivedBytesThisLoop;
+        const auto receiveResult = BridgeSerial::receiveAndDispatch(remainingByteBudget);
+        if (receiveResult.consumedBytes == 0U)
+        {
+            break;
+        }
+
+        receivedBytesThisLoop = static_cast<uint16_t>(receivedBytesThisLoop + receiveResult.consumedBytes);
+        mustTransmitStateToBridge |= receiveResult.dispatch.stateChanged;
 #if CONFIG_USE_NETWORK_CLICKS
-        mustPollNetworkClickTimeouts |= dispatchResult.networkClickHandled;
+        mustPollNetworkClickTimeouts |= receiveResult.dispatch.networkClickHandled;
 #endif
-        ++receivedPayloadsThisLoop;
+        if (receiveResult.payloadDispatched)
+        {
+            ++receivedPayloadsThisLoop;
+        }
     }
 
 #if CONFIG_USE_NETWORK_CLICKS

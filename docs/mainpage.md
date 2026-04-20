@@ -27,7 +27,7 @@ The firmware is intentionally strict about a few invariants:
 - The real cardinality is the number of successful `addActuator()`, `addClickable()`, and `addIndicator()` registrations performed by `Configurator::configure()`.
 - Device IDs exposed on the wire are positive non-zero `uint8_t` values and must stay unique within their domain.
 - `BOOT` is the re-synchronization trigger used to invalidate cached models in the bridge and force a fresh `details + state` cycle.
-- Serial transport depends on the selected codec: JSON uses newline-delimited frames, while MsgPack writes raw payload bytes directly on the link.
+- Serial transport depends on the selected codec: JSON uses newline-delimited frames, while MsgPack uses a framed delimiter-and-escape transport on top of the pure payload bytes.
 - The protocol assumes a trusted environment. Authentication, encryption, and hostile-peer hardening are intentionally out of scope.
 
 ## Navigation
@@ -35,7 +35,7 @@ The firmware is intentionally strict about a few invariants:
 - Start with `README.md` for project structure, build flags, fallback logic and integration examples.
 - Inspect @ref Configurator to understand how devices are declared and registered.
 - Inspect @ref Clickable, @ref Actuator and @ref Indicator for the local I/O model.
-- Inspect @ref lsh::core::protocol for the generated constants mirrored from the shared protocol spec.
+- Inspect the generated protocol constants in `src/communication/constants/protocol.hpp` and `src/communication/constants/static_payloads.hpp`.
 - Inspect the generated protocol page included from `vendor/lsh-protocol/shared/lsh_protocol.md` for the canonical key map, command IDs and golden payload examples.
 
 ## Design Notes

@@ -27,13 +27,13 @@
 namespace utils::payloads
 {
 /**
- * @brief Gets a span pointing to the correct pre-defined static transport frame.
+ * @brief Gets the final serial transport bytes for one compile-time static payload.
  *
- * JSON payloads include the newline delimiter. MsgPack payloads are emitted
- * as raw bytes and rely on the serial transport configuration used by the
- * controller and the bridge.
+ * The protocol generator emits both raw payload bytes and serial-ready bytes.
+ * `lsh-core` only needs the serial form here, so the returned span may be
+ * written directly to the controller UART without any extra runtime framing.
  */
-template <bool IsMsgPack> [[nodiscard]] constexpr auto get(constants::payloads::StaticType type) -> etl::span<const uint8_t>
+template <bool IsMsgPack> [[nodiscard]] constexpr auto getSerial(constants::payloads::StaticType type) -> etl::span<const uint8_t>
 {
     using namespace constants::payloads;
 
@@ -42,9 +42,9 @@ template <bool IsMsgPack> [[nodiscard]] constexpr auto get(constants::payloads::
         switch (type)
         {
         case StaticType::BOOT:
-            return MSGPACK_BOOT_BYTES;
+            return MSGPACK_SERIAL_BOOT_BYTES;
         case StaticType::PING_:
-            return MSGPACK_PING_BYTES;
+            return MSGPACK_SERIAL_PING_BYTES;
 
         default:
             return {};
@@ -55,9 +55,9 @@ template <bool IsMsgPack> [[nodiscard]] constexpr auto get(constants::payloads::
         switch (type)
         {
         case StaticType::BOOT:
-            return JSON_BOOT_BYTES;
+            return JSON_SERIAL_BOOT_BYTES;
         case StaticType::PING_:
-            return JSON_PING_BYTES;
+            return JSON_SERIAL_PING_BYTES;
         default:
             return {};
         }

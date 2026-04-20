@@ -70,10 +70,20 @@ static constexpr const uint32_t COM_SERIAL_BAUD = CONFIG_COM_SERIAL_BAUD;  //!< 
 #endif  // CONFIG_COM_SERIAL_BAUD
 
 #ifndef CONFIG_COM_SERIAL_TIMEOUT_MS
-static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS = 5U;  //!< Default timeout applied to bridge serial reads.
+static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS =
+    5U;  //!< Compatibility fallback used only as the default MsgPack frame idle-timeout value.
 #else
-static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS = CONFIG_COM_SERIAL_TIMEOUT_MS;  //!< Timeout applied to bridge serial reads.
+static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS =
+    CONFIG_COM_SERIAL_TIMEOUT_MS;  //!< Compatibility fallback used only as the default MsgPack frame idle-timeout value.
 #endif  // CONFIG_COM_SERIAL_TIMEOUT_MS
+
+#ifndef CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS
+static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
+    COM_SERIAL_TIMEOUT_MS;  //!< Maximum silence while one serial MsgPack frame is still incomplete.
+#else
+static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
+    CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS;  //!< Maximum silence while one serial MsgPack frame is still incomplete.
+#endif  // CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS
 
 #ifndef CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP
 static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP =
@@ -113,23 +123,70 @@ constexpr uint16_t RECEIVED_DOC_SIZE =
         : RECEIVED_DOC_MIN_SIZE;  //!< Final allocated size for the received JSON document, ensuring a minimum of 48 bytes.
 static_assert(RECEIVED_DOC_SIZE >= JSON_OBJECT_SIZE(4), "RECEIVED_DOC_SIZE must fit network click responses with correlation ID.");
 
+#ifdef CONFIG_MSG_PACK
 /**
- * @brief Defines the size of the temporary on-stack buffer for reading raw serial messages.
+ * @brief Return the MsgPack array-header size required by one packed actuator-state payload.
+ *
+ * `SET_STATE` is the largest inbound command in MsgPack mode. The controller
+ * stores the deframed payload bytes in `rawInputBuffer`, so the sizing formula
+ * must follow the binary MsgPack shape instead of the historical JSON line
+ * length.
  */
-constexpr uint16_t RAW_INPUT_BUFFER_MIN_SIZE =
-    etl::bit_ceil(31U);  //!< Minimum buffer size for the longest fixed JSON command plus null terminator: {"p":17,"t":2,"i":255,"c":255}\0
+constexpr uint16_t PACKED_STATE_MSGPACK_ARRAY_HEADER_SIZE =
+    (PACKED_STATE_BYTES < 16U) ? 1U : 3U;  //!< `fixarray` for up to 15 bytes, `array16` beyond that.
 
 /**
- * @brief Calculated size for the longest variable-length JSON command (packed `SET_STATE`).
+ * @brief Maximum MsgPack size of one fixed-width inbound command handled by the controller.
+ * @details `NETWORK_CLICK_*` and `FAILOVER_CLICK` are the widest fixed-shape
+ *          commands received by the controller in MsgPack mode:
+ *          `map4 + 4 one-character keys + 4 uint8_t values`.
+ */
+constexpr uint16_t RAW_INPUT_BUFFER_FIXED_CMD_SIZE = 13U;
+
+/**
+ * @brief Maximum MsgPack size of a packed `SET_STATE` command received from the bridge.
+ * @details Layout:
+ *          - `map2` header: 1 byte
+ *          - key `p`: 2 bytes
+ *          - command value: 1 byte
+ *          - key `s`: 2 bytes
+ *          - array header: 1 or 3 bytes
+ *          - packed state bytes: `PACKED_STATE_BYTES`
+ */
+constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = 6U + PACKED_STATE_MSGPACK_ARRAY_HEADER_SIZE + PACKED_STATE_BYTES;
+#else
+/**
+ * @brief Minimum JSON-line buffer size required by the widest fixed-width command.
+ */
+constexpr uint16_t RAW_INPUT_BUFFER_FIXED_CMD_SIZE =
+    etl::bit_ceil(31U);  //!< Longest fixed JSON command plus null terminator: {"p":17,"t":2,"i":255,"c":255}\0
+
+/**
+ * @brief Maximum JSON-line size of a packed `SET_STATE` command.
  */
 constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE =
     etl::bit_ceil(17U + (4U * PACKED_STATE_BYTES));  //!< Conservative worst case for {"p":12,"s":[255,...]}\n\0
+#endif
 
 constexpr uint16_t RAW_INPUT_BUFFER_SIZE =
-    RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_MIN_SIZE
-        ? RAW_INPUT_BUFFER_MIN_SIZE
-        : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE;  //!< Final allocated size for the raw serial input buffer.
+    RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_FIXED_CMD_SIZE
+        ? RAW_INPUT_BUFFER_FIXED_CMD_SIZE
+        : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE;  //!< Final allocated size for the raw serial input buffer used by the active codec.
+
+#ifdef CONFIG_MSG_PACK
+static_assert(RAW_INPUT_BUFFER_SIZE >= 13U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size network click commands in MsgPack mode.");
+#else
 static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size click/failover commands plus null terminator.");
+#endif
+
+#ifndef CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP
+static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
+    RAW_INPUT_BUFFER_SIZE;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
+#else
+static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
+    CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
+#endif  // CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP
+static_assert(COM_SERIAL_MAX_RX_BYTES_PER_LOOP > 0U, "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP must be greater than zero.");
 
 /*
                 Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/

@@ -7,8 +7,14 @@ PROJECT_BRIEF          = "Deterministic firmware core for Controllino-based Labo
 # --- Output Configuration ---
 # Generate documentation inside the project docs directory.
 OUTPUT_DIRECTORY       = docs
+GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
-OPTIMIZE_OUTPUT_FOR_C  = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+SEARCHENGINE           = YES
+DISABLE_INDEX          = YES
+FULL_SIDEBAR           = YES
+PAGE_OUTLINE_PANEL     = YES
+QUIET                  = YES
 
 # --- Input Configuration ---
 # Paths are relative to the directory where doxygen is run (the project root).
@@ -23,6 +29,8 @@ EXCLUDE_PATTERNS       = */examples/*
 MARKDOWN_SUPPORT       = YES
 USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
 JAVADOC_AUTOBRIEF      = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
 WARN_IF_UNDOCUMENTED   = YES
 
 # --- Graphviz Configuration (for diagrams) ---

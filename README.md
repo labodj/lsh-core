@@ -46,7 +46,7 @@ The serial contract between `lsh-core` and `lsh-bridge` is intentionally strict:
 - `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
 - A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
 - The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
-- Serial transport is codec-specific: JSON uses newline-delimited frames, while MsgPack is written as raw payload bytes without extra framing.
+- Serial transport is codec-specific: JSON uses newline-delimited frames, while MsgPack uses a delimiter-and-escape framed transport.
 
 ### API Documentation
 
@@ -194,6 +194,8 @@ Optional compact actuator-link pools:
 - Duplicates count too. If one clickable intentionally adds the same actuator twice, the pool must reserve two entries because the runtime stores exactly what the configuration asked for.
 - Network-only clicks do not contribute local link entries by themselves. If a `setClickableLong(..., true, ...)` or `setClickableSuperLong(..., true, ...)` has no matching local `addActuatorLong(...)` or `addActuatorSuperLong(...)`, the local pool count for that click type stays unchanged.
 - The storage stays static and heap-free. If you undersize one of these totals, setup aborts with a clear wrong-config reset to protect the compact pools from invalid writes.
+- On AVR, omitting these macros now emits compile-time warnings because the compatibility fallback reserves the full worst-case `devices × actuators` budget in `.bss`.
+- For final AVR builds you will usually want to define the real totals explicitly. The fallback is practical during early bring-up, but it is rarely the RAM-optimal end state.
 - The bundled examples show both sides:
   - `J1` uses compact pools and disables network clicks completely
   - `J2` uses compact pools but keeps network clicks enabled
@@ -219,8 +221,9 @@ Important registration-order rule:
 Optional receive-path fairness guard:
 
 - `CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP` bounds how many complete bridge payloads the controller dispatches in a single `loop()` iteration.
-- The default is `4`, which keeps serial bursts from starving local input scanning for too long while still draining the bridge quickly.
-- Increase it only if your device is bridge-heavy and you have already verified that button latency remains acceptable on hardware.
+- `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP` bounds how many raw UART bytes the controller may drain in the same iteration, including malformed or incomplete traffic.
+- The defaults let one normal bridge burst make progress without allowing serial noise to monopolize the hot loop.
+- Increase them only after measuring the real hardware tradeoff between bridge throughput and local button latency.
 
 ```cpp
 // GOOD: Connects the button to the actuator using its safe index.
@@ -484,7 +487,7 @@ The same bootstrapping contract is used outside of clicks:
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
 
-The protocol maintenance workflow itself is documented once in [vendor/lsh-protocol/README.md](vendor/lsh-protocol/README.md). This README only keeps the `lsh-core`-specific invariants and runtime behavior.
+The protocol maintenance workflow itself is documented once in the vendored subtree README at `vendor/lsh-protocol/README.md`. This README only keeps the `lsh-core`-specific invariants and runtime behavior.
 
 To verify that the generated protocol files in this repository are aligned with the vendored source of truth:
 
@@ -515,8 +518,8 @@ You can set these flags globally for all devices or on a per-device basis in you
 
 - **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from human-readable JSON to the more efficient, binary MessagePack format.
 - **When to use:** Recommended for most production environments. MessagePack significantly reduces the size of the payloads, leading to faster and more reliable serial communication. This also reduces the RAM required for serialization buffers on both the Controllino and the ESP32.
-- **Serial transport:** When this flag is enabled, the controller writes raw MessagePack payload bytes directly on the serial link. JSON mode continues to use newline-delimited text frames.
-- **Compile-time static payloads:** Static control payloads such as `BOOT` and `PING` are generated at compile time already in their final transport form, with no runtime prefixing.
+- **Serial transport:** When this flag is enabled, the controller uses a framed MessagePack serial transport: `END + escaped(payload) + END`. JSON mode continues to use newline-delimited text frames.
+- **Compile-time static payloads:** Static control payloads such as `BOOT` and `PING` are generated in both raw and serial-ready forms. `lsh-core` writes the serial-ready bytes directly to the UART, so static MessagePack control frames do not pay framing work at runtime.
 - **Impact:** Smaller firmware size and lower RAM usage. Requires the `lsh-bridge` firmware to also be configured for MessagePack.
 
 ### I/O Performance
@@ -556,6 +559,14 @@ These flags allow you to override the default timing behavior of the framework. 
 - **Default:** `20U` (20 milliseconds)
 - **Description:** Sets the debounce time for all buttons. This is the minimum time a button state must be stable before being recognized as a valid press or release, preventing electrical noise from causing multiple triggers.
 - **Example:** `-D CONFIG_CLICKABLE_DEBOUNCE_TIME_MS=30U`
+
+#### `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`
+
+- **Default:** `1U` (1 millisecond)
+- **Description:** Sets the minimum elapsed time between two input scan passes. With the default value, the historical policy remains approximately `~1000 Hz` when the main loop is otherwise free to run.
+- **Behavior note:** This is a scan policy knob, not a hard real-time guarantee. If the controller is busy, `lsh-core` passes the whole accumulated elapsed time to the clickable state machine so debounce and long-click timing stay coherent.
+- **When to tune:** Increase it only after measuring the real hardware tradeoff between button latency, serial fairness and CPU headroom.
+- **Example:** `-D CONFIG_CLICKABLE_SCAN_INTERVAL_MS=2U`
 
 #### `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`
 
@@ -616,8 +627,22 @@ These flags allow you to override the default timing behavior of the framework. 
 #### `CONFIG_COM_SERIAL_TIMEOUT_MS`
 
 - **Default:** `5U` (5 milliseconds)
-- **Description:** Sets the serial read timeout applied to the controller-to-bridge transport.
+- **Description:** Defines the compatibility fallback used as the default value for `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`.
+- **Behavior note:** The current receive path does not use timeout-based framing. Changing this flag only changes the default housekeeping timeout for incomplete MsgPack frames unless you also override `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`.
 - **Example:** `-D CONFIG_COM_SERIAL_TIMEOUT_MS=10U`
+
+#### `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`
+
+- **Default:** `CONFIG_COM_SERIAL_TIMEOUT_MS`
+- **Description:** Sets the housekeeping timeout used to drop one incomplete framed MsgPack payload after the UART goes silent for too long. This timeout only cleans up truncated frames; it does not define frame boundaries.
+- **Example:** `-D CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS=8U`
+
+#### `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP`
+
+- **Default:** `RAW_INPUT_BUFFER_SIZE`
+- **Description:** Bounds the total number of raw UART bytes that `lsh-core` may drain in one `loop()` iteration before returning to local input scanning and logic.
+- **When to tune:** Raise it only if the bridge regularly delivers bursts that should be drained faster and hardware tests confirm that button latency stays acceptable.
+- **Example:** `-D CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP=48U`
 
 #### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`
 
@@ -635,12 +660,6 @@ These flags allow you to override the default timing behavior of the framework. 
 - **Default:** `50U` (50 milliseconds)
 - **Description:** Sets the short quiet window used after receiving a bridge-side state-changing payload before `lsh-core` mirrors the new authoritative state back out. This reduces duplicate publish bursts when multiple single-actuator updates arrive close together.
 - **Example:** `-D CONFIG_DELAY_AFTER_RECEIVE_MS=75U`
-
-#### `CONFIG_CONNECTION_CHECK_INTERVAL_MS`
-
-- **Default:** `1000U` (1 second)
-- **Description:** Sets how often `lsh-core` runs its periodic bridge connectivity check.
-- **Example:** `-D CONFIG_CONNECTION_CHECK_INTERVAL_MS=500U`
 
 #### `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`
 
@@ -682,7 +701,7 @@ If you need a different ETL setup for another target or toolchain, the
 recommended override path is:
 
 1. Create your own small header in the consumer project, for example `include/lsh_etl_profile_override.h`
-2. Pass `-D LSH_ETL_PROFILE_OVERRIDE_HEADER=\"lsh_etl_profile_override.h\"`
+2. Pass the `LSH_ETL_PROFILE_OVERRIDE_HEADER` build flag and point it at your override header.
 3. In that header, `#undef` and redefine only what you need
 
 Example:

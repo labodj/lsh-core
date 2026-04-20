@@ -26,6 +26,7 @@
 #include "peripherals/output/actuator.hpp"
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
+#include "util/saturating_time.hpp"
 
 /**
  * @brief One compact clickable-to-actuator link record stored inside the shared pools.
@@ -397,27 +398,6 @@ void assignActuatorLinksOffsets(etl::array<ClickableActuatorLinkEntry, StorageCa
     }
 }
 
-/**
- * @brief Add milliseconds to a 16-bit elapsed-time counter without wrapping.
- * @details Click detection only needs relative time within the current state and
- *          all configured thresholds already fit in 16 bits. Saturating instead
- *          of wrapping keeps comparisons monotonic even after very long loop
- *          stalls or debugger pauses.
- *
- * @param currentAge_ms Elapsed time already accumulated for the current state.
- * @param elapsed_ms Additional milliseconds measured by the main loop since the
- *                   last clickable scan.
- * @return uint16_t The saturated elapsed time to store back into the clickable.
- */
-auto addElapsedTimeSaturated(uint16_t currentAge_ms, uint16_t elapsed_ms) -> uint16_t
-{
-    const uint16_t updatedAge_ms = static_cast<uint16_t>(currentAge_ms + elapsed_ms);
-    if (updatedAge_ms < currentAge_ms)
-    {
-        return UINT16_MAX;
-    }
-    return updatedAge_ms;
-}
 }  // namespace
 
 /**
@@ -792,7 +772,7 @@ auto Clickable::shortClick() const -> bool
  * @brief Perform a long click action.
  *
  * The action depends on the longClickType configuration.
- * If NORMAL -> Switch ON if less than half of attached long actuators are OFF, switch OFF otherwise.
+ * If NORMAL -> Switch ON if more than half of attached long actuators are OFF, switch OFF otherwise.
  * If ON_ONLY -> Switch ON attached long actuators.
  * If OFF_ONLY -> Switch OFF attached long actuators.
  *
@@ -900,7 +880,7 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
     const bool isPressed = this->getState();
     if (this->currentState != State::IDLE)
     {
-        this->stateAge_ms = addElapsedTimeSaturated(this->stateAge_ms, elapsed_ms);
+        this->stateAge_ms = timeUtils::addElapsedTimeSaturated(this->stateAge_ms, elapsed_ms);
     }
 
     switch (this->currentState)

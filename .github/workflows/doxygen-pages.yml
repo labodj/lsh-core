@@ -20,6 +20,9 @@ jobs:
   deploy:
     # Use a fresh Ubuntu environment
     runs-on: ubuntu-latest
+    env:
+      DOXYGEN_VERSION: "1.14.0"
+      DOXYGEN_SHA256: "e5d6ae24d0bf3f0cdc4d8f146726b89ca323922f19441af99b1872d503665ad6"
 
     # Configure the environment for GitHub Pages
     environment:
@@ -36,21 +39,41 @@ jobs:
           # pipeline ever adds submodules again.
           submodules: "recursive"
 
-      # Step 2: Install Doxygen and Graphviz
-      - name: Install Doxygen and Graphviz
-        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+      # Step 2: Install Graphviz for call/caller graphs
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
 
-      # Step 3: Build the Doxygen documentation
+      # Step 3: Install a pinned Doxygen version so runner image updates do not
+      # silently change the HTML theme or Markdown behavior.
+      - name: Install pinned Doxygen
+        run: |
+          set -eux
+          curl -fsSL -o /tmp/doxygen.tar.gz "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          echo "${DOXYGEN_SHA256}  /tmp/doxygen.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/doxygen.tar.gz -C /opt
+          sudo ln -sf "/opt/doxygen-${DOXYGEN_VERSION}/bin/doxygen" /usr/local/bin/doxygen
+          doxygen --version
+
+      # Step 4: Verify vendored/generated protocol artifacts before publishing.
+      - name: Verify generated protocol artifacts
+        run: |
+          python3 tools/update_lsh_protocol.py --check
+          python3 vendor/lsh-protocol/tools/generate_lsh_protocol.py \
+            --target shared-doc \
+            --shared-doc-root vendor/lsh-protocol \
+            --check
+
+      # Step 5: Build the Doxygen documentation
       - name: Build Doxygen documentation
         # Run doxygen from the project root. It will use the configuration
         # file located at 'docs/Doxyfile'.
         run: doxygen docs/Doxyfile
 
-      # Step 4: Configure GitHub Pages
+      # Step 6: Configure GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # Step 5: Upload the generated documentation as an artifact
+      # Step 7: Upload the generated documentation as an artifact
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -58,7 +81,7 @@ jobs:
           # as specified by OUTPUT_DIRECTORY = docs in your Doxyfile.
           path: "./docs/html"
 
-      # Step 6: Deploy the artifact to GitHub Pages
+      # Step 8: Deploy the artifact to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -46,30 +46,17 @@ namespace
  */
 [[nodiscard]] auto tryGetPackedStateByte(const JsonVariantConst &value, uint8_t &out) -> bool
 {
-    if (value.isNull() || value.is<const char *>() || value.is<bool>() || value.is<JsonArrayConst>() || value.is<JsonObjectConst>())
+    // ArduinoJson stores integers and floats with different internal tags.
+    // `is<uint8_t>()` therefore accepts only true integer payloads that fit
+    // exactly in one byte and rejects floats such as `1.0` or `1.5` before
+    // any conversion happens. This keeps the validation strict while avoiding
+    // the AVR flash cost of the floating-point helpers pulled by `as<double>()`.
+    if (!value.is<uint8_t>())
     {
         return false;
     }
 
-    if (value.is<uint8_t>())
-    {
-        out = value.as<uint8_t>();
-        return true;
-    }
-
-    const double rawValue = value.as<double>();
-    if (rawValue < 0.0 || rawValue > 255.0)
-    {
-        return false;
-    }
-
-    const auto packedByte = static_cast<uint8_t>(rawValue);
-    if (static_cast<double>(packedByte) != rawValue)
-    {
-        return false;
-    }
-
-    out = packedByte;
+    out = value.as<uint8_t>();
     return true;
 }
 

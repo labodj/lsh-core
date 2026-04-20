@@ -38,6 +38,15 @@ static constexpr const uint8_t CLICKABLE_DEBOUNCE_TIME_MS = 20U;  //!< Default C
 static constexpr const uint8_t CLICKABLE_DEBOUNCE_TIME_MS = CONFIG_CLICKABLE_DEBOUNCE_TIME_MS;  //!< Clickable (button) debounce
 #endif  // CONFIG_CLICKABLE_DEBOUNCE_TIME_MS
 
+#ifndef CONFIG_CLICKABLE_SCAN_INTERVAL_MS
+static constexpr const uint16_t CLICKABLE_SCAN_INTERVAL_MS =
+    1U;  //!< Minimum elapsed time between two clickable scan passes. Default policy is about 1 kHz when the loop is free to run.
+#else
+static constexpr const uint16_t CLICKABLE_SCAN_INTERVAL_MS =
+    CONFIG_CLICKABLE_SCAN_INTERVAL_MS;  //!< Minimum elapsed time between two clickable scan passes.
+#endif  // CONFIG_CLICKABLE_SCAN_INTERVAL_MS
+static_assert(CLICKABLE_SCAN_INTERVAL_MS > 0U, "CONFIG_CLICKABLE_SCAN_INTERVAL_MS must be greater than zero.");
+
 #ifndef CONFIG_CLICKABLE_LONG_CLICK_TIME_MS
 static constexpr const uint16_t CLICKABLE_LONG_CLICK_TIME_MS = 400U;  //!< Default Clickable (button) long click time
 #else
@@ -62,16 +71,6 @@ static constexpr const uint8_t DELAY_AFTER_RECEIVE_MS = 50U;
 #else
 static constexpr const uint8_t DELAY_AFTER_RECEIVE_MS = CONFIG_DELAY_AFTER_RECEIVE_MS;
 #endif  // CONFIG_DELAY_AFTER_RECEIVE_MS
-
-/**
- * @brief Time between two consecutive ESP connection checks
- *
- */
-#ifndef CONFIG_CONNECTION_CHECK_INTERVAL_MS
-static constexpr const uint16_t CONNECTION_CHECK_INTERVAL_MS = 1000U;
-#else
-static constexpr const uint16_t CONNECTION_CHECK_INTERVAL_MS = CONFIG_CONNECTION_CHECK_INTERVAL_MS;
-#endif  // CONFIG_CONNECTION_CHECK_INTERVAL_MS
 
 #ifndef CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS
 static constexpr const uint8_t NETWORK_CLICK_CHECK_INTERVAL_MS = 50U;  //!< Default Network click check interval, in ms.

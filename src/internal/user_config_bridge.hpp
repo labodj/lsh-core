@@ -21,6 +21,8 @@
 #ifndef LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
 #define LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP
 
+#include <stdint.h>
+
 #include "lsh_user_config.hpp"
 
 #include "internal/lsh_config_types.hpp"
@@ -29,6 +31,19 @@ static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME;    //!< Stabl
 static constexpr uint8_t CONFIG_MAX_CLICKABLES = LSH_MAX_CLICKABLES;  //!< Maximum number of clickables declared by the consumer profile.
 static constexpr uint8_t CONFIG_MAX_ACTUATORS = LSH_MAX_ACTUATORS;    //!< Maximum number of actuators declared by the consumer profile.
 static constexpr uint8_t CONFIG_MAX_INDICATORS = LSH_MAX_INDICATORS;  //!< Maximum number of indicators declared by the consumer profile.
+
+// Compute worst-case compact-pool budgets in 32 bits first, then downcast only
+// after a static check. Today the device counts are 8-bit, so the product still
+// fits in 16 bits, but keeping the wide intermediate makes the intent explicit
+// and protects future maintenance if the count types ever grow.
+static constexpr uint32_t CONFIG_CLICKABLE_ACTUATOR_LINKS_WORST_CASE =
+    static_cast<uint32_t>(CONFIG_MAX_CLICKABLES) * static_cast<uint32_t>(CONFIG_MAX_ACTUATORS);
+static constexpr uint32_t CONFIG_INDICATOR_ACTUATOR_LINKS_WORST_CASE =
+    static_cast<uint32_t>(CONFIG_MAX_INDICATORS) * static_cast<uint32_t>(CONFIG_MAX_ACTUATORS);
+static_assert(CONFIG_CLICKABLE_ACTUATOR_LINKS_WORST_CASE <= UINT16_MAX,
+              "Worst-case clickable actuator-link budget exceeds 16-bit storage.");
+static_assert(CONFIG_INDICATOR_ACTUATOR_LINKS_WORST_CASE <= UINT16_MAX,
+              "Worst-case indicator actuator-link budget exceeds 16-bit storage.");
 
 // Network clicks are optional at device level. Keeping this as a compile-time
 // switch lets small installations remove all related state, timeout scans and
@@ -78,42 +93,56 @@ static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID =
 //
 // When the consumer does not provide an explicit total, fall back to the old
 // worst-case allocation strategy so existing projects stay compatible.
+//
+// On AVR this fallback can waste a surprising amount of static RAM because the
+// compact pools are allocated in `.bss`, not lazily at runtime. Emit a build
+// warning so a maintainer sees the tradeoff immediately instead of discovering
+// it later from a tight memory report.
+#if defined(__AVR__)
+#ifndef LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS
+#warning "lsh-core AVR build: LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS not defined; worst-case clickable*actuator storage will be reserved."
+#endif
+#ifndef LSH_MAX_LONG_CLICK_ACTUATOR_LINKS
+#warning "lsh-core AVR build: LSH_MAX_LONG_CLICK_ACTUATOR_LINKS not defined; worst-case clickable*actuator storage will be reserved."
+#endif
+#ifndef LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS
+#warning "lsh-core AVR build: LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS not defined; worst-case clickable*actuator storage will be reserved."
+#endif
+#ifndef LSH_MAX_INDICATOR_ACTUATOR_LINKS
+#warning "lsh-core AVR build: LSH_MAX_INDICATOR_ACTUATOR_LINKS not defined; worst-case indicator*actuator storage will be reserved."
+#endif
+#endif
+
 #ifdef LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS
 static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS =
     LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of short-click links in the whole device.
 #else
-static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
-    static_cast<uint16_t>(
-        CONFIG_MAX_ACTUATORS);  //!< Worst-case short-click link budget when the consumer does not provide a tighter total.
+static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS = static_cast<uint16_t>(
+    CONFIG_CLICKABLE_ACTUATOR_LINKS_WORST_CASE);  //!< Worst-case short-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_LONG_CLICK_ACTUATOR_LINKS
 static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS =
     LSH_MAX_LONG_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of long-click links in the whole device.
 #else
-static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
-    static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);  //!< Worst-case long-click link budget when the consumer does not provide a tighter total.
+static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS = static_cast<uint16_t>(
+    CONFIG_CLICKABLE_ACTUATOR_LINKS_WORST_CASE);  //!< Worst-case long-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS
 static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS =
     LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of super-long-click links in the whole device.
 #else
-static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
-    static_cast<uint16_t>(
-        CONFIG_MAX_ACTUATORS);  //!< Worst-case super-long-click link budget when the consumer does not provide a tighter total.
+static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS = static_cast<uint16_t>(
+    CONFIG_CLICKABLE_ACTUATOR_LINKS_WORST_CASE);  //!< Worst-case super-long-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_INDICATOR_ACTUATOR_LINKS
 static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS =
     LSH_MAX_INDICATOR_ACTUATOR_LINKS;  //!< Logical maximum of indicator-to-actuator links in the whole device.
 #else
-static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_INDICATORS) *
-    static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);  //!< Worst-case indicator link budget when the consumer does not provide a tighter total.
+static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS = static_cast<uint16_t>(
+    CONFIG_INDICATOR_ACTUATOR_LINKS_WORST_CASE);  //!< Worst-case indicator link budget when the consumer does not provide a tighter total.
 #endif
 
 // ETL arrays must have a strictly positive compile-time capacity.
