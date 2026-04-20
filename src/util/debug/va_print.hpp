@@ -27,8 +27,8 @@
 
 namespace VaPrint
 {
-extern uint8_t base;  //!< Numeric base used when printing integral values.
-extern uint8_t prec;  //!< Decimal precision used when printing floating-point values.
+extern uint8_t base;
+extern uint8_t prec;
 
 void setBase(uint8_t baseToSet);              // Set the numeric base used for integral debug prints.
 void setPrec(uint8_t precisionToSet);         // Set the decimal precision used for floating-point debug prints.

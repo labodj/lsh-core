@@ -27,6 +27,11 @@
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
 
+/**
+ * @brief One compact clickable-to-actuator link record stored inside the shared pools.
+ * @details The owner index is stored as `index + 1` so zero remains available as
+ *          a cheap always-invalid sentinel during setup-time sorting and scans.
+ */
 struct ClickableActuatorLinkEntry
 {
     uint8_t ownerIndexEncoded = 0U;  //!< One-based clickable index. Zero is reserved as "unused".
@@ -186,10 +191,40 @@ void failActuatorLinkOverflow(const __FlashStringHelper *linkKind)
 }
 
 /**
+ * @brief Abort setup when a clickable references an actuator that is not registered.
+ * @details `Configurator::getIndex(actuator)` returns `UINT8_MAX` until the
+ *          actuator is registered. This helper treats that sentinel as a
+ *          configuration error.
+ */
+void failInvalidActuatorLink()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong actuator registration order or index"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
+ * @brief Abort setup when one click type links the same actuator more than once.
+ * @details Duplicate links are not harmless: for example, a duplicated short
+ *          link would toggle the same relay twice and cancel the action.
+ *
+ * @param linkKind Human-readable click type label used in the debug error message.
+ */
+void failDuplicateActuatorLink(const __FlashStringHelper *linkKind)
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(F("Duplicate "));
+    CONFIG_DEBUG_SERIAL->print(linkKind);
+    CONFIG_DEBUG_SERIAL->println(F(" actuator link"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
  * @brief Resolve the dense runtime index of one already-registered clickable.
  * @details This double-checks both the stored index and the manager array slot so
- *          misordered configuration code fails loudly instead of appending links
- *          to the wrong owner.
+ *          every compact link is attached to the intended clickable owner.
  *
  * @param clickable Clickable that is about to receive a compact actuator link.
  * @return uint8_t Dense runtime index assigned by `Clickables::addClickable()`.
@@ -201,6 +236,20 @@ auto getRegisteredClickableIndex(const Clickable *clickable) -> uint8_t
         failUnregisteredClickable();
     }
     return clickable->getIndex();
+}
+
+/**
+ * @brief Return whether the provided dense actuator index already maps to one registered actuator.
+ * @details Link configuration stores dense actuator indexes, not IDs. This helper
+ *          validates those indexes before they enter the compact shared pools.
+ *
+ * @param actuatorIndex Dense actuator index about to be stored inside a link pool.
+ * @return true if the index currently refers to one registered actuator.
+ * @return false if the index is out of range or still points to an unregistered slot.
+ */
+auto isRegisteredActuatorIndex(uint8_t actuatorIndex) -> bool
+{
+    return actuatorIndex < Actuators::totalActuators && Actuators::actuators[actuatorIndex] != nullptr;
 }
 
 /**
@@ -232,6 +281,37 @@ void appendActuatorLink(etl::array<ClickableActuatorLinkEntry, StorageCapacity> 
     storage[usedEntries].ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
     storage[usedEntries].actuatorIndex = actuatorIndex;
     ++usedEntries;
+}
+
+/**
+ * @brief Return whether one compact clickable pool already contains the same owner/actuator pair.
+ * @details This linear scan runs only during setup, so keeping it simple avoids
+ *          extra RAM while still preventing duplicate links from slipping into
+ *          the runtime pools.
+ *
+ * @tparam StorageCapacity Compile-time ETL storage size of the destination pool.
+ * @param storage Shared compact pool to inspect.
+ * @param usedEntries Number of valid entries currently stored in the pool.
+ * @param ownerIndex Dense runtime clickable index that owns the link.
+ * @param actuatorIndex Dense runtime actuator index referenced by the link.
+ * @return true if the exact owner/actuator pair already exists in the pool.
+ * @return false otherwise.
+ */
+template <size_t StorageCapacity>
+auto containsActuatorLink(const etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage,
+                          uint16_t usedEntries,
+                          uint8_t ownerIndex,
+                          uint8_t actuatorIndex) -> bool
+{
+    const uint8_t ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
+    for (uint16_t entryIndex = 0U; entryIndex < usedEntries; ++entryIndex)
+    {
+        if (storage[entryIndex].ownerIndexEncoded == ownerIndexEncoded && storage[entryIndex].actuatorIndex == actuatorIndex)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -416,19 +496,36 @@ auto Clickable::setClickableSuperLong(bool superLongClickable,
 auto Clickable::addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType) -> Clickable &
 {
     const uint8_t clickableIndex = getRegisteredClickableIndex(this);
+    if (!isRegisteredActuatorIndex(actuatorIndex))
+    {
+        failInvalidActuatorLink();
+    }
+
     switch (actuatorType)
     {
     case ClickType::SHORT:
+        if (containsActuatorLink(shortClickActuatorLinks, totalShortClickActuatorLinks, clickableIndex, actuatorIndex))
+        {
+            failDuplicateActuatorLink(F("short click"));
+        }
         appendActuatorLink(shortClickActuatorLinks, CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS, totalShortClickActuatorLinks, clickableIndex,
                            actuatorIndex, F("short click"));
         ++this->shortLinksCount;
         break;
     case ClickType::LONG:
+        if (containsActuatorLink(longClickActuatorLinks, totalLongClickActuatorLinks, clickableIndex, actuatorIndex))
+        {
+            failDuplicateActuatorLink(F("long click"));
+        }
         appendActuatorLink(longClickActuatorLinks, CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS, totalLongClickActuatorLinks, clickableIndex,
                            actuatorIndex, F("long click"));
         ++this->longLinksCount;
         break;
     case ClickType::SUPER_LONG:
+        if (containsActuatorLink(superLongClickActuatorLinks, totalSuperLongClickActuatorLinks, clickableIndex, actuatorIndex))
+        {
+            failDuplicateActuatorLink(F("super long click"));
+        }
         appendActuatorLink(superLongClickActuatorLinks, CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS, totalSuperLongClickActuatorLinks,
                            clickableIndex, actuatorIndex, F("super long click"));
         ++this->superLongLinksCount;
@@ -639,8 +736,14 @@ auto Clickable::getSuperLongClickType() const -> constants::SuperLongClickType
  * @brief Validates the clickable's configuration.
  *
  * A clickable is considered valid if it's enabled for at least one click type
- * (short, long, or super-long) AND is configured to control at least one actuator.
- * This check also sets internal optimization flags.
+ * (short, long, or super-long) AND has at least one real action behind it.
+ * A "real action" can be either:
+ * - one or more attached local actuators, or
+ * - a network-click path for long or super-long clicks.
+ *
+ * This keeps the cached validity flag aligned with the real runtime behaviour,
+ * where some installations intentionally use long/super-long clicks only over
+ * the bridge without any local actuator attached to that same clickable.
  *
  * @return true if the clickable has a valid and actionable configuration, false otherwise.
  */
@@ -649,19 +752,15 @@ auto Clickable::check() -> bool
     this->configFlags.isChecked = true;  // We have checked the clickable
     this->configFlags.isQuickClickable =
         (this->configFlags.isShortClickable && !this->configFlags.isLongClickable && !this->configFlags.isSuperLongClickable);
-    if (this->configFlags.isShortClickable || this->configFlags.isLongClickable || this->configFlags.isSuperLongClickable)
-    {
-        // This check ensures a clickable is linked to at least one local actuator.
-        // This check might be removed in the future to support "virtual clickables"
-        // that only trigger network actions without controlling any local hardware.
-        if (this->shortLinksCount != 0U || this->longLinksCount != 0U || this->superLongLinksCount != 0U)
-        {
-            this->configFlags.isValid = true;
-            return true;
-        }
-    }
-    this->configFlags.isValid = false;
-    return false;
+
+    const bool hasLocalAction = (this->shortLinksCount != 0U || this->longLinksCount != 0U || this->superLongLinksCount != 0U);
+    const bool hasNetworkAction = ((this->configFlags.isLongClickable && this->configFlags.isNetworkLongClickable) ||
+                                   (this->configFlags.isSuperLongClickable && this->configFlags.isNetworkSuperLongClickable));
+
+    this->configFlags.isValid =
+        ((this->configFlags.isShortClickable || this->configFlags.isLongClickable || this->configFlags.isSuperLongClickable) &&
+         (hasLocalAction || hasNetworkAction));
+    return this->configFlags.isValid;
 }
 
 /**

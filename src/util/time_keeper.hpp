@@ -30,7 +30,7 @@
  */
 namespace timeKeeper
 {
-extern uint32_t now;  //!< Cached value returned by the latest `millis()` refresh.
+extern uint32_t now;
 
 /**
  * @brief Gets the cached timestamp from the last `timeKeeper::update()` call.

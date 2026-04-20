@@ -21,8 +21,15 @@
 #include "util/debug/debug.hpp"
 
 #ifndef LSH_DEBUG  // If not in debug mode
+/** @brief Tracks whether the fallback debug serial port was already initialized in non-debug builds. */
 bool Debug::details::serialIsActive = false;
 
+/**
+ * @brief Lazily initialize the debug serial port in non-debug builds.
+ * @details Release firmware keeps normal debug printing compiled out, but the
+ *          fatal configuration paths still need one safe way to emit an error
+ *          message before resetting the controller.
+ */
 void Debug::NDSB()
 {
     if (!details::serialIsActive)

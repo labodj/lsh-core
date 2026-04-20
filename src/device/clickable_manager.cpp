@@ -42,6 +42,11 @@ etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{};  //!< Device 
 
 namespace
 {
+/**
+ * @brief Abort setup when one clickable uses an invalid numeric ID.
+ * @details Clickable ID zero is reserved as "missing" in the wire protocol
+ *          and in the bounded lookup tables, so configuration must reject it.
+ */
 void failWrongClickableId()
 {
     using namespace constants::wrongConfigStrings;
@@ -56,6 +61,11 @@ void failWrongClickableId()
 }
 
 #if CONFIG_USE_CLICKABLE_ID_LUT
+/**
+ * @brief Abort setup when two clickables reuse the same numeric ID.
+ * @details The bounded LUT requires a one-to-one mapping between wire ID and
+ *          dense runtime index. Duplicate IDs would make later lookups ambiguous.
+ */
 void failDuplicateClickableId()
 {
     using namespace constants::wrongConfigStrings;
@@ -69,6 +79,20 @@ void failDuplicateClickableId()
     deviceReset();
 }
 #endif
+
+/**
+ * @brief Abort setup when a clickable was registered but has no actionable configuration.
+ * @details After the compact pools are finalized, every clickable must map to at
+ *          least one real action. Otherwise the installation contains dead inputs
+ *          that can only confuse future maintenance.
+ */
+void failInvalidClickableConfiguration()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong clickable configuration"));
+    delay(10000);
+    deviceReset();
+}
 }  // namespace
 
 /**
@@ -129,14 +153,30 @@ void addClickable(Clickable *const clickable)
  * @brief Get a single clickable.
  *
  * @param clickableId clickable UUID.
- * @return Clickable* a single clickable.
+ * @return Clickable* A single clickable when the ID exists.
+ * @return nullptr When the ID is unknown.
  */
 auto getClickable(uint8_t clickableId) -> Clickable *
 {
 #if CONFIG_USE_CLICKABLE_ID_LUT
-    return clickables[static_cast<uint8_t>(clickableIndexById[clickableId] - 1U)];
+    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    {
+        return nullptr;
+    }
+
+    const uint8_t encodedIndex = clickableIndexById[clickableId];
+    if (encodedIndex == 0U)
+    {
+        return nullptr;
+    }
+    return clickables[static_cast<uint8_t>(encodedIndex - 1U)];
 #else
-    return clickables[clickablesMap.find(clickableId)->second];
+    const auto it = clickablesMap.find(clickableId);
+    if (it == clickablesMap.end())
+    {
+        return nullptr;
+    }
+    return clickables[it->second];
 #endif
 }
 
@@ -144,14 +184,30 @@ auto getClickable(uint8_t clickableId) -> Clickable *
  * @brief Get a single clickable index (in device vector of clickable).
  *
  * @param clickableId clickable UUID.
- * @return uint8_t a single clickable index (in device vector of clickable).
+ * @return uint8_t A single clickable index (in device vector of clickables).
+ * @return UINT8_MAX When the ID is unknown.
  */
 auto getIndex(uint8_t clickableId) -> uint8_t
 {
 #if CONFIG_USE_CLICKABLE_ID_LUT
-    return static_cast<uint8_t>(clickableIndexById[clickableId] - 1U);
+    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    {
+        return UINT8_MAX;
+    }
+
+    const uint8_t encodedIndex = clickableIndexById[clickableId];
+    if (encodedIndex == 0U)
+    {
+        return UINT8_MAX;
+    }
+    return static_cast<uint8_t>(encodedIndex - 1U);
 #else
-    return clickablesMap.find(clickableId)->second;
+    const auto it = clickablesMap.find(clickableId);
+    if (it == clickablesMap.end())
+    {
+        return UINT8_MAX;
+    }
+    return it->second;
 #endif
 }
 
@@ -250,6 +306,10 @@ auto click(const Clickable *const clickable, constants::ClickType clickType) -> 
      */
 auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 {
+    if (clickableIndex >= totalClickables || clickables[clickableIndex] == nullptr)
+    {
+        return false;
+    }
     return click(clickables[clickableIndex], clickType);
 }
 
@@ -268,7 +328,10 @@ void finalizeSetup()
     auto *const clickableEnd = clickableBegin + totalClickables;
     for (auto *currentClickable = clickableBegin; currentClickable != clickableEnd; ++currentClickable)
     {
-        (*currentClickable)->check();
+        if (!(*currentClickable)->check())
+        {
+            failInvalidClickableConfiguration();
+        }
     }
 #if !CONFIG_USE_CLICKABLE_ID_LUT
     if (clickablesMap.size() != totalClickables)

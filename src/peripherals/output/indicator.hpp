@@ -29,7 +29,7 @@
 
 namespace Indicators
 {
-void finalizeActuatorLinkStorage();  //!< Sorts the shared indicator-to-actuator pool and stores final slice offsets.
+void finalizeActuatorLinkStorage();
 }
 
 /**
@@ -45,7 +45,7 @@ private:
     const uint8_t pinMask;            //!< Mask of the indicator, for fast IO
     volatile uint8_t *const pinPort;  //!< Port of the indicator, for fast IO
 #endif
-    uint8_t index = 0U;                                             //!< Indicator index on Indicators namespace Array
+    uint8_t index = UINT8_MAX;  //!< Indicator index on Indicators namespace Array, or `UINT8_MAX` until registration succeeds.
     constants::IndicatorMode mode = constants::IndicatorMode::ANY;  //!< Indicator mode
     uint16_t controlledActuatorsOffset = 0U;  //!< Offset of the first controlled actuator link inside the shared pool.
     uint8_t controlledActuatorsCount = 0U;    //!< Number of actuators attached to this indicator.
@@ -111,6 +111,7 @@ public:
     void check();                                                         // Perform the actual check
 
     [[nodiscard]] auto getIndex() const -> uint8_t;           // Get the indicator index on Indicators namespace Array
+    [[nodiscard]] auto hasAttachedActuators() const -> bool;  // Return true when at least one actuator is attached to this indicator
     void setControlledActuatorsOffset(uint16_t offsetToSet);  // Stores the compact shared-pool offset for the controlled actuators list.
 };
 

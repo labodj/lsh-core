@@ -31,10 +31,10 @@
 
 namespace Clickables
 {
-void finalizeActuatorLinkStorage();  //!< Sorts the shared clickable-to-actuator pools and stores final slice offsets.
+void finalizeActuatorLinkStorage();
 }
 
-struct ClickableActuatorLinkEntry;  //!< One compact clickable-to-actuator link record stored inside the shared pools.
+struct ClickableActuatorLinkEntry;
 
 /**
  * @brief Lightweight read-only view over one clickable actuator-link list.
@@ -61,7 +61,7 @@ public:
         [[nodiscard]] auto operator!=(const Iterator &other) const -> bool;
 
     private:
-        const ClickableActuatorLinkEntry *currentEntry = nullptr;
+        const ClickableActuatorLinkEntry *currentEntry = nullptr;  //!< Current compact link entry visited by the iterator.
     };
 
     ClickableActuatorLinksView() = default;
@@ -73,8 +73,8 @@ public:
     [[nodiscard]] auto size() const -> uint8_t;
 
 private:
-    const ClickableActuatorLinkEntry *entries = nullptr;
-    uint8_t count = 0U;
+    const ClickableActuatorLinkEntry *entries = nullptr;  //!< Pointer to the first compact link entry of the exposed slice.
+    uint8_t count = 0U;                                   //!< Number of valid compact link entries in the slice.
 };
 
 /**
@@ -135,8 +135,8 @@ private:
     const uint8_t pinMask;                  //!< Mask of the clickable, for fast IO
     const volatile uint8_t *const pinPort;  //!< Port of the clickable, for fast IO
 #endif
-    uint8_t index = 0U;  //!< Clickable index on Clickables namespace Array
-    const uint8_t id;    //!< Unique ID of the clickable (integer)
+    uint8_t index = UINT8_MAX;  //!< Clickable index on Clickables namespace Array, or `UINT8_MAX` until registration succeeds.
+    const uint8_t id;           //!< Unique ID of the clickable (integer)
 
     // State variables for the FSM ("hot" data, move to top for <64 byte offset optimization).
     State currentState = State::IDLE;                 //!< The current state of the FSM.

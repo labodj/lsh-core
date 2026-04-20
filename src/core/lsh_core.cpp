@@ -53,7 +53,7 @@ using namespace Debug;
  *          time, starts the controller-to-bridge serial link, applies the
  *          user-defined topology, and then starts the bridge resynchronization
  *          handshake so the bridge must request fresh details and state before
- *          sending mutating commands again.
+ *          sending mutating commands.
  */
 void setup()
 {
@@ -70,7 +70,7 @@ void setup()
     Configurator::configure();      // Apply user configuration and register the real runtime topology.
     Configurator::finalizeSetup();  // Finalize setup for the actually registered devices only.
     // After any controller reboot or config change, the bridge must ask for
-    // REQUEST_DETAILS and REQUEST_STATE again before mutating commands are trusted.
+    // REQUEST_DETAILS and REQUEST_STATE before mutating commands are trusted.
     BridgeSync::begin(timeKeeper::getTime());
     DFM();
 }
@@ -237,14 +237,18 @@ void loop()
         }
     }
 
-    // If there is something in the serial buffer try to deserialize it
-    while (CONFIG_COM_SERIAL->available())
+    // If there is something in the serial buffer try to deserialize it.
+    // The per-loop cap prevents bridge bursts from monopolising the controller
+    // for too many consecutive payloads in one iteration.
+    uint8_t receivedPayloadsThisLoop = 0U;
+    while (receivedPayloadsThisLoop < constants::bridgeSerial::COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP && CONFIG_COM_SERIAL->available())
     {
         const auto dispatchResult = BridgeSerial::receiveAndDispatch();
         mustTransmitStateToBridge |= dispatchResult.stateChanged;
 #if CONFIG_USE_NETWORK_CLICKS
         mustPollNetworkClickTimeouts |= dispatchResult.networkClickHandled;
 #endif
+        ++receivedPayloadsThisLoop;
     }
 
 #if CONFIG_USE_NETWORK_CLICKS
@@ -273,7 +277,8 @@ void loop()
     // that protects the link from immediate reply collisions after an inbound frame.
     if (mustTransmitStateToBridge)
     {
-        if (now - BridgeSerial::lastReceivedPayloadTime_ms > DELAY_AFTER_RECEIVE_MS)
+        const uint32_t nowForTransmit_ms = timeKeeper::getRealTime();
+        if (nowForTransmit_ms - BridgeSerial::lastReceivedPayloadTime_ms > DELAY_AFTER_RECEIVE_MS)
         {
             Serializer::serializeActuatorsState();
             Indicators::indicatorsCheck();

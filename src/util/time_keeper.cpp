@@ -20,4 +20,5 @@
 
 #include "util/time_keeper.hpp"
 
+/** @brief Cached `millis()` value refreshed once per main-loop iteration. */
 uint32_t timeKeeper::now = 0U;

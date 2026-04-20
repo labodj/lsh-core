@@ -27,6 +27,9 @@ namespace BridgeSync
 {
 namespace
 {
+/**
+ * @brief Internal handshake phases of the controller-to-bridge synchronization state machine.
+ */
 enum class State : uint8_t
 {
     AwaitBridgeDetails = 0U,
@@ -34,10 +37,18 @@ enum class State : uint8_t
     Synced = 2U,
 };
 
+/** @brief Current controller-side handshake phase with the bridge runtime. */
 State syncState = State::AwaitBridgeDetails;
+/** @brief Cached timestamp of the last BOOT payload emitted while waiting for bridge details. */
 uint32_t lastBootSentTime_ms = 0U;
+/** @brief Cached timestamp captured when the controller started waiting for `REQUEST_STATE`. */
 uint32_t awaitingStateSince_ms = 0U;
 
+/**
+ * @brief Emit one `BOOT` payload and remember when it was sent.
+ *
+ * @param now Current loop timestamp used to seed the BOOT retry timer.
+ */
 void sendBoot(uint32_t now)
 {
     Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT);
@@ -49,7 +60,7 @@ void sendBoot(uint32_t now)
  * @brief Mark the bridge as out of sync and send the initial `BOOT`.
  * @details This is called whenever the controller starts up. From that moment
  *          on the bridge must ask for `REQUEST_DETAILS` and `REQUEST_STATE`
- *          again before controller-side mutating commands are trusted.
+ *          before controller-side mutating commands are trusted.
  *
  * @param now Current loop timestamp.
  */

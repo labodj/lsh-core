@@ -33,6 +33,23 @@ namespace Indicators
 uint8_t totalIndicators = 0U;                                 //!< Device real total indicators
 etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators{};  //!< Device indicators
 
+namespace
+{
+/**
+ * @brief Abort setup when one indicator was registered without any controlled actuator.
+ * @details Indicators with no attached actuators are configuration mistakes: in
+ *          `ALL` mode they would otherwise evaluate to ON forever, and in any mode
+ *          they express no real hardware dependency.
+ */
+void failIndicatorWithoutActuators()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong indicator controlled actuators number"));
+    delay(10000UL);
+    deviceReset();
+}
+}  // namespace
+
 /**
  * @brief Adds an indicator to the system.
  *
@@ -75,14 +92,24 @@ void indicatorsCheck()
 
 /**
  * @brief Finalize shared storage for all indicators.
- * @details Indicators now use one compact shared pool for actuator links. This
- *          setup hook closes that pool before the runtime starts reading it.
+ * @details Indicators use one compact shared pool for actuator links. This
+ *          setup hook closes that pool before the runtime starts reading it and
+ *          then validates that every registered indicator actually controls at
+ *          least one actuator.
  *
  */
 void finalizeSetup()
 {
     DP_CONTEXT();
     finalizeActuatorLinkStorage();
+
+    for (uint8_t indicatorIndex = 0U; indicatorIndex < totalIndicators; ++indicatorIndex)
+    {
+        if (!indicators[indicatorIndex]->hasAttachedActuators())
+        {
+            failIndicatorWithoutActuators();
+        }
+    }
 }
 
 }  // namespace Indicators

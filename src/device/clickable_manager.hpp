@@ -30,7 +30,7 @@
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/click_types.hpp"
 
-class Clickable;  //!< Forward declaration
+class Clickable;
 
 /**
  * @brief Globally stores all clickables (like buttons) and to operates over them.
@@ -38,26 +38,25 @@ class Clickable;  //!< Forward declaration
  */
 namespace Clickables
 {
-extern uint8_t totalClickables;                                    //!< Device real total Clickables
-extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;  //!< Device clickables
+extern uint8_t totalClickables;
+extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;
 #if CONFIG_USE_CLICKABLE_ID_LUT
-extern etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U>
-    clickableIndexById;  //!< One-based lookup table (UUID -> clickable index + 1, 0 means missing).
+extern etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U> clickableIndexById;
 #else
-extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap;  //!< Device clickables map (UUID (numeric)-> clickables index)
+extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap;
 #endif
 
 void addClickable(Clickable *clickable);                              // Add one clickable to clickables vector and activate it
-[[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable
-[[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;          // Returns a single clickable index
+[[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable, or nullptr if the ID is unknown
+[[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;          // Returns a single clickable index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex)
     -> bool;                                                      // Returns true and writes the clickable index when the ID exists
 [[nodiscard]] auto clickableExists(uint8_t clickableId) -> bool;  // Returns true if clickable exists
 [[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType)
     -> bool;  // Method for all types of clicks, since not all click can be done within clickable class
 [[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;  // Alternative method for all types of click
-void finalizeActuatorLinkStorage();  //!< Sorts the shared clickable-to-actuator pools and stores final slice offsets.
-void finalizeSetup();                //!< Finalizes compact storage and validates every registered clickable.
+void finalizeActuatorLinkStorage();
+void finalizeSetup();
 }  // namespace Clickables
 
 #endif  // LSH_CORE_DEVICE_CLICKABLE_MANAGER_HPP

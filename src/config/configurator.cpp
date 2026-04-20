@@ -60,6 +60,8 @@ void Configurator::addIndicator(Indicator *const indicator)
 
 /**
  * @brief Helper to get an actuator index, for leaner config.
+ * @details Before registration the object returns `UINT8_MAX`. Link helpers
+ *          treat that sentinel as a configuration error.
  *
  * @param actuator the actuator.
  * @return uint8_t actuator index.
@@ -71,6 +73,7 @@ auto Configurator::getIndex(const Actuator &actuator) -> uint8_t
 
 /**
  * @brief Helper to get a clickable index, for leaner config.
+ * @details Before registration the object returns `UINT8_MAX`.
  *
  * @param clickable the clickable.
  * @return uint8_t clickable index.
@@ -82,6 +85,7 @@ auto Configurator::getIndex(const Clickable &clickable) -> uint8_t
 
 /**
  * @brief Helper to get an indicator index, for leaner config.
+ * @details Before registration the object returns `UINT8_MAX`.
  *
  * @param indicator the indicator
  * @return uint8_t indicator index.

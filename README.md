@@ -193,7 +193,7 @@ Optional compact actuator-link pools:
   - every `Indicator::addActuator(...)` contributes `1` to `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
 - Duplicates count too. If one clickable intentionally adds the same actuator twice, the pool must reserve two entries because the runtime stores exactly what the configuration asked for.
 - Network-only clicks do not contribute local link entries by themselves. If a `setClickableLong(..., true, ...)` or `setClickableSuperLong(..., true, ...)` has no matching local `addActuatorLong(...)` or `addActuatorSuperLong(...)`, the local pool count for that click type stays unchanged.
-- The storage stays static and heap-free. If you undersize one of these totals, setup fails loudly with a clear wrong-config reset instead of silently corrupting memory.
+- The storage stays static and heap-free. If you undersize one of these totals, setup aborts with a clear wrong-config reset to protect the compact pools from invalid writes.
 - The bundled examples show both sides:
   - `J1` uses compact pools and disables network clicks completely
   - `J2` uses compact pools but keeps network clicks enabled
@@ -210,8 +210,17 @@ Optional network-click exclusion:
 Important registration-order rule:
 
 - Register every `Clickable` with `addClickable(...)` before calling any `addActuatorShort(...)`, `addActuatorLong(...)`, or `addActuatorSuperLong(...)` on it.
+- Register every `Actuator` with `addActuator(...)` before using `getIndex(actuator)` anywhere else.
 - Register every `Indicator` with `addIndicator(...)` before calling `Indicator::addActuator(...)`.
-- The compact pools store links using the dense runtime index assigned at registration time. If the registration order is wrong, setup now fails loudly instead of silently writing corrupted link data.
+- The compact pools store links using the dense runtime index assigned at registration time. Wrong registration order is treated as a setup error.
+- Duplicate local links are rejected during setup. Duplicated links are almost always a configuration bug and can produce confusing behaviour such as one short click toggling the same relay twice.
+- Every indicator must control at least one actuator. An empty indicator configuration is treated as a setup error.
+
+Optional receive-path fairness guard:
+
+- `CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP` bounds how many complete bridge payloads the controller dispatches in a single `loop()` iteration.
+- The default is `4`, which keeps serial bursts from starving local input scanning for too long while still draining the bridge quickly.
+- Increase it only if your device is bridge-heavy and you have already verified that button latency remains acceptable on hardware.
 
 ```cpp
 // GOOD: Connects the button to the actuator using its safe index.
@@ -234,18 +243,18 @@ Create `include/lsh_configs/living_room_config.hpp`. This file defines the hardw
 #define LSH_HARDWARE_INCLUDE <Controllino.h>
 
 // 2. Define the build constants required by the LSH library.
-#define LSH_DEVICE_NAME      "LivingRoom"
-#define LSH_MAX_CLICKABLES   8
-#define LSH_MAX_ACTUATORS    6
-#define LSH_MAX_INDICATORS   2
+#define LSH_DEVICE_NAME "LivingRoom"
+#define LSH_MAX_CLICKABLES 8
+#define LSH_MAX_ACTUATORS 6
+#define LSH_MAX_INDICATORS 2
 #define LSH_MAX_CLICKABLE_ID 8
-#define LSH_MAX_ACTUATOR_ID  6
-#define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS      8
-#define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS       4
+#define LSH_MAX_ACTUATOR_ID 6
+#define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS 8
+#define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS 4
 #define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 2
-#define LSH_MAX_INDICATOR_ACTUATOR_LINKS        3
-#define LSH_COM_SERIAL       &Serial1
-#define LSH_DEBUG_SERIAL     &Serial
+#define LSH_MAX_INDICATOR_ACTUATOR_LINKS 3
+#define LSH_COM_SERIAL &Serial1
+#define LSH_DEBUG_SERIAL &Serial
 
 #endif
 ```
@@ -254,7 +263,7 @@ If that device used dense IDs (`1..8` for clickables and `1..6` for actuators), 
 
 ```cpp
 #define LSH_ASSUME_DENSE_CLICKABLE_IDS 1
-#define LSH_ASSUME_DENSE_ACTUATOR_IDS  1
+#define LSH_ASSUME_DENSE_ACTUATOR_IDS 1
 ```
 
 If that device had no network-click logic at all, it could also opt out completely:
@@ -269,7 +278,7 @@ Those link totals are not guessed. They are meant to be derived from the real co
 Create `src/configs/living_room_config.cpp`. This is where you define your objects (relays, buttons) and their behavior.
 
 ```cpp
-#include <lsh.hpp> // Gives access to LSH_ACTUATOR, etc.
+#include <lsh.hpp>  // Gives access to LSH_ACTUATOR, etc.
 
 // Define all your device objects in an anonymous namespace to prevent name clashes.
 namespace {
@@ -291,7 +300,7 @@ In `include/lsh_user_config.hpp`:
 
 ```cpp
 #if defined(LSH_BUILD_LIVING_ROOM)
-  #include "lsh_configs/living_room_config.hpp"
+#include "lsh_configs/living_room_config.hpp"
 #endif
 ```
 

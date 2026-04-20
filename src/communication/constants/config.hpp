@@ -75,6 +75,13 @@ static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS = 5U;  //!< Default timeout
 static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS = CONFIG_COM_SERIAL_TIMEOUT_MS;  //!< Timeout applied to bridge serial reads.
 #endif  // CONFIG_COM_SERIAL_TIMEOUT_MS
 
+#ifndef CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP
+static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP =
+    4U;  //!< Upper bound for fully dispatched bridge payloads in one controller loop iteration.
+#else
+static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP = CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP;
+#endif  // CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP
+
 #ifndef CONFIG_COM_SERIAL_FLUSH_AFTER_SEND
 static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = true;  //!< Conservative default: flush after every payload send.
 #else

@@ -31,7 +31,7 @@ namespace BridgeSerial
 using namespace Debug;
 
 uint16_t sendIdleAge_ms = UINT16_MAX;      //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
-uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Last time a valid payload has been received.
+uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Real-time instant at which the last valid payload finished deserializing.
 bool firstValidPayloadReceived = false;    //!< True after the first valid payload has been received.
 #ifndef CONFIG_MSG_PACK
 char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];  //!< Raw buffer for incoming serial data.
@@ -109,6 +109,9 @@ void sendJson(const JsonDocument &documentToSend)
  * @details This function handles both MsgPack and JSON-newline protocols based on compilation flags.
  *          For JSON, it buffers incoming bytes until a newline is detected, then parses the message.
  *          For MsgPack, it relies on ArduinoJson stream deserialization directly on the serial stream.
+ *          The controller therefore keeps the serial timeout intentionally low
+ *          and the main loop limits how many payloads are drained per iteration,
+ *          so one burst from the bridge cannot starve local inputs forever.
  *          Upon receiving a valid message, it calls Deserializer::deserializeAndDispatch to execute the command.
  * @return Deserializer::DispatchResult A struct indicating if the command changed the device state.
  */
@@ -132,7 +135,7 @@ auto receiveAndDispatch() -> Deserializer::DispatchResult
     DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
     DPJ(receivedDocument);
     firstValidPayloadReceived = true;
-    lastReceivedPayloadTime_ms = timeKeeper::getTime();
+    lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
     return Deserializer::deserializeAndDispatch(receivedDocument);
 
 #else
@@ -166,7 +169,7 @@ auto receiveAndDispatch() -> Deserializer::DispatchResult
                     DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
                     DPJ(receivedDocument);
                     firstValidPayloadReceived = true;
-                    lastReceivedPayloadTime_ms = timeKeeper::getTime();
+                    lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
                     return Deserializer::deserializeAndDispatch(receivedDocument);
                 }
                 else

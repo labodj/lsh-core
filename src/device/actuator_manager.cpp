@@ -41,6 +41,11 @@ etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{};  //!< 
 
 namespace
 {
+/**
+ * @brief Abort setup when one actuator uses an invalid numeric ID.
+ * @details Actuator ID zero is reserved as "missing" inside the wire protocol
+ *          and in the bounded lookup tables, so configuration must reject it.
+ */
 void failWrongActuatorId()
 {
     using namespace constants::wrongConfigStrings;
@@ -55,6 +60,11 @@ void failWrongActuatorId()
 }
 
 #if CONFIG_USE_ACTUATOR_ID_LUT
+/**
+ * @brief Abort setup when two actuators reuse the same numeric ID.
+ * @details The bounded LUT requires a one-to-one mapping between wire ID and
+ *          dense runtime index. Duplicate IDs would make later lookups ambiguous.
+ */
 void failDuplicateActuatorId()
 {
     using namespace constants::wrongConfigStrings;
@@ -128,14 +138,30 @@ void addActuator(Actuator *const actuator)
  * @brief Get a single actuator.
  *
  * @param actuatorId actuator UUID.
- * @return Actuator* a single actuator.
+ * @return Actuator* A single actuator when the ID exists.
+ * @return nullptr When the ID is unknown.
  */
 auto getActuator(uint8_t actuatorId) -> Actuator *
 {
 #if CONFIG_USE_ACTUATOR_ID_LUT
-    return actuators[static_cast<uint8_t>(actuatorIndexById[actuatorId] - 1U)];
+    if (actuatorId > CONFIG_MAX_ACTUATOR_ID)
+    {
+        return nullptr;
+    }
+
+    const uint8_t encodedIndex = actuatorIndexById[actuatorId];
+    if (encodedIndex == 0U)
+    {
+        return nullptr;
+    }
+    return actuators[static_cast<uint8_t>(encodedIndex - 1U)];
 #else
-    return actuators[actuatorsMap.find(actuatorId)->second];
+    const auto it = actuatorsMap.find(actuatorId);
+    if (it == actuatorsMap.end())
+    {
+        return nullptr;
+    }
+    return actuators[it->second];
 #endif
 }
 
@@ -143,14 +169,30 @@ auto getActuator(uint8_t actuatorId) -> Actuator *
  * @brief Get a single actuator index (in device vector of actuators).
  *
  * @param actuatorId actuator UUID.
- * @return uint8_t a single actuator index (in device vector of actuators).
+ * @return uint8_t A single actuator index (in device vector of actuators).
+ * @return UINT8_MAX When the ID is unknown.
  */
 auto getIndex(uint8_t actuatorId) -> uint8_t
 {
 #if CONFIG_USE_ACTUATOR_ID_LUT
-    return static_cast<uint8_t>(actuatorIndexById[actuatorId] - 1U);
+    if (actuatorId > CONFIG_MAX_ACTUATOR_ID)
+    {
+        return UINT8_MAX;
+    }
+
+    const uint8_t encodedIndex = actuatorIndexById[actuatorId];
+    if (encodedIndex == 0U)
+    {
+        return UINT8_MAX;
+    }
+    return static_cast<uint8_t>(encodedIndex - 1U);
 #else
-    return actuatorsMap.find(actuatorId)->second;
+    const auto it = actuatorsMap.find(actuatorId);
+    if (it == actuatorsMap.end())
+    {
+        return UINT8_MAX;
+    }
+    return it->second;
 #endif
 }
 

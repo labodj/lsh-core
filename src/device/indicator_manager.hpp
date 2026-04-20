@@ -26,7 +26,7 @@
 #include "internal/etl_array.hpp"
 #include "internal/user_config_bridge.hpp"
 
-class Indicator;  //!< Forward declaration
+class Indicator;
 
 /**
  * @brief Globally stores all indicators and to operates over them.
@@ -34,13 +34,13 @@ class Indicator;  //!< Forward declaration
  */
 namespace Indicators
 {
-extern uint8_t totalIndicators;                                    //!< Device real total Indicators
-extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;  //!< Device indicators
+extern uint8_t totalIndicators;
+extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;
 
 void addIndicator(Indicator *indicator);  // Add one indicator to indicators vector and activate it
 void indicatorsCheck();                   // Performs an  indicator check for every indicator set
-void finalizeActuatorLinkStorage();       //!< Sorts the shared indicator-to-actuator pool and stores final slice offsets.
-void finalizeSetup();                     //!< Finalizes the shared indicator pool after configuration is complete.
+void finalizeActuatorLinkStorage();
+void finalizeSetup();
 }  // namespace Indicators
 
 #endif  // LSH_CORE_DEVICE_INDICATOR_MANAGER_HPP

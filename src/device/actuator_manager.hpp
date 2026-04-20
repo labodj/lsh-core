@@ -29,7 +29,7 @@
 #endif
 #include "internal/etl_vector.hpp"
 #include "internal/user_config_bridge.hpp"
-class Actuator;  //!< Forward declaration
+class Actuator;
 
 /**
  * @brief Globally stores all actuators (relays) and to operates over them.
@@ -37,19 +37,18 @@ class Actuator;  //!< Forward declaration
  */
 namespace Actuators
 {
-extern uint8_t totalActuators;                                  //!< Device real total Actuators
-extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;  //!< All device actuators (like relays)
+extern uint8_t totalActuators;
+extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
 #if CONFIG_USE_ACTUATOR_ID_LUT
-extern etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U>
-    actuatorIndexById;  //!< One-based lookup table (UUID -> actuator index + 1, 0 means missing).
+extern etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U> actuatorIndexById;
 #else
-extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;  //!< Device actuators map (UUID (integer) -> actuator index)
+extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;
 #endif
-extern etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes;  //!< Indexes of actuators with auto off functionality active
+extern etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes;
 
 void addActuator(Actuator *actuator);                              // Add one actuator to actuators vector and activate it
-[[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator
-[[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;        // Returns a single actuator index
+[[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator, or nullptr if the ID is unknown
+[[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;        // Returns a single actuator index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex)
     -> bool;                                                    // Returns true and writes the actuator index when the ID exists
 [[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;  // Returns true if actuator exists

@@ -36,6 +36,14 @@ using namespace Debug;
 using namespace lsh::core::protocol;
 namespace
 {
+/**
+ * @brief Validate one JSON scalar as a packed actuator-state byte.
+ *
+ * @param value JSON value to validate.
+ * @param out Output byte written only when validation succeeds.
+ * @return true if the value is an exact integer in the `[0, 255]` range.
+ * @return false otherwise.
+ */
 [[nodiscard]] auto tryGetPackedStateByte(const JsonVariantConst &value, uint8_t &out) -> bool
 {
     if (value.isNull() || value.is<const char *>() || value.is<bool>() || value.is<JsonArrayConst>() || value.is<JsonObjectConst>())
@@ -65,6 +73,14 @@ namespace
     return true;
 }
 
+/**
+ * @brief Validate one JSON scalar as a binary actuator state.
+ *
+ * @param value JSON value to validate.
+ * @param out Output boolean written only when validation succeeds.
+ * @return true if the value is exactly `0` or `1`.
+ * @return false otherwise.
+ */
 [[nodiscard]] auto tryGetBinaryState(const JsonVariantConst &value, bool &out) -> bool
 {
     uint8_t rawState = 0U;

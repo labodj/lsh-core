@@ -92,6 +92,13 @@ auto getActiveCountStorage(constants::ClickType clickType) -> uint8_t *
     }
 }
 
+/**
+ * @brief Allocate one non-zero correlation ID for a new network-click transaction.
+ * @details Correlation ID zero is reserved as "missing" so the generator wraps
+ *          around it when the 8-bit counter overflows.
+ *
+ * @return uint8_t Correlation ID to embed in the outgoing request payload.
+ */
 auto generateCorrelationId() -> uint8_t
 {
     ++nextCorrelationId;
@@ -102,6 +109,12 @@ auto generateCorrelationId() -> uint8_t
     return nextCorrelationId;
 }
 
+/**
+ * @brief Clear the stored correlation ID for one pending click slot.
+ *
+ * @param clickableIndex Dense clickable index that owns the pending transaction.
+ * @param clickType Network click type whose slot must be cleared.
+ */
 void clearCorrelationId(uint8_t clickableIndex, constants::ClickType clickType)
 {
     auto *const correlationStorage = getCorrelationStorage(clickType);
@@ -112,6 +125,13 @@ void clearCorrelationId(uint8_t clickableIndex, constants::ClickType clickType)
     (*correlationStorage)[clickableIndex] = 0U;
 }
 
+/**
+ * @brief Read the correlation ID currently stored for one pending click slot.
+ *
+ * @param clickableIndex Dense clickable index that owns the pending transaction.
+ * @param clickType Network click type whose slot must be read.
+ * @return uint8_t Stored correlation ID, or zero when the slot is invalid or empty.
+ */
 auto getStoredCorrelationId(uint8_t clickableIndex, constants::ClickType clickType) -> uint8_t
 {
     auto *const correlationStorage = getCorrelationStorage(clickType);
@@ -122,6 +142,14 @@ auto getStoredCorrelationId(uint8_t clickableIndex, constants::ClickType clickTy
     return (*correlationStorage)[clickableIndex];
 }
 
+/**
+ * @brief Return whether one clickable currently has an active network-click transaction of the requested type.
+ *
+ * @param clickableIndex Dense clickable index that owns the slot.
+ * @param clickType Network click type to inspect.
+ * @return true if the slot currently stores a non-zero correlation ID.
+ * @return false otherwise.
+ */
 auto isNetworkClickActive(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 {
     return getStoredCorrelationId(clickableIndex, clickType) != 0U;
@@ -201,10 +229,9 @@ void ageActiveTimers(constants::ClickType clickType, uint16_t elapsed_ms)
 
 /**
  * @brief Bring all active network-click timers up to the current cached time.
- * @details This keeps per-clickable storage at 16 bits while preserving the
- *          old semantics where ACK handling and timeout sweeps both observe
- *          fresh timer values. Only one 32-bit delta is paid for the whole
- *          module, instead of one 32-bit timestamp per clickable slot.
+ * @details This keeps per-clickable storage at 16 bits while ensuring ACK
+ *          handling and timeout sweeps both observe fresh timer values. Only
+ *          one 32-bit delta is paid for the whole module.
  *
  * @param now Cached current time from the main loop or dispatcher.
  */
@@ -355,6 +382,15 @@ void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickTyp
     }
 }
 
+/**
+ * @brief Check whether a pending click slot still carries the expected correlation ID.
+ *
+ * @param clickableIndex Dense clickable index that owns the pending transaction.
+ * @param clickType Network click type to inspect.
+ * @param correlationId Correlation ID received from the bridge payload.
+ * @return true if the slot is active and still matches the provided correlation ID.
+ * @return false otherwise.
+ */
 auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId) -> bool
 {
     if (correlationId == 0U)

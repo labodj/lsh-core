@@ -39,7 +39,7 @@ private:
     const uint8_t pinMask;            //!< Mask of the actuator, for fast IO
     volatile uint8_t *const pinPort;  //!< Port of the actuator, for fast IO
 #endif
-    uint8_t index = 0U;              //!< Actuator index on Actuators namespace array
+    uint8_t index = UINT8_MAX;       //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
     const bool defaultState;         //!< Default state of the actuator (false=OFF, true=ON)
     bool actualState = false;        //!< Actual state of the actuator (false=OFF, true=ON)
     uint32_t lastTimeSwitched = 0U;  //!< Last time the actuator performed a switch

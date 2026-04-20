@@ -24,7 +24,9 @@
 
 namespace VaPrint
 {
+/** @brief Numeric base passed to `HardwareSerial::print()` when printing integral debug values. */
 uint8_t base = 10U;
+/** @brief Decimal precision passed to `HardwareSerial::print()` when printing floating-point debug values. */
 uint8_t prec = 2U;
 
 /**

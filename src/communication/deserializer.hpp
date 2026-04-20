@@ -38,7 +38,7 @@ struct DispatchResult
     bool networkClickHandled = false;  //!< True if network click timer processing must remain active after this dispatch.
 };
 
-auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult;  //!<  Main entry point for command processing.
+auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult;
 
 }  // namespace Deserializer
 

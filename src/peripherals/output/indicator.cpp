@@ -31,6 +31,11 @@ namespace
 {
 using namespace Debug;
 
+/**
+ * @brief One compact indicator-to-actuator link record stored inside the shared pool.
+ * @details The owner index is stored as `index + 1` so zero remains available as
+ *          a cheap always-invalid sentinel during setup-time sorting and scans.
+ */
 struct IndicatorActuatorLinkEntry
 {
     uint8_t ownerIndexEncoded = 0U;  //!< One-based indicator index. Zero is reserved as "unused".
@@ -66,6 +71,30 @@ void failIndicatorActuatorLinkOverflow()
 }
 
 /**
+ * @brief Abort setup when an indicator references an actuator that is not registered yet.
+ * @details This catches both wrong registration order and manually provided dense
+ *          indexes that fall outside the real actuator array.
+ */
+void failInvalidIndicatorActuatorLink()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong indicator actuator registration order or index"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
+ * @brief Abort setup when the same indicator/actuator pair is configured twice.
+ */
+void failDuplicateIndicatorActuatorLink()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Duplicate indicator actuator link"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
  * @brief Resolve the dense runtime index of one already-registered indicator.
  *
  * @param indicator Indicator that is about to receive a compact actuator link.
@@ -78,6 +107,40 @@ auto getRegisteredIndicatorIndex(const Indicator *indicator) -> uint8_t
         failUnregisteredIndicator();
     }
     return indicator->getIndex();
+}
+
+/**
+ * @brief Return whether the provided dense actuator index already maps to one registered actuator.
+ *
+ * @param actuatorIndex Dense actuator index about to be stored inside the indicator pool.
+ * @return true if the index currently refers to one registered actuator.
+ * @return false if the index is out of range or still points to an unregistered slot.
+ */
+auto isRegisteredActuatorIndex(uint8_t actuatorIndex) -> bool
+{
+    return actuatorIndex < Actuators::totalActuators && Actuators::actuators[actuatorIndex] != nullptr;
+}
+
+/**
+ * @brief Return whether the shared indicator pool already contains the same owner/actuator pair.
+ *
+ * @param ownerIndex Dense runtime indicator index that owns the link.
+ * @param actuatorIndex Dense runtime actuator index referenced by the link.
+ * @return true if the exact owner/actuator pair already exists.
+ * @return false otherwise.
+ */
+auto containsIndicatorActuatorLink(uint8_t ownerIndex, uint8_t actuatorIndex) -> bool
+{
+    const uint8_t ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
+    for (uint16_t entryIndex = 0U; entryIndex < totalIndicatorActuatorLinks; ++entryIndex)
+    {
+        if (indicatorActuatorLinks[entryIndex].ownerIndexEncoded == ownerIndexEncoded &&
+            indicatorActuatorLinks[entryIndex].actuatorIndex == actuatorIndex)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -122,9 +185,17 @@ void Indicator::setIndex(uint8_t indexToSet)
 auto Indicator::addActuator(uint8_t actuatorIndex) -> Indicator &
 {
     const uint8_t indicatorIndex = getRegisteredIndicatorIndex(this);
+    if (!isRegisteredActuatorIndex(actuatorIndex))
+    {
+        failInvalidIndicatorActuatorLink();
+    }
     if (totalIndicatorActuatorLinks >= CONFIG_MAX_INDICATOR_ACTUATOR_LINKS)
     {
         failIndicatorActuatorLinkOverflow();
+    }
+    if (containsIndicatorActuatorLink(indicatorIndex, actuatorIndex))
+    {
+        failDuplicateIndicatorActuatorLink();
     }
 
     indicatorActuatorLinks[totalIndicatorActuatorLinks].ownerIndexEncoded = static_cast<uint8_t>(indicatorIndex + 1U);
@@ -165,10 +236,23 @@ auto Indicator::setMode(constants::IndicatorMode indicatorMode) -> Indicator &
  * If this->mode = ALL -> If all controlled actuators are ON switch ON the indicator, OFF otherwise.
  * If this->mode = MAJORITY -> If the majority of controlled actuators are ON switch ON the indicator, OFF otherwise.
  *
+ * Indicators with zero controlled actuators are treated as OFF here as a final
+ * safety net, even though setup validation should already reject that config.
+ *
  */
 void Indicator::check()
 {
     using constants::IndicatorMode;
+
+    if (this->controlledActuatorsCount == 0U)
+    {
+        if (this->actualState)
+        {
+            this->actualState = false;
+            this->setState(false);
+        }
+        return;
+    }
 
     // Cache the pointer to the global actuators array
     auto *const actuators = Actuators::actuators.data();
@@ -246,6 +330,17 @@ void Indicator::check()
 auto Indicator::getIndex() const -> uint8_t
 {
     return this->index;
+}
+
+/**
+ * @brief Return whether this indicator controls at least one actuator.
+ *
+ * @return true if the indicator has at least one attached actuator.
+ * @return false otherwise.
+ */
+auto Indicator::hasAttachedActuators() const -> bool
+{
+    return this->controlledActuatorsCount != 0U;
 }
 
 /**

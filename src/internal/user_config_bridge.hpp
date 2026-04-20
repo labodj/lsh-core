@@ -25,10 +25,10 @@
 
 #include "internal/lsh_config_types.hpp"
 
-static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME;
-static constexpr uint8_t CONFIG_MAX_CLICKABLES = LSH_MAX_CLICKABLES;
-static constexpr uint8_t CONFIG_MAX_ACTUATORS = LSH_MAX_ACTUATORS;
-static constexpr uint8_t CONFIG_MAX_INDICATORS = LSH_MAX_INDICATORS;
+static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME;    //!< Stable device name exposed on the wire and in logs.
+static constexpr uint8_t CONFIG_MAX_CLICKABLES = LSH_MAX_CLICKABLES;  //!< Maximum number of clickables declared by the consumer profile.
+static constexpr uint8_t CONFIG_MAX_ACTUATORS = LSH_MAX_ACTUATORS;    //!< Maximum number of actuators declared by the consumer profile.
+static constexpr uint8_t CONFIG_MAX_INDICATORS = LSH_MAX_INDICATORS;  //!< Maximum number of indicators declared by the consumer profile.
 
 // Network clicks are optional at device level. Keeping this as a compile-time
 // switch lets small installations remove all related state, timeout scans and
@@ -47,20 +47,24 @@ static constexpr uint8_t CONFIG_MAX_INDICATORS = LSH_MAX_INDICATORS;
 // "missing entry" without extra flags.
 #ifdef LSH_MAX_CLICKABLE_ID
 #define CONFIG_USE_CLICKABLE_ID_LUT 1
-static constexpr uint8_t CONFIG_MAX_CLICKABLE_ID = LSH_MAX_CLICKABLE_ID;
+static constexpr uint8_t CONFIG_MAX_CLICKABLE_ID =
+    LSH_MAX_CLICKABLE_ID;  //!< Highest clickable ID accepted by the bounded clickable lookup table.
 #elif defined(LSH_ASSUME_DENSE_CLICKABLE_IDS)
 #define CONFIG_USE_CLICKABLE_ID_LUT 1
-static constexpr uint8_t CONFIG_MAX_CLICKABLE_ID = CONFIG_MAX_CLICKABLES;
+static constexpr uint8_t CONFIG_MAX_CLICKABLE_ID =
+    CONFIG_MAX_CLICKABLES;  //!< Highest clickable ID accepted when clickable IDs are declared dense.
 #else
 #define CONFIG_USE_CLICKABLE_ID_LUT 0
 #endif
 
 #ifdef LSH_MAX_ACTUATOR_ID
 #define CONFIG_USE_ACTUATOR_ID_LUT 1
-static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID = LSH_MAX_ACTUATOR_ID;
+static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID =
+    LSH_MAX_ACTUATOR_ID;  //!< Highest actuator ID accepted by the bounded actuator lookup table.
 #elif defined(LSH_ASSUME_DENSE_ACTUATOR_IDS)
 #define CONFIG_USE_ACTUATOR_ID_LUT 1
-static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID = CONFIG_MAX_ACTUATORS;
+static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID =
+    CONFIG_MAX_ACTUATORS;  //!< Highest actuator ID accepted when actuator IDs are declared dense.
 #else
 #define CONFIG_USE_ACTUATOR_ID_LUT 0
 #endif
@@ -75,31 +79,41 @@ static constexpr uint8_t CONFIG_MAX_ACTUATOR_ID = CONFIG_MAX_ACTUATORS;
 // When the consumer does not provide an explicit total, fall back to the old
 // worst-case allocation strategy so existing projects stay compatible.
 #ifdef LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS
-static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS = LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS;
+static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS =
+    LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of short-click links in the whole device.
 #else
 static constexpr uint16_t CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) * static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);
+    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
+    static_cast<uint16_t>(
+        CONFIG_MAX_ACTUATORS);  //!< Worst-case short-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_LONG_CLICK_ACTUATOR_LINKS
-static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS = LSH_MAX_LONG_CLICK_ACTUATOR_LINKS;
+static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS =
+    LSH_MAX_LONG_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of long-click links in the whole device.
 #else
 static constexpr uint16_t CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) * static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);
+    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
+    static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);  //!< Worst-case long-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS
-static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS = LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS;
+static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS =
+    LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS;  //!< Logical maximum of super-long-click links in the whole device.
 #else
 static constexpr uint16_t CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) * static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);
+    static_cast<uint16_t>(CONFIG_MAX_CLICKABLES) *
+    static_cast<uint16_t>(
+        CONFIG_MAX_ACTUATORS);  //!< Worst-case super-long-click link budget when the consumer does not provide a tighter total.
 #endif
 
 #ifdef LSH_MAX_INDICATOR_ACTUATOR_LINKS
-static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS = LSH_MAX_INDICATOR_ACTUATOR_LINKS;
+static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS =
+    LSH_MAX_INDICATOR_ACTUATOR_LINKS;  //!< Logical maximum of indicator-to-actuator links in the whole device.
 #else
 static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS =
-    static_cast<uint16_t>(CONFIG_MAX_INDICATORS) * static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);
+    static_cast<uint16_t>(CONFIG_MAX_INDICATORS) *
+    static_cast<uint16_t>(CONFIG_MAX_ACTUATORS);  //!< Worst-case indicator link budget when the consumer does not provide a tighter total.
 #endif
 
 // ETL arrays must have a strictly positive compile-time capacity.
@@ -110,13 +124,21 @@ static constexpr uint16_t CONFIG_MAX_INDICATOR_ACTUATOR_LINKS =
 //
 // When the logical maximum is zero, the extra ETL slot is never used at runtime.
 static constexpr uint16_t CONFIG_SHORT_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY =
-    (CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS == 0U) ? 1U : CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS;
+    (CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS == 0U)
+        ? 1U
+        : CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS;  //!< Physical ETL storage capacity for short-click links, clamped to at least one slot.
 static constexpr uint16_t CONFIG_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY =
-    (CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS == 0U) ? 1U : CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS;
+    (CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS == 0U)
+        ? 1U
+        : CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS;  //!< Physical ETL storage capacity for long-click links, clamped to at least one slot.
 static constexpr uint16_t CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY =
-    (CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS == 0U) ? 1U : CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS;
+    (CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS == 0U)
+        ? 1U
+        : CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS;  //!< Physical ETL storage capacity for super-long-click links, clamped to at least one slot.
 static constexpr uint16_t CONFIG_INDICATOR_ACTUATOR_LINK_STORAGE_CAPACITY =
-    (CONFIG_MAX_INDICATOR_ACTUATOR_LINKS == 0U) ? 1U : CONFIG_MAX_INDICATOR_ACTUATOR_LINKS;
+    (CONFIG_MAX_INDICATOR_ACTUATOR_LINKS == 0U)
+        ? 1U
+        : CONFIG_MAX_INDICATOR_ACTUATOR_LINKS;  //!< Physical ETL storage capacity for indicator links, clamped to at least one slot.
 
 static constexpr HardwareSerial *const CONFIG_COM_SERIAL = LSH_COM_SERIAL;      //!< Serial port used for the controller-to-bridge link.
 static constexpr HardwareSerial *const CONFIG_DEBUG_SERIAL = LSH_DEBUG_SERIAL;  //!< Serial port used for local debug output.

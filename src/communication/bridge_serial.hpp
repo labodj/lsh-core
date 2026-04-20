@@ -33,13 +33,13 @@
  */
 namespace BridgeSerial
 {
-extern uint16_t sendIdleAge_ms;              //!< Elapsed idle time since the last payload transmitted to the bridge, saturated at 65535 ms.
-extern uint32_t lastReceivedPayloadTime_ms;  //!< Timestamp of the last valid payload received from the bridge.
-extern bool firstValidPayloadReceived;       //!< True after the first valid bridge payload has been received.
+extern uint16_t sendIdleAge_ms;
+extern uint32_t lastReceivedPayloadTime_ms;
+extern bool firstValidPayloadReceived;
 #ifndef CONFIG_MSG_PACK
-extern char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];  //!< Raw byte buffer used by the newline-delimited JSON codec.
-extern size_t bufferedBytesCount;  //!< Number of meaningful bytes currently stored in `rawInputBuffer`.
-extern bool discardUntilNewline;   //!< True while the JSON codec is discarding an overflowed frame tail.
+extern char rawInputBuffer[constants::bridgeSerial::RAW_INPUT_BUFFER_SIZE];
+extern size_t bufferedBytesCount;
+extern bool discardUntilNewline;
 #endif
 
 void init();                                                // Initialize the hardware serial link used by the bridge.

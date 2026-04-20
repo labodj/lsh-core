@@ -46,7 +46,13 @@ struct __freelist
 /* The head of the free list structure */
 extern struct __freelist *__flp;  //!< Pointer to the head of the free list.
 
-/* Calculates the size of the free list */
+/**
+ * @brief Calculate the total payload currently stored in avr-libc's free list.
+ * @details This helper walks the allocator free list so fragmented heap blocks
+ *          contribute to the final free-memory estimate returned by `freeMemory()`.
+ *
+ * @return size_t Total bytes available inside the allocator free list.
+ */
 auto freeListSize() -> size_t
 {
     struct __freelist *current = nullptr;
@@ -59,6 +65,13 @@ auto freeListSize() -> size_t
     return total;
 }
 
+/**
+ * @brief Estimate the amount of free SRAM currently available on the MCU.
+ * @details The implementation combines the stack-to-heap gap with the bytes
+ *          stored in avr-libc's free list so fragmented allocations are counted too.
+ *
+ * @return size_t Estimated free SRAM in bytes.
+ */
 auto freeMemory() -> size_t
 {
     size_t free_memory = 0U;
