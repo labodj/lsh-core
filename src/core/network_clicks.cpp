@@ -423,6 +423,14 @@ auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
     }
 
     markNetworkClickAcked(clickableIndex, clickType);
+    auto *const ageStorage = getAgeStorage(clickType);
+    if (ageStorage != nullptr)
+    {
+        // Once the ACK has arrived, the confirm retry budget must start from the
+        // ACK moment, not from the original request. Otherwise a late ACK could
+        // leave no real time for the bridge to receive NETWORK_CLICK_CONFIRM.
+        (*ageStorage)[clickableIndex] = 0U;
+    }
     if (Serializer::serializeNetworkClick(clickableIndex, clickType, true, correlationId))
     {
         eraseNetworkClick(clickableIndex, clickType);

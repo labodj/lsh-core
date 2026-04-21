@@ -41,7 +41,7 @@ namespace NetworkClicks
 {
 enum class RequestResult : uint8_t
 {
-    Accepted,          //!< The request frame has been accepted by the UART and the timeout is now active.
+    Accepted,          //!< The request frame has been accepted by the UART and the request-timeout window is now active.
     AlreadyPending,    //!< The same clickable/clickType pair already has one in-flight transaction.
     TransportRejected  //!< The UART rejected the outgoing request frame.
 };
