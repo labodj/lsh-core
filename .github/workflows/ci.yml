@@ -97,4 +97,5 @@ jobs:
       - name: Trigger release-aligned Doxygen deployment
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run doxygen-pages.yml --ref main -f checkout_ref="refs/tags/${GITHUB_REF_NAME}"
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run doxygen-pages.yml --repo "$GH_REPO" --ref main -f checkout_ref="refs/tags/${GITHUB_REF_NAME}"
