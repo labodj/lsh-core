@@ -1,8 +1,9 @@
-name: CI
+name: CI & Release
 
 on:
   push:
     branches: ["main"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -52,3 +53,30 @@ jobs:
 
       - name: Build public example
         run: platformio run -d examples/multi-device-project -e "${{ matrix.env }}"
+
+  release:
+    needs: [validate-generated-artifacts, build-public-example]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - name: Verify library version matches tag
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          LIBRARY_VERSION=$(python3 -c "import json; print(json.load(open('library.json', 'r', encoding='utf-8'))['version'])")
+          if [ "$LIBRARY_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: library.json version ($LIBRARY_VERSION) does not match tag version ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
