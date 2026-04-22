@@ -22,9 +22,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      DOXYGEN_VERSION: "1.14.0"
-      DOXYGEN_SHA256: "e5d6ae24d0bf3f0cdc4d8f146726b89ca323922f19441af99b1872d503665ad6"
 
     environment:
       name: github-pages
@@ -37,16 +34,11 @@ jobs:
           ref: ${{ inputs.checkout_ref || github.ref }}
           submodules: "recursive"
 
-      - name: Install Graphviz
-        run: sudo apt-get update && sudo apt-get install -y graphviz
-
-      - name: Install pinned Doxygen
+      - name: Install Graphviz and Doxygen
         run: |
           set -eux
-          curl -fsSL -o /tmp/doxygen.tar.gz "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
-          echo "${DOXYGEN_SHA256}  /tmp/doxygen.tar.gz" | sha256sum -c -
-          sudo tar -xzf /tmp/doxygen.tar.gz -C /opt
-          sudo ln -sf "/opt/doxygen-${DOXYGEN_VERSION}/bin/doxygen" /usr/local/bin/doxygen
+          sudo apt-get update
+          sudo apt-get install -y graphviz doxygen
           doxygen --version
 
       - name: Verify generated protocol artifacts
