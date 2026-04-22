@@ -92,7 +92,6 @@ void loop()
 {
     using constants::ClickResult;
     using constants::ClickType;
-    using constants::NoNetworkClickType;
     using constants::timings::ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS;
     using constants::timings::CLICKABLE_SCAN_INTERVAL_MS;
     using constants::timings::DELAY_AFTER_RECEIVE_MS;
@@ -194,7 +193,6 @@ void loop()
     const uint32_t elapsedSinceLastClickableScan_ms = now - lastClickableScanTime_ms;
     if (elapsedSinceLastClickableScan_ms >= CLICKABLE_SCAN_INTERVAL_MS)
     {
-        ClickType detectedClickType = ClickType::NONE;  //!< Temporary holder for the click currently being processed.
         lastClickableScanTime_ms = now;
         const uint16_t clickableElapsed_ms =
             (elapsedSinceLastClickableScan_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastClickableScan_ms);
@@ -215,40 +213,39 @@ void loop()
             {
                 DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), currentClickable->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::SHORT),
                     FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                detectedClickType = ClickType::SHORT;
                 mustTransmitStateToBridge |= currentClickable->shortClick();
             }
             break;
 
             case ClickResult::LONG_CLICK:
             {
+                constexpr auto clickType = ClickType::LONG;
                 DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), currentClickable->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::LONG),
                     FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                detectedClickType = ClickType::LONG;
-                if (currentClickable->isNetworkClickable(detectedClickType))
+                if (currentClickable->isNetworkClickable(clickType))
                 {
 #if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
-                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
+                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), clickType);
                         if (requestResult == NetworkClicks::RequestResult::Accepted)
                         {
                             mustPollNetworkClickTimeouts = true;
                         }
                         else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
-                                 currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                                 currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                         {
                             mustTransmitStateToBridge |= currentClickable->longClick();
                         }
                     }
                     // If the bridge path is unavailable and the device was configured with
                     // local fallback, execute the local action instead of dropping the press.
-                    else if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    else if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
                         mustTransmitStateToBridge |= currentClickable->longClick();
                     }
 #else
-                    if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
                         mustTransmitStateToBridge |= currentClickable->longClick();
                     }
@@ -263,39 +260,39 @@ void loop()
 
             case ClickResult::SUPER_LONG_CLICK:
             {
+                constexpr auto clickType = ClickType::SUPER_LONG;
                 DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), currentClickable->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::SUPER_LONG),
                     FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                detectedClickType = ClickType::SUPER_LONG;
-                if (currentClickable->isNetworkClickable(detectedClickType))
+                if (currentClickable->isNetworkClickable(clickType))
                 {
 #if CONFIG_USE_NETWORK_CLICKS
                     if (BridgeSerial::isConnected())
                     {
-                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), detectedClickType);
+                        const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), clickType);
                         if (requestResult == NetworkClicks::RequestResult::Accepted)
                         {
                             mustPollNetworkClickTimeouts = true;
                         }
                         else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
-                                 currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                                 currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                         {
-                            mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                            mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
                         }
                     }
-                    else if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    else if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                        mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
                     }
 #else
-                    if (currentClickable->getNetworkFallback(detectedClickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
+                    if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                        mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
                     }
 #endif
                 }
                 else
                 {
-                    mustTransmitStateToBridge |= Clickables::click(currentClickable, detectedClickType);
+                    mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
                 }
             }
             break;

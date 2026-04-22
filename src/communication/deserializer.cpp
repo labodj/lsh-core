@@ -184,6 +184,22 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 
     const auto cmd = static_cast<Command>(rawCommand);
 
+#if CONFIG_USE_NETWORK_CLICKS
+    if (cmd == Command::NETWORK_CLICK_ACK || cmd == Command::FAILOVER_CLICK)
+    {
+        if (BridgeSync::allowsMutatingCommands())
+        {
+            processNetworkClickResponse(doc, cmd, result);
+        }
+        return result;
+    }
+#else
+    if (cmd == Command::NETWORK_CLICK_ACK || cmd == Command::FAILOVER_CLICK)
+    {
+        return result;
+    }
+#endif
+
     switch (cmd)
     {
     case Command::SET_SINGLE_ACTUATOR:
@@ -258,19 +274,6 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         result.stateChanged = anyStateChanged;
         break;
     }
-
-    case Command::NETWORK_CLICK_ACK:
-    case Command::FAILOVER_CLICK:
-#if CONFIG_USE_NETWORK_CLICKS
-        if (!BridgeSync::allowsMutatingCommands())
-        {
-            break;
-        }
-        processNetworkClickResponse(doc, cmd, result);
-#else
-        // When network clicks are compiled out, these commands become harmless no-ops.
-#endif
-        break;
 
     case Command::FAILOVER:
 #if CONFIG_USE_NETWORK_CLICKS

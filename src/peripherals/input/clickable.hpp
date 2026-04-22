@@ -25,6 +25,9 @@
 
 #include "internal/cpp_features.hpp"
 #include "internal/user_config_bridge.hpp"
+#ifdef CONFIG_USE_FAST_CLICKABLES
+#include "internal/avr_fast_io.hpp"
+#endif
 #include "util/constants/click_results.hpp"
 #include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
@@ -183,7 +186,7 @@ public:
      * @param uniqueId unique ID of the clickable.
      */
     explicit Clickable(uint8_t pin, uint8_t uniqueId) noexcept :
-        pinMask(digitalPinToBitMask(pin)), pinPort(portInputRegister(digitalPinToPort(pin))), id(uniqueId)
+        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::inputRegisterForPin(pin)), id(uniqueId)
     {}
 #endif
 

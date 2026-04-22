@@ -22,6 +22,7 @@
 
 #include "device/actuator_manager.hpp"
 #include "device/clickable_manager.hpp"
+#include "internal/etl_algorithm.hpp"
 #include "internal/etl_array.hpp"
 #include "peripherals/output/actuator.hpp"
 #include "util/debug/debug.hpp"
@@ -358,7 +359,21 @@ auto makeLinksView(const etl::array<ClickableActuatorLinkEntry, StorageCapacity>
     {
         return {};
     }
-    return ClickableActuatorLinksView(storage.data() + offset, count);
+
+    const auto storageSize = static_cast<uint16_t>(storage.size());
+    // cppcheck-suppress unsignedPositive
+    if (offset >= storageSize)
+    {
+        return {};
+    }
+
+    const uint16_t remainingEntries = static_cast<uint16_t>(storageSize - offset);
+    if (count > remainingEntries)
+    {
+        return {};
+    }
+
+    return ClickableActuatorLinksView(&storage[offset], count);
 }
 
 /**
@@ -796,10 +811,10 @@ auto Clickable::longClick() const -> bool
     {
     case LongClickType::NORMAL:
         // Check long actuators are ON or OFF (actuatorsLongOn==0: everything OFF, actuatorsLongOn==totalLongActuators: everything ON)
-        for (const auto actuatorIndex : this->getActuators(ClickType::LONG))
-        {
-            actuatorsLongOn += static_cast<uint8_t>(localActuators[actuatorIndex]->getState());
-        }
+        actuatorsLongOn =
+            etl::accumulate(this->getActuators(ClickType::LONG).begin(), this->getActuators(ClickType::LONG).end(),
+                            static_cast<uint8_t>(0U), [&](uint8_t total, uint8_t actuatorIndex)
+                            { return static_cast<uint8_t>(total + static_cast<uint8_t>(localActuators[actuatorIndex]->getState())); });
         /*
         Less than half of attached long actuators are ON -> stateToSet = true
         More or equal than half of attached long actuators are ON -> stateToSet = false

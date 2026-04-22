@@ -26,25 +26,22 @@
 #include <WProgram.h>
 #endif  // (ARDUINO >= 100)
 
-extern unsigned int __heap_start;
-extern void *__brkval;
-
-/*
- * The free list structure as maintained by the
- * avr-libc memory allocation routines.
- */
+using AvrHeapStart = unsigned int;
 
 /**
  * @brief Internal structure used by avr-libc to manage the free memory list.
  */
-struct __freelist
+struct AvrFreeListEntry
 {
-    size_t sz;              //!< Size of the free block.
-    struct __freelist *nx;  //!< Pointer to the next free block.
+    size_t size;             //!< Size of the free block payload.
+    AvrFreeListEntry *next;  //!< Pointer to the next free block.
 };
 
-/* The head of the free list structure */
-extern struct __freelist *__flp;  //!< Pointer to the head of the free list.
+extern "C" {
+extern AvrHeapStart avrHeapStart asm("__heap_start");
+extern void *avrBreakValue asm("__brkval");
+extern AvrFreeListEntry *avrFreeListHead asm("__flp");
+}
 
 /**
  * @brief Calculate the total payload currently stored in avr-libc's free list.
@@ -55,12 +52,11 @@ extern struct __freelist *__flp;  //!< Pointer to the head of the free list.
  */
 auto freeListSize() -> size_t
 {
-    struct __freelist *current = nullptr;
     size_t total = 0U;
-    for (current = __flp; current != nullptr; current = current->nx)
+    for (const auto *current = avrFreeListHead; current != nullptr; current = current->next)
     {
         total += 2U; /* Account for the block's header and payload */
-        total += static_cast<size_t>(current->sz);
+        total += static_cast<size_t>(current->size);
     }
     return total;
 }
@@ -75,13 +71,13 @@ auto freeListSize() -> size_t
 auto freeMemory() -> size_t
 {
     size_t free_memory = 0U;
-    if (reinterpret_cast<uintptr_t>(__brkval) == 0U)
+    if (reinterpret_cast<uintptr_t>(avrBreakValue) == 0U)
     {
-        free_memory = reinterpret_cast<uintptr_t>(&free_memory) - reinterpret_cast<uintptr_t>(&__heap_start);
+        free_memory = reinterpret_cast<uintptr_t>(&free_memory) - reinterpret_cast<uintptr_t>(&avrHeapStart);
     }
     else
     {
-        free_memory = reinterpret_cast<uintptr_t>(&free_memory) - reinterpret_cast<uintptr_t>(__brkval);
+        free_memory = reinterpret_cast<uintptr_t>(&free_memory) - reinterpret_cast<uintptr_t>(avrBreakValue);
         free_memory += freeListSize();
     }
     return free_memory;

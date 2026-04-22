@@ -25,6 +25,9 @@
 
 #include "internal/cpp_features.hpp"
 #include "internal/user_config_bridge.hpp"
+#ifdef CONFIG_USE_FAST_INDICATORS
+#include "internal/avr_fast_io.hpp"
+#endif
 #include "util/constants/indicator_modes.hpp"
 
 namespace Indicators
@@ -66,11 +69,11 @@ public:
      * @brief Construct a new Indicator object using fast I/O (direct port manipulation).
      * @param pin The Arduino pin number for the indicator.
      */
-    explicit Indicator(uint8_t pin) noexcept : pinMask(digitalPinToBitMask(pin)), pinPort(portOutputRegister(digitalPinToPort(pin)))
+    explicit Indicator(uint8_t pin) noexcept :
+        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::outputRegisterForPin(pin))
     {
         // PinMode to OUTPUT
-        uint8_t port = digitalPinToPort(pin);
-        volatile uint8_t *const reg = portModeRegister(port);
+        volatile uint8_t *const reg = lsh::core::avr::modeRegisterForPin(pin);
         const uint8_t oldSREG = SREG;
         cli();
         *reg |= this->pinMask;

@@ -25,6 +25,9 @@
 
 #include "internal/cpp_features.hpp"
 #include "internal/user_config_bridge.hpp"
+#ifdef CONFIG_USE_FAST_ACTUATORS
+#include "internal/avr_fast_io.hpp"
+#endif
 
 /**
  * @brief Represents an actuator (relay) attached to a digital pin.
@@ -72,12 +75,11 @@ public:
      * @param normalState the default state of the actuator.
      */
     explicit Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept :
-        pinMask(digitalPinToBitMask(pin)), pinPort(portOutputRegister(digitalPinToPort(pin))), defaultState(normalState),
+        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::outputRegisterForPin(pin)), defaultState(normalState),
         actualState(normalState), id(uniqueId)
     {
         // PinMode to OUTPUT
-        uint8_t port = digitalPinToPort(pin);
-        volatile uint8_t *const reg = portModeRegister(port);
+        volatile uint8_t *const reg = lsh::core::avr::modeRegisterForPin(pin);
         const uint8_t oldSREG = SREG;
         cli();
         *reg |= this->pinMask;
