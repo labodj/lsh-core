@@ -1,13 +1,11 @@
-# GitHub Actions workflow for generating and deploying Doxygen documentation
+# GitHub Actions workflow for generating and deploying release-aligned Doxygen documentation
 
-name: Deploy Doxygen Documentation
+name: Deploy Release Doxygen Documentation
 
 on:
-  # Run this workflow automatically on pushes to the 'main' branch
   push:
-    branches: ["main"]
+    tags: ["v*"]
 
-  # Allows you to run this workflow manually from the Actions tab on GitHub
   workflow_dispatch:
 
 # Grant GITHUB_TOKEN the necessary permissions to deploy to GitHub Pages
@@ -18,33 +16,24 @@ permissions:
 
 jobs:
   deploy:
-    # Use a fresh Ubuntu environment
     runs-on: ubuntu-latest
     env:
       DOXYGEN_VERSION: "1.14.0"
       DOXYGEN_SHA256: "e5d6ae24d0bf3f0cdc4d8f146726b89ca323922f19441af99b1872d503665ad6"
 
-    # Configure the environment for GitHub Pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      # Step 1: Check out your repository's code
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Keep recursive checkout enabled. It is harmless for the current
-          # subtree-based layout and future-proofs the workflow if the docs
-          # pipeline ever adds submodules again.
           submodules: "recursive"
 
-      # Step 2: Install Graphviz for call/caller graphs
       - name: Install Graphviz
         run: sudo apt-get update && sudo apt-get install -y graphviz
 
-      # Step 3: Install a pinned Doxygen version so runner image updates do not
-      # silently change the HTML theme or Markdown behavior.
       - name: Install pinned Doxygen
         run: |
           set -eux
@@ -54,7 +43,6 @@ jobs:
           sudo ln -sf "/opt/doxygen-${DOXYGEN_VERSION}/bin/doxygen" /usr/local/bin/doxygen
           doxygen --version
 
-      # Step 4: Verify vendored/generated protocol artifacts before publishing.
       - name: Verify generated protocol artifacts
         run: |
           python3 tools/update_lsh_protocol.py --check
@@ -63,25 +51,17 @@ jobs:
             --shared-doc-root vendor/lsh-protocol \
             --check
 
-      # Step 5: Build the Doxygen documentation
       - name: Build Doxygen documentation
-        # Run doxygen from the project root. It will use the configuration
-        # file located at 'docs/Doxyfile'.
         run: doxygen docs/Doxyfile
 
-      # Step 6: Configure GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # Step 7: Upload the generated documentation as an artifact
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # This is the directory Doxygen generates the HTML files into,
-          # as specified by OUTPUT_DIRECTORY = docs in your Doxyfile.
           path: "./docs/html"
 
-      # Step 8: Deploy the artifact to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

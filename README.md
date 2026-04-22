@@ -1,14 +1,61 @@
 # LSH-Core: The Arduino Firmware Engine for Labo Smart Home
 
+[![Build Status](https://github.com/labodj/lsh-core/actions/workflows/ci.yml/badge.svg)](https://github.com/labodj/lsh-core/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/labodj/lsh-core?display_name=tag&sort=semver)](https://github.com/labodj/lsh-core/releases/latest)
 [![API Documentation](https://img.shields.io/badge/API%20Reference-Doxygen-blue.svg)](https://labodj.github.io/lsh-core/)
 
-Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home (LSH)** ecosystem. This framework was originally designed for personal use with industrial-grade Controllino PLCs to ensure maximum reliability.
+Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home
+(LSH)** ecosystem. This framework was refined in a real-world Controllino-based
+installation to keep the controller side fast, predictable and maintainable.
 
 This document serves as the official guide for using the `lsh-core` library in your own PlatformIO projects.
 
+The hosted GitHub Pages API reference tracks the latest tagged release so the
+public class-level documentation stays aligned with released artifacts. This
+README on `main` may describe newer work that has not been tagged yet.
+
+If you are new to the public LSH stack, read the landing repository and its
+reference profile first:
+
+- [Labo Smart Home landing page](https://github.com/labodj/labo-smart-home)
+- [LSH reference stack](https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md)
+- [LSH glossary](https://github.com/labodj/labo-smart-home/blob/main/GLOSSARY.md)
+
+## Start Here
+
+Use this README in different ways depending on what you need:
+
+- If you are new to LSH, start with the landing page, the reference stack and the glossary before reading this firmware guide.
+- If you want the shortest answers to common adoption questions, skim the landing [`FAQ.md`](https://github.com/labodj/labo-smart-home/blob/main/FAQ.md).
+- If you want the shortest end-to-end bring-up path, read the landing [`GETTING_STARTED.md`](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md) before customizing this firmware.
+- If your first lab is partially alive but inconsistent, use the landing [`TROUBLESHOOTING.md`](https://github.com/labodj/labo-smart-home/blob/main/TROUBLESHOOTING.md).
+- If you want to wire a controller correctly, jump to [Hardware & Electrical Setup](#hardware--electrical-setup).
+- If you want to build your first controller project, jump to [Getting Started: Creating Your Project](#getting-started-creating-your-project).
+- If you want click semantics, fallbacks and network behavior, jump to [Configuring Device Behavior](#configuring-device-behavior).
+- If you want compile-time tuning knobs, jump to [Feature Flags](#feature-flags).
+- If you want class- and method-level details for the latest released API, use the [Doxygen API reference](https://labodj.github.io/lsh-core/).
+
+## Bundled Example
+
+The fastest concrete starting point in this repository is:
+
+- [examples/multi-device-project](./examples/multi-device-project)
+
+It already shows a reusable multi-device PlatformIO layout with separate device
+profiles.
+
+Useful example profiles:
+
+- `J1_release`: leaner profile, MsgPack enabled, no network-click subsystem
+- `J2_release`: richer profile that keeps the network-click path enabled
+
+For the stack-level bring-up order around this example, use the landing
+[`GETTING_STARTED.md`](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md).
+
 ## What is the Labo Smart Home (LSH) Ecosystem?
 
-LSH is a complete, distributed home automation system composed of three distinct, open-source projects:
+LSH is a complete, distributed home automation system composed of four public,
+open-source repositories:
 
 - **`lsh-core` (This Project):** The heart of the physical layer. This modern C++17 framework runs on an Arduino-compatible controller (like a Controllino). Its job is to read inputs (like push-buttons), control outputs (like relays and lights), and execute local logic with maximum speed and efficiency.
 
@@ -16,9 +63,12 @@ LSH is a complete, distributed home automation system composed of three distinct
 
 - **[node-red-contrib-lsh-logic](https://github.com/labodj/node-red-contrib-lsh-logic):** A collection of nodes for Node-RED. This is the brain of your smart home, running on a server or Raspberry Pi. It listens to events from all your `lsh-core` devices and orchestrates complex, network-wide automation logic.
 
-### System Architecture
+- **[lsh-protocol](https://github.com/labodj/lsh-protocol):** The shared protocol source of truth. It keeps command IDs, compact keys, compatibility metadata and generated artifacts aligned across the controller, bridge and Node-RED layers.
 
-The three components work together to create a robust and responsive system.
+### Runtime Path
+
+The active runtime path involves three peers. `lsh-protocol` sits beside them as
+the shared contract that keeps the payload model aligned.
 
 ```text
 +-----------------+                      +-----------------+                      +-----------------+
@@ -54,9 +104,19 @@ While this README provides a comprehensive guide for getting started and common 
 
 It is the perfect resource for developers who want to understand the inner workings of the library or explore advanced functionalities beyond the examples provided here.
 
+The hosted site tracks the latest tagged release. If you are reading `main`
+between releases, the repository sources and this README may already include
+changes that are not reflected on the published API pages yet.
+
 **[Browse the full API Documentation here](https://labodj.github.io/lsh-core/)**
 
 ## Hardware & Electrical Setup
+
+This section keeps the `lsh-core`-specific electrical assumptions. For the full
+public panel pattern and the cross-repo controller/bridge split, see:
+
+- [Labo Smart Home hardware overview](https://github.com/labodj/labo-smart-home/blob/main/HARDWARE_OVERVIEW.md)
+- [LSH reference stack](https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md)
 
 `lsh-core` was designed around the **Controllino Maxi**, but can be adapted. The following setup is considered standard.
 
@@ -103,9 +163,6 @@ Typically, `Serial2` on the Controllino Maxi is used for this communication.
 - when Wi-Fi, MQTT or the central logic node are unavailable, local behavior should still remain coherent
 
 This is why the bridge and orchestration layers are treated as additive rather than authoritative over the physical panel.
-
-For a system-level hardware view of the real installation pattern, see the public landing repo:
-[Labo Smart Home hardware overview](https://github.com/labodj/labo-smart-home/blob/main/HARDWARE_OVERVIEW.md)
 
 ## Getting Started: Creating Your Project
 
@@ -471,19 +528,26 @@ Understanding the handshake between devices helps clarify when a fallback is tri
 
 1. **Initial Request:** The user long-presses a network-enabled button on a Controllino running `lsh-core`.
 2. `lsh-core` sends the click event (e.g., "Button ID 5, Long Click, Request") to the connected `lsh-bridge` (ESP32) and starts a short timeout timer.
-3. **Gateway to MQTT:** `lsh-bridge` publishes the event to the MQTT broker (e.g., on topic `MyDevice/OUT`).
+3. **Gateway to MQTT:** `lsh-bridge` publishes the request to the controller-backed MQTT runtime topic (for example `LSH/<device>/events`).
 4. **Central Logic:** `lsh-logic` (Node-RED) receives the message, validates it against its configuration, and checks the status of any other devices involved.
-5. **Acknowledgement (ACK):** If the request is valid, `lsh-logic` immediately sends an ACK back via MQTT (e.g., on topic `MyDevice/IN`).
+5. **Acknowledgement (ACK):** If the request is valid, `lsh-logic` immediately sends `NETWORK_CLICK_ACK` back on the device command topic (for example `LSH/<device>/IN`).
 6. **Confirmation:** `lsh-bridge` receives the ACK and forwards it to `lsh-core` via serial.
-7. **Execution:** Upon receiving the ACK, `lsh-core` stops its timeout, confirms the action (e.g., with a quick LED blink), and sends a final confirmation message to `lsh-bridge` ("Button ID 5, Long Click, Confirmed").
+7. **Execution:** Upon receiving the ACK, `lsh-core` stops its timeout, confirms the action (e.g., with a quick LED blink), and sends `NETWORK_CLICK_CONFIRM` back through `lsh-bridge`.
 8. **Final Action:** `lsh-logic` receives the final confirmation and executes the network-wide automation (e.g., turning on lights on three different devices).
 
 The same bootstrapping contract is used outside of clicks:
 
 - `lsh-core` sends `BOOT` during startup after configuration has been finalized.
-- If the controller reboots while `lsh-bridge` is online, the bridge reboots immediately and rebuilds its cached model through the normal startup handshake.
-- When `lsh-bridge` reaches `MQTT_READY`, it sends `BOOT` back to `lsh-core` to trigger a fresh `details + state` re-sync.
-- This reboot-driven handshake is the only supported way to realign the bridge after reconnects. Runtime topology mutation without reboot is not part of the design.
+- When the bridge receives controller `BOOT`, it stops trusting controller-derived runtime state and requests fresh `DEVICE_DETAILS`.
+- After validated details are accepted, the bridge requests fresh `ACTUATORS_STATE` before it treats the controller path as synchronized again.
+- If the bridge has no validated cached topology yet, or if the topology changed, it persists the new details and performs one controlled reboot so MQTT topics and Homie nodes are rebuilt from a coherent snapshot.
+- MQTT reconnects do not redefine the serial protocol. The bridge re-subscribes and re-synchronizes its MQTT-side runtime around the cached or freshly confirmed controller model.
+- A bridge-local service-topic `BOOT` may be used by orchestration peers to request a replay when snapshots are missing. That is a profile behavior of the public stack, not a mandatory end-to-end forwarding rule for `BOOT`.
+
+For the public reference profile behind this flow, see:
+
+- [LSH reference stack](https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md)
+- [vendor/lsh-protocol/docs/profiles-and-roles.md](vendor/lsh-protocol/docs/profiles-and-roles.md)
 
 For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
 

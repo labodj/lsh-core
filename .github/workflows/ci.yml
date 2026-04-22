@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-generated-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Validate generated protocol artifacts
+        run: |
+          python3 tools/update_lsh_protocol.py --check
+          python3 vendor/lsh-protocol/tools/generate_lsh_protocol.py \
+            --target shared-doc \
+            --shared-doc-root vendor/lsh-protocol \
+            --check
+
+  build-public-example:
+    needs: validate-generated-artifacts
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ["J1_release", "J2_release"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install PlatformIO
+        run: python3 -m pip install --upgrade pip "platformio==6.1.19"
+
+      - name: Build public example
+        run: platformio run -d examples/multi-device-project -e "${{ matrix.env }}"

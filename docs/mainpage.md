@@ -7,6 +7,20 @@ It runs on the controller-side MCU, owns the physical topology, and executes the
 local logic for buttons, actuators, indicators, failover behaviour and the serial
 protocol spoken with `lsh-bridge`.
 
+If you are new to the public LSH stack, start with the landing repository and
+its reference profile before diving into the firmware API surface:
+
+- https://github.com/labodj/labo-smart-home
+- https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md
+- https://github.com/labodj/labo-smart-home/blob/main/GLOSSARY.md
+- https://github.com/labodj/labo-smart-home/blob/main/FAQ.md
+- https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md
+- https://github.com/labodj/labo-smart-home/blob/main/TROUBLESHOOTING.md
+
+This hosted API site is published from the latest tagged release so it stays
+aligned with released artifacts. The repository `main` branch may move ahead
+between releases.
+
 ## What This Documentation Covers
 
 This Doxygen site combines three complementary sources:

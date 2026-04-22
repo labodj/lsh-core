@@ -8,7 +8,7 @@ authors:
 repository-code: "https://github.com/labodj/lsh-core"
 url: "https://github.com/labodj/lsh-core"
 license: "Apache-2.0"
-abstract: "Core Arduino C++ framework for the LSH smart home ecosystem, designed for Controllino PLCs."
+abstract: "Deterministic Arduino C++ controller framework for the LSH ecosystem, designed for Controllino PLCs."
 keywords:
   - arduino
   - controllino
