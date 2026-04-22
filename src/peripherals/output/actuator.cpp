@@ -20,6 +20,7 @@
 
 #include "peripherals/output/actuator.hpp"
 
+#include "device/actuator_manager.hpp"
 #include "util/constants/timing.hpp"
 #include "util/time_keeper.hpp"
 
@@ -60,6 +61,12 @@ auto Actuator::setState(bool state) -> bool
 #endif
     this->actualState = state;  // Store the new state
     this->lastTimeSwitched = now;
+    if (this->index != UINT8_MAX)
+    {
+        // Keep the global packed shadow in sync so state serialization never
+        // has to walk the actuator array just to rebuild protocol bytes.
+        Actuators::updatePackedState(this->index, state);
+    }
     return true;
 }
 

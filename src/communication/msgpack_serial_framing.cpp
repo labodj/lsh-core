@@ -284,10 +284,37 @@ auto MsgPackFrameWriter::write(const uint8_t *buffer, size_t size) -> size_t
     size_t writtenPayloadBytes = 0U;
     while (writtenPayloadBytes < size)
     {
+        size_t contiguousSafeBytes = 0U;
+        while ((writtenPayloadBytes + contiguousSafeBytes) < size)
+        {
+            const uint8_t byte = buffer[writtenPayloadBytes + contiguousSafeBytes];
+            if (byte == MSGPACK_FRAME_END || byte == MSGPACK_FRAME_ESCAPE)
+            {
+                break;
+            }
+            ++contiguousSafeBytes;
+        }
+
+        if (contiguousSafeBytes > 0U)
+        {
+            const size_t writtenChunkBytes = this->output.write(buffer + writtenPayloadBytes, contiguousSafeBytes);
+            writtenPayloadBytes += writtenChunkBytes;
+            if (writtenChunkBytes != contiguousSafeBytes)
+            {
+                break;
+            }
+
+            if (writtenPayloadBytes == size)
+            {
+                break;
+            }
+        }
+
         if (!this->writeEscapedByte(buffer[writtenPayloadBytes]))
         {
             break;
         }
+
         ++writtenPayloadBytes;
     }
 

@@ -20,6 +20,9 @@
 
 #include "communication/bridge_serial.hpp"
 
+#include <Print.h>
+
+#include "communication/checked_writer.hpp"
 #include "communication/deserializer.hpp"
 #include "communication/msgpack_serial_framing.hpp"
 #include "communication/constants/config.hpp"
@@ -88,24 +91,25 @@ auto sendJson(const JsonDocument &documentToSend) -> bool
 {
     DP_CONTEXT();
 #ifdef CONFIG_MSG_PACK
-    const size_t expectedPayloadBytes = measureMsgPack(documentToSend);
     MsgPackFrameWriter framedWriter(*CONFIG_COM_SERIAL);
     if (!framedWriter.beginFrame())
     {
         return false;
     }
 
-    const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, framedWriter);
+    lsh::core::communication::CheckedWriter<Print> checkedWriter(framedWriter);
+    const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, checkedWriter);
     const bool frameEnded = framedWriter.endFrame();
-    if (writtenPayloadBytes == 0U || writtenPayloadBytes != expectedPayloadBytes || !frameEnded)
+    if (writtenPayloadBytes == 0U || checkedWriter.failed() || !frameEnded)
     {
         return false;
     }
 #else
-    const size_t expectedPayloadBytes = measureJson(documentToSend);
-    const size_t writtenPayloadBytes = serializeJson(documentToSend, *CONFIG_COM_SERIAL);
-    const size_t writtenDelimiterBytes = CONFIG_COM_SERIAL->write("\n", 1);  // Add a newline character after sending the JSON payload.
-    if (writtenPayloadBytes != expectedPayloadBytes || writtenDelimiterBytes != 1U)
+    lsh::core::communication::CheckedWriter<Print> checkedWriter(*CONFIG_COM_SERIAL);
+    const size_t writtenPayloadBytes = serializeJson(documentToSend, checkedWriter);
+    const size_t writtenDelimiterBytes =
+        checkedWriter.write(static_cast<uint8_t>('\n'));  // Add a newline character after sending the JSON payload.
+    if (writtenPayloadBytes == 0U || writtenDelimiterBytes != 1U || checkedWriter.failed())
     {
         return false;
     }

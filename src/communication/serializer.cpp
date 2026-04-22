@@ -123,17 +123,6 @@ auto serializeDetails() -> bool
     return BridgeSerial::sendJson(serializationDoc);
 }
 
-namespace
-{
-/**
- * @brief Lookup table for bit masks (8-bit).
- * @details ESSENTIAL for AVR: AVR has no barrel shifter, so `1 << i` becomes
- *          an O(i) loop (~i cycles). LUT provides O(1) lookup (~2 cycles).
- *          For 12 actuators: ~66 cycles saved per serialization.
- */
-constexpr uint8_t BIT_MASK_8[8] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
-}  // anonymous namespace
-
 /**
  * @brief Prepare and send a JSON actuators state payload with bitpacked byte array.
  * @details AVR-optimized packing using:
@@ -153,32 +142,17 @@ auto serializeActuatorsState() -> bool
 
     serializationDoc.clear();
 
-    // Calculate how many bytes we need: ceil(totalActuators / 8)
-    // Using >>3 instead of /8 (bit shift is MUCH faster on AVR, no division unit)
-    const uint8_t numBytes = (Actuators::totalActuators + 7U) >> 3U;
+    // The actuator manager already maintains a canonical packed shadow in wire
+    // order, so serialization only has to append the ready-made bytes.
+    const uint8_t numBytes = Actuators::getPackedStateByteCount();
 
     // Create the JSON structure
     serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE);  // "p":2
     JsonArray stateArray = serializationDoc.createNestedArray(KEY_STATE);            // "s":[]
 
-    // Pack actuator states into bytes using optimized loop
-    // Using <<3 instead of *8 (bit shift is single cycle on AVR)
-    uint8_t actuatorIndex = 0U;
-    auto *const localActuators = Actuators::actuators.data();
     for (uint8_t byteIndex = 0U; byteIndex < numBytes; ++byteIndex)
     {
-        uint8_t packedByte = 0U;
-
-        // Pack up to 8 actuators into this byte
-        for (uint8_t bitIndex = 0U; bitIndex < 8U && actuatorIndex < Actuators::totalActuators; ++bitIndex)
-        {
-            if (localActuators[actuatorIndex]->getState())
-            {
-                packedByte |= BIT_MASK_8[bitIndex];  // LUT lookup: O(1), ~2 cycles
-            }
-            ++actuatorIndex;
-        }
-        stateArray.add(packedByte);
+        stateArray.add(Actuators::getPackedStateByte(byteIndex));
     }
 
     // Send the Json

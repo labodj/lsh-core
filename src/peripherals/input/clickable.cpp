@@ -775,7 +775,8 @@ auto Clickable::shortClick() const -> bool
 
     bool anyActuatorChangedState = false;
     auto *const localActuators = Actuators::actuators.data();
-    for (const auto actuatorIndex : this->getActuators(ClickType::SHORT))
+    const auto shortActuators = this->getActuators(ClickType::SHORT);
+    for (const auto actuatorIndex : shortActuators)
     {
         anyActuatorChangedState |= localActuators[actuatorIndex]->toggleState();
     }
@@ -806,14 +807,14 @@ auto Clickable::longClick() const -> bool
     bool stateToSet = false;       // The state to be set to long actuators
     uint8_t actuatorsLongOn = 0U;  // Number of active long actuators
     auto *const localActuators = Actuators::actuators.data();
+    const auto longActuators = this->getActuators(ClickType::LONG);
 
     switch (this->longClickType)
     {
     case LongClickType::NORMAL:
         // Check long actuators are ON or OFF (actuatorsLongOn==0: everything OFF, actuatorsLongOn==totalLongActuators: everything ON)
         actuatorsLongOn =
-            etl::accumulate(this->getActuators(ClickType::LONG).begin(), this->getActuators(ClickType::LONG).end(),
-                            static_cast<uint8_t>(0U), [&](uint8_t total, uint8_t actuatorIndex)
+            etl::accumulate(longActuators.begin(), longActuators.end(), static_cast<uint8_t>(0U), [&](uint8_t total, uint8_t actuatorIndex)
                             { return static_cast<uint8_t>(total + static_cast<uint8_t>(localActuators[actuatorIndex]->getState())); });
         /*
         Less than half of attached long actuators are ON -> stateToSet = true
@@ -836,7 +837,7 @@ auto Clickable::longClick() const -> bool
 
     bool anyActuatorChangedState = false;
     // Set stateToSet to all actuators in the long actuators list
-    for (const auto actuatorIndex : this->getActuators(ClickType::LONG))
+    for (const auto actuatorIndex : longActuators)
     {
         anyActuatorChangedState |= localActuators[actuatorIndex]->setState(stateToSet);
     }
@@ -861,7 +862,8 @@ auto Clickable::superLongClickSelective() const -> bool
 
     bool anyActuatorChangedState = false;
     auto *const localActuators = Actuators::actuators.data();
-    for (const auto actuatorIndex : this->getActuators(ClickType::SUPER_LONG))
+    const auto superLongActuators = this->getActuators(ClickType::SUPER_LONG);
+    for (const auto actuatorIndex : superLongActuators)
     {
         if (!localActuators[actuatorIndex]->hasProtection())
         {

@@ -38,6 +38,7 @@ static_assert(CONFIG_MAX_ACTUATOR_ID > 0U, "CONFIG_MAX_ACTUATOR_ID must be great
 etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};  //!< Device actuators map (UUID -> actuator index)
 #endif
 etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{};  //!< Indexes of actuators with auto off functionality active
+PackedActuatorStateBitset packedActuatorStates{};  //!< Canonical packed actuator-state shadow kept in sync with `Actuator::setState()`.
 
 namespace
 {
@@ -131,6 +132,7 @@ void addActuator(Actuator *const actuator)
     DPL(FPSTR(dStr::ACTUATOR), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), actuator->getId(), FPSTR(dStr::SPACE),
         FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
 
+    updatePackedState(currentIndex, actuator->getState());
     totalActuators++;
 }
 
@@ -317,6 +319,55 @@ auto setAllActuatorsState(const etl::array<bool, CONFIG_MAX_ACTUATORS> &states) 
         anySwitchPerformed |= (*currActuator)->setState(*stateIt);
     }
     return anySwitchPerformed;
+}
+
+/**
+ * @brief Keep the compact actuator-state shadow aligned with one runtime state change.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @param state new actuator state.
+ */
+void updatePackedState(uint8_t actuatorIndex, bool state)
+{
+    if (actuatorIndex >= CONFIG_MAX_ACTUATORS)
+    {
+        return;
+    }
+
+    // This shadow intentionally tracks dense runtime index, not logical ID:
+    // the controller protocol serializes actuator state in compact runtime order.
+    packedActuatorStates.set(actuatorIndex, state);
+}
+
+/**
+ * @brief Return the number of packed bytes required by the current topology.
+ */
+auto getPackedStateByteCount() -> uint8_t
+{
+    // Equivalent to ceil(totalActuators / 8) while staying cheap on AVR.
+    return static_cast<uint8_t>((static_cast<uint16_t>(totalActuators) + 7U) >> 3U);
+}
+
+/**
+ * @brief Return one packed state byte in protocol wire order.
+ *
+ * @param byteIndex packed byte index.
+ * @return uint8_t packed actuator-state byte, or zero when out of range.
+ */
+auto getPackedStateByte(uint8_t byteIndex) -> uint8_t
+{
+    const uint8_t byteCount = getPackedStateByteCount();
+    if (byteIndex >= byteCount)
+    {
+        return 0U;
+    }
+
+    const uint16_t bitOffset = static_cast<uint16_t>(byteIndex) * 8U;
+    const uint16_t remainingBits = static_cast<uint16_t>(totalActuators) - bitOffset;
+    const uint8_t extractedBits = remainingBits < 8U ? static_cast<uint8_t>(remainingBits) : 8U;
+    // `extract()` lets the compact shadow stay authoritative for wire encoding:
+    // byte 0 carries actuator bits 0..7, byte 1 carries 8..15, and so on.
+    return packedActuatorStates.extract<uint8_t>(bitOffset, extractedBits);
 }
 
 /**

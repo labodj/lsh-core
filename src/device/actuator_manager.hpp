@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
+#include "internal/etl_bitset.hpp"
 #if !CONFIG_USE_ACTUATOR_ID_LUT
 #include "internal/etl_map.hpp"
 #endif
@@ -37,6 +38,14 @@ class Actuator;
  */
 namespace Actuators
 {
+/**
+ * @brief Compact shadow of the full actuator runtime state in protocol bit order.
+ * @details Bit 0 maps to actuator index 0, bit 1 to actuator index 1, and so on.
+ *          The serializer can therefore emit `ACTUATORS_STATE` directly from this
+ *          cached representation without rescanning every actuator object.
+ */
+using PackedActuatorStateBitset = etl::bitset<CONFIG_MAX_ACTUATORS>;
+
 extern uint8_t totalActuators;
 extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
 #if CONFIG_USE_ACTUATOR_ID_LUT
@@ -45,6 +54,13 @@ extern etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U> actuatorIndexById;
 extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;
 #endif
 extern etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes;
+/**
+ * @brief Canonical packed actuator-state shadow kept aligned with runtime changes.
+ * @details The bridge serializer consumes this compact representation directly,
+ *          so actuator state reporting no longer has to rebuild protocol bytes
+ *          by rescanning every actuator object.
+ */
+extern PackedActuatorStateBitset packedActuatorStates;
 
 void addActuator(Actuator *actuator);                              // Add one actuator to actuators vector and activate it
 [[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator, or nullptr if the ID is unknown
@@ -56,6 +72,30 @@ void addActuator(Actuator *actuator);                              // Add one ac
 [[nodiscard]] auto turnOffAllActuators() -> bool;               // Turns off all actuators
 [[nodiscard]] auto turnOffUnprotectedActuators() -> bool;       // Turns off unprotected actuators
 [[nodiscard]] auto setAllActuatorsState(const etl::array<bool, CONFIG_MAX_ACTUATORS> &states) -> bool;  // Set the state for all actuators
+
+/**
+ * @brief Keep the compact actuator-state shadow aligned with one runtime state change.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @param state new actuator state.
+ */
+void updatePackedState(uint8_t actuatorIndex, bool state);
+
+/**
+ * @brief Return the number of packed bytes required by the active actuator topology.
+ *
+ * @return uint8_t number of bytes needed by the compact `ACTUATORS_STATE` payload.
+ */
+[[nodiscard]] auto getPackedStateByteCount() -> uint8_t;
+
+/**
+ * @brief Return one packed actuator-state byte in protocol wire order.
+ *
+ * @param byteIndex packed byte index.
+ * @return uint8_t packed actuator-state byte, or zero when `byteIndex` is out of range.
+ */
+[[nodiscard]] auto getPackedStateByte(uint8_t byteIndex) -> uint8_t;
+
 void finalizeSetup();  // Populates actuatorsWithAutoOffIndexes
 }  // namespace Actuators
 
