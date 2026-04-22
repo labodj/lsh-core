@@ -59,6 +59,7 @@ The codebase is optimized for embedded determinism:
 - fixed-capacity ETL containers instead of heap allocation
 - compact on-wire payloads
 - compile-time feature flags for timing, debugging and performance tuning
+- compile-time AVR pin binding when public device macros use constant pins on supported boards
 - explicit fallback behaviour when the network path is unavailable
 
 That optimization target matters when reviewing or extending the code. Prefer

@@ -3,7 +3,7 @@
  * @author  Jacopo Labardi (labodj)
  * @brief   Provides the user-facing macros (LSH_ACTUATOR, LSH_BUTTON, LSH_INDICATOR) for device configuration.
  *
- * Copyright 2025 Jacopo Labardi
+ * Copyright 2026 Jacopo Labardi
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,8 +23,12 @@
 
 // This file provides the user-facing macros. It needs the definitions of the
 // classes it instantiates and the bridge to the user's configuration.
+// The public DSL still looks runtime-oriented, but each `pin` argument is
+// expected to be a compile-time constant so it can flow through `PinTag` and
+// unlock the constexpr AVR mapping path when the target board supports it.
 
 #include "config/configurator.hpp"
+#include "internal/pin_tag.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/input/clickable.hpp"
 #include "peripherals/output/actuator.hpp"
@@ -39,7 +43,7 @@
  */
 #define LSH_ACTUATOR(var_name, pin, id)                                                           \
     static_assert((id) > 0, "Actuator ID must be > 0. Please use positive IDs starting from 1."); \
-    Actuator var_name((pin), (id))
+    Actuator var_name(::lsh::core::PinTag<(pin)>{}, (id))
 
 /**
  * @brief Defines a Clickable (Button) with a compile-time check to ensure its ID is not 0.
@@ -49,13 +53,13 @@
  */
 #define LSH_BUTTON(var_name, pin, id)                                                           \
     static_assert((id) > 0, "Button ID must be > 0. Please use positive IDs starting from 1."); \
-    Clickable var_name((pin), (id))
+    Clickable var_name(::lsh::core::PinTag<(pin)>{}, (id))
 
 /**
  * @brief Defines an IndicatorLight. Does not require an ID.
  * @param var_name The name of the variable to declare (e.g., light0).
  * @param pin The hardware pin for the indicator.
  */
-#define LSH_INDICATOR(var_name, pin) Indicator var_name((pin))
+#define LSH_INDICATOR(var_name, pin) Indicator var_name(::lsh::core::PinTag<(pin)>{})
 
 #endif  // LSH_CORE_LSH_USER_MACROS_HPP

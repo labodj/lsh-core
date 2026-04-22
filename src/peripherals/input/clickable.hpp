@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
+#include "internal/pin_tag.hpp"
 #include "internal/user_config_bridge.hpp"
 #ifdef CONFIG_USE_FAST_CLICKABLES
 #include "internal/avr_fast_io.hpp"
@@ -130,6 +131,8 @@ private:
     };
 
     // Bitfield for configuration flags to save RAM. "Hot" data, read every detection.
+    // Keeping the whole bitfield near the start of the object helps the click
+    // scanner on AVR reach the most queried configuration with short offsets.
     ClickableConfigFlags configFlags;
 
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -137,6 +140,18 @@ private:
 #else
     const uint8_t pinMask;                  //!< Mask of the clickable, for fast IO
     const volatile uint8_t *const pinPort;  //!< Port of the clickable, for fast IO
+
+    /**
+     * @brief Shared fast-I/O constructor fed by a fully resolved input binding.
+     *
+     * Keeping the binding-to-member transfer in one non-template constructor
+     * prevents the same setup boilerplate from being instantiated for every
+     * compile-time pin used by the public macros, while preserving a direct
+     * register read in `getState()` with no extra dispatch in the scan loop.
+     */
+    explicit Clickable(lsh::core::avr::FastInputPinBinding binding, uint8_t uniqueId) noexcept :
+        pinMask(binding.mask), pinPort(binding.pinPort), id(uniqueId)
+    {}
 #endif
     uint8_t index = UINT8_MAX;  //!< Clickable index on Clickables namespace Array, or `UINT8_MAX` until registration succeeds.
     const uint8_t id;           //!< Unique ID of the clickable (integer)
@@ -178,6 +193,17 @@ public:
      */
     explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(uint8_t pin, uint8_t uniqueId) noexcept : pinNumber(pin), id(uniqueId)
     {}
+
+    /**
+     * @brief Construct a clickable from a compile-time pin tag on the slow-I/O path.
+     *
+     * The tag keeps the configuration DSL uniform even when the build uses the
+     * portable Arduino input path.
+     */
+    template <uint8_t Pin>
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(lsh::core::PinTag<Pin>, uint8_t uniqueId) noexcept :
+        Clickable(static_cast<uint8_t>(Pin), uniqueId)
+    {}
 #else
     /**
      * @brief Construct a new Clickable object, fast IO version.
@@ -185,8 +211,18 @@ public:
      * @param pin pin number
      * @param uniqueId unique ID of the clickable.
      */
-    explicit Clickable(uint8_t pin, uint8_t uniqueId) noexcept :
-        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::inputRegisterForPin(pin)), id(uniqueId)
+    explicit Clickable(uint8_t pin, uint8_t uniqueId) noexcept : Clickable(lsh::core::avr::makeFastInputPinBinding(pin), uniqueId)
+    {}
+
+    /**
+     * @brief Construct a clickable from a compile-time pin tag on the fast-I/O path.
+     *
+     * On supported AVR targets the binding is resolved at compile time and then
+     * cached into the exact two fields used by the polling hot path.
+     */
+    template <uint8_t Pin>
+    explicit Clickable(lsh::core::PinTag<Pin>, uint8_t uniqueId) noexcept :
+        Clickable(lsh::core::avr::makeFastInputPinBinding(lsh::core::PinTag<Pin>{}), uniqueId)
     {}
 #endif
 
@@ -207,6 +243,9 @@ public:
     inline auto getState() const -> bool
     {
 #ifdef CONFIG_USE_FAST_CLICKABLES
+        // The hot scan path reads the cached register directly. This is the
+        // whole point of the fast-I/O variant: no Arduino helper and no
+        // extra indirection while polling buttons continuously.
         return (*this->pinPort & this->pinMask) != 0U;
 #else
         return (static_cast<bool>(digitalRead(this->pinNumber)));

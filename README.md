@@ -393,6 +393,13 @@ Declare an actuator using the `LSH_ACTUATOR` macro. IDs must be unique and great
 LSH_ACTUATOR(variable_name, PIN, UNIQUE_NUMERIC_ID);
 ```
 
+The `PIN` argument is expected to be a compile-time constant such as a board
+macro (`CONTROLLINO_R0`, `CONTROLLINO_A0`, ...) or a numeric literal. On
+supported AVR boards, `lsh-core` now routes these macro pins through a
+compile-time binding path so the final port/mask pair is resolved without
+touching the Arduino PROGMEM lookup tables in the translation unit that
+instantiates the device.
+
 #### Auto-Off Timer
 
 Set a relay to automatically turn off after a predefined time (in milliseconds).
@@ -416,6 +423,10 @@ Declare buttons using the `LSH_BUTTON` macro. IDs must be unique and greater tha
 ```cpp
 LSH_BUTTON(variable_name, PIN, UNIQUE_NUMERIC_ID);
 ```
+
+As with actuators, the `PIN` argument should be a compile-time constant so the
+fast-I/O backend can resolve the final AVR binding at compile time when the
+selected board is supported.
 
 #### Short Click
 
@@ -480,6 +491,8 @@ Declare an indicator light using the `LSH_INDICATOR` macro.
 ```cpp
 LSH_INDICATOR(variable_name, PIN);
 ```
+
+Indicators follow the same compile-time pin rule as actuators and clickables.
 
 Link one or more actuators to the indicator. Its behavior depends on the configured mode.
 
@@ -590,22 +603,32 @@ You can set these flags globally for all devices or on a per-device basis in you
 
 These flags replace standard `digitalRead()` and `digitalWrite()` calls with direct port manipulation for maximum speed. This is especially useful on AVR-based controllers like the ATmega2560, where it can dramatically reduce I/O latency.
 
+When the device is declared through the public `LSH_*` macros and the selected
+pin is a compile-time constant, the AVR fast-I/O path also resolves the final
+register binding at compile time on supported Mega/Controllino-class boards.
+The hot path still uses the same cached direct register access as before; only
+the setup-time lookup changes. Unsupported boards or pins fall back to the
+traditional Arduino table lookup path automatically.
+
 #### `CONFIG_USE_FAST_CLICKABLES`
 
 - **Description:** Optimizes the reading of input pins for buttons (`Clickable` objects).
 - **When to use:** Always recommended unless you are using a non-standard board or core where direct port manipulation might not be supported. The performance gain ensures that even very rapid button presses are never missed.
+- **Compile-time path:** With `LSH_BUTTON(...)` and a compile-time pin constant, supported AVR boards avoid the setup-time Arduino lookup tables entirely and still keep the polling path as one direct register read.
 - **Impact:** Faster input polling.
 
 #### `CONFIG_USE_FAST_ACTUATORS`
 
 - **Description:** Optimizes the writing to output pins for relays (`Actuator` objects).
 - **When to use:** Always recommended for performance-critical applications.
+- **Compile-time path:** With `LSH_ACTUATOR(...)` and a compile-time pin constant, supported AVR boards resolve the port binding at compile time while leaving the steady-state write path as a direct register update.
 - **Impact:** Faster relay switching.
 
 #### `CONFIG_USE_FAST_INDICATORS`
 
 - **Description:** Optimizes the writing to output pins for status LEDs (`Indicator` objects).
 - **When to use:** Always recommended.
+- **Compile-time path:** With `LSH_INDICATOR(...)` and a compile-time pin constant, supported AVR boards resolve the indicator binding at compile time and keep runtime LED updates on the direct port path.
 - **Impact:** Faster LED state changes.
 
 ### Timing Configuration

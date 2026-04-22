@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
+#include "internal/pin_tag.hpp"
 #include "internal/user_config_bridge.hpp"
 #ifdef CONFIG_USE_FAST_ACTUATORS
 #include "internal/avr_fast_io.hpp"
@@ -41,6 +42,35 @@ private:
 #else
     const uint8_t pinMask;            //!< Mask of the actuator, for fast IO
     volatile uint8_t *const pinPort;  //!< Port of the actuator, for fast IO
+
+    /**
+     * @brief Shared fast-I/O constructor fed by a fully resolved output binding.
+     *
+     * Both the runtime `uint8_t pin` path and the compile-time `PinTag` path
+     * collapse here, so the initialization sequence is emitted only once.
+     */
+    explicit Actuator(lsh::core::avr::FastOutputPinBinding binding, uint8_t uniqueId, bool normalState) noexcept :
+        pinMask(binding.mask), pinPort(binding.pinPort), defaultState(normalState), actualState(normalState), id(uniqueId)
+    {
+        // Keep the heavy init path in one non-template constructor so compile-time
+        // pins do not clone the whole setup sequence for every instantiation.
+        const uint8_t oldSREG = SREG;
+        cli();
+        *binding.modePort |= this->pinMask;
+        SREG = oldSREG;
+
+        // Apply the default state directly to the resolved AVR register so the
+        // fast path starts from the exact same electrical state as the classic
+        // `pinMode + digitalWrite` sequence, but without the Arduino helpers.
+        if (!normalState)
+        {
+            *this->pinPort &= ~this->pinMask;
+        }
+        else
+        {
+            *this->pinPort |= this->pinMask;
+        }
+    }
 #endif
     uint8_t index = UINT8_MAX;       //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
     const bool defaultState;         //!< Default state of the actuator (false=OFF, true=ON)
@@ -66,6 +96,17 @@ public:
         pinMode(pin, OUTPUT);                                  // PinMode to Output
         digitalWrite(pin, static_cast<uint8_t>(normalState));  // Set the default state
     }
+
+    /**
+     * @brief Construct an actuator from a compile-time pin tag on the slow-I/O path.
+     *
+     * The tag keeps the public macro surface uniform even when fast I/O is
+     * disabled or unavailable for the current build target.
+     */
+    template <uint8_t Pin>
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(lsh::core::PinTag<Pin>, uint8_t uniqueId, bool normalState = false) noexcept :
+        Actuator(static_cast<uint8_t>(Pin), uniqueId, normalState)
+    {}
 #else
     /**
      * @brief Construct a new Actuator object, fast IO version.
@@ -75,26 +116,20 @@ public:
      * @param normalState the default state of the actuator.
      */
     explicit Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept :
-        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::outputRegisterForPin(pin)), defaultState(normalState),
-        actualState(normalState), id(uniqueId)
-    {
-        // PinMode to OUTPUT
-        volatile uint8_t *const reg = lsh::core::avr::modeRegisterForPin(pin);
-        const uint8_t oldSREG = SREG;
-        cli();
-        *reg |= this->pinMask;
-        SREG = oldSREG;
+        Actuator(lsh::core::avr::makeFastOutputPinBinding(pin), uniqueId, normalState)
+    {}
 
-        // Set the default state
-        if (!normalState)
-        {
-            *this->pinPort &= ~this->pinMask;
-        }
-        else
-        {
-            *this->pinPort |= this->pinMask;
-        }
-    }
+    /**
+     * @brief Construct an actuator from a compile-time pin tag on the fast-I/O path.
+     *
+     * On supported AVR boards this resolves the port and mask without touching
+     * the Arduino PROGMEM lookup tables in the translation unit that instantiates
+     * the actuator.
+     */
+    template <uint8_t Pin>
+    explicit Actuator(lsh::core::PinTag<Pin>, uint8_t uniqueId, bool normalState = false) noexcept :
+        Actuator(lsh::core::avr::makeFastOutputPinBinding(lsh::core::PinTag<Pin>{}), uniqueId, normalState)
+    {}
 #endif
 
     /*  Workaround for https://stackoverflow.com/questions/28788353/clang-wweak-vtables-and-pure-abstract-class

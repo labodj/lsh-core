@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "internal/cpp_features.hpp"
+#include "internal/pin_tag.hpp"
 #include "internal/user_config_bridge.hpp"
 #ifdef CONFIG_USE_FAST_INDICATORS
 #include "internal/avr_fast_io.hpp"
@@ -47,6 +48,20 @@ private:
 #else
     const uint8_t pinMask;            //!< Mask of the indicator, for fast IO
     volatile uint8_t *const pinPort;  //!< Port of the indicator, for fast IO
+
+    /**
+     * @brief Shared fast-I/O constructor fed by a fully resolved output binding.
+     *
+     * Indicators keep only the mask and output register in the instance so the
+     * steady-state `setState()` path is a single direct register update.
+     */
+    explicit Indicator(lsh::core::avr::FastOutputPinBinding binding) noexcept : pinMask(binding.mask), pinPort(binding.pinPort)
+    {
+        const uint8_t oldSREG = SREG;
+        cli();
+        *binding.modePort |= this->pinMask;
+        SREG = oldSREG;
+    }
 #endif
     uint8_t index = UINT8_MAX;  //!< Indicator index on Indicators namespace Array, or `UINT8_MAX` until registration succeeds.
     constants::IndicatorMode mode = constants::IndicatorMode::ANY;  //!< Indicator mode
@@ -64,21 +79,33 @@ public:
     {
         pinMode(pin, OUTPUT);  // PinMode to Output
     }
+
+    /**
+     * @brief Construct an indicator from a compile-time pin tag on the slow-I/O path.
+     *
+     * This keeps the public DSL consistent across builds even when the target
+     * does not use the AVR fast-I/O backend.
+     */
+    template <uint8_t Pin>
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Indicator(lsh::core::PinTag<Pin>) noexcept : Indicator(static_cast<uint8_t>(Pin))
+    {}
 #else
     /**
      * @brief Construct a new Indicator object using fast I/O (direct port manipulation).
      * @param pin The Arduino pin number for the indicator.
      */
-    explicit Indicator(uint8_t pin) noexcept :
-        pinMask(lsh::core::avr::readPinBitMask(pin)), pinPort(lsh::core::avr::outputRegisterForPin(pin))
-    {
-        // PinMode to OUTPUT
-        volatile uint8_t *const reg = lsh::core::avr::modeRegisterForPin(pin);
-        const uint8_t oldSREG = SREG;
-        cli();
-        *reg |= this->pinMask;
-        SREG = oldSREG;
-    }
+    explicit Indicator(uint8_t pin) noexcept : Indicator(lsh::core::avr::makeFastOutputPinBinding(pin))
+    {}
+
+    /**
+     * @brief Construct an indicator from a compile-time pin tag on the fast-I/O path.
+     *
+     * The compile-time tag lets the AVR helper resolve the final registers once
+     * during construction, while `setState()` stays a plain direct port write.
+     */
+    template <uint8_t Pin>
+    explicit Indicator(lsh::core::PinTag<Pin>) noexcept : Indicator(lsh::core::avr::makeFastOutputPinBinding(lsh::core::PinTag<Pin>{}))
+    {}
 #endif
 
 #if LSH_USING_CPP17
