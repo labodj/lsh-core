@@ -7,6 +7,11 @@ on:
     tags: ["v*"]
 
   workflow_dispatch:
+    inputs:
+      checkout_ref:
+        description: "Optional git ref to publish instead of the triggering ref"
+        required: false
+        type: string
 
 # Grant GITHUB_TOKEN the necessary permissions to deploy to GitHub Pages
 permissions:
@@ -29,6 +34,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
           submodules: "recursive"
 
       - name: Install Graphviz
