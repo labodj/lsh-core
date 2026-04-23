@@ -181,7 +181,7 @@ void loop()
     // a valid frame already waiting in the UART could only refresh liveness on
     // the next loop iteration and a network-clickable press could spuriously
     // fall back to the local action on the timeout edge.
-    if (!BridgeSerial::isConnected() && CONFIG_COM_SERIAL->available())
+    if (CONFIG_COM_SERIAL->available() && !BridgeSerial::isConnected())
     {
         drainBridgeRx(1U, constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP);
     }
