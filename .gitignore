@@ -1,9 +1,28 @@
-.pio
-.pioenvs
-.piolibdeps
+.pio/
+.pioenvs/
+.piolibdeps/
+.build_cache/
+.static-analysis-temp/
+
 .clang_complete
 .gcc-flags.json
-.vscode
-docs/html
-docs/latex
+compile_commands.json
+
+.vscode/
+.idea/
+
+docs/html/
+docs/latex/
+htmlcov/
+
 __pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# The all-options TOML example is validated by generating into a temporary
+# directory in CI. Ignore local output if a developer runs it in place.
+examples/all-options-toml/generated/

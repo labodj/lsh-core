@@ -21,10 +21,8 @@
 #ifndef LSH_CORE_LSH_USER_MACROS_HPP
 #define LSH_CORE_LSH_USER_MACROS_HPP
 
-// This file provides the user-facing macros. It needs the definitions of the
-// classes it instantiates and the bridge to the user's configuration.
-// The public DSL still looks runtime-oriented, but each `pin` argument is
-// expected to be a compile-time constant so it can flow through `PinTag` and
+// This file provides the generated-profile object macros. Each `pin` argument
+// is expected to be a compile-time constant so it can flow through `PinTag` and
 // unlock the constexpr AVR mapping path when the target board supports it.
 
 #include "config/configurator.hpp"
@@ -36,24 +34,18 @@
 #include "util/debug/debug.hpp"
 
 /**
- * @brief Defines an Actuator with a compile-time check to ensure its ID is not 0.
+ * @brief Defines an Actuator object bound to one compile-time pin.
  * @param var_name The name of the variable to declare (e.g., rel0).
  * @param pin The hardware pin for the actuator.
- * @param id The unique numeric ID for the actuator. MUST be > 0.
  */
-#define LSH_ACTUATOR(var_name, pin, id)                                                           \
-    static_assert((id) > 0, "Actuator ID must be > 0. Please use positive IDs starting from 1."); \
-    Actuator var_name(::lsh::core::PinTag<(pin)>{}, (id))
+#define LSH_ACTUATOR(var_name, pin) Actuator var_name(::lsh::core::PinTag<(pin)>{})
 
 /**
- * @brief Defines a Clickable (Button) with a compile-time check to ensure its ID is not 0.
+ * @brief Defines a Clickable object bound to one compile-time pin.
  * @param var_name The name of the variable to declare (e.g., btn0).
  * @param pin The hardware pin for the clickable.
- * @param id The unique numeric ID for the clickable. MUST be > 0.
  */
-#define LSH_BUTTON(var_name, pin, id)                                                           \
-    static_assert((id) > 0, "Button ID must be > 0. Please use positive IDs starting from 1."); \
-    Clickable var_name(::lsh::core::PinTag<(pin)>{}, (id))
+#define LSH_BUTTON(var_name, pin) Clickable var_name(::lsh::core::PinTag<(pin)>{})
 
 /**
  * @brief Defines an IndicatorLight. Does not require an ID.

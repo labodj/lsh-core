@@ -29,6 +29,19 @@
 #ifdef CONFIG_USE_FAST_ACTUATORS
 #include "internal/avr_fast_io.hpp"
 #endif
+#include "util/constants/timing.hpp"
+
+#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && (LSH_EFFECTIVE_ACTUATOR_DEBOUNCE_TIME_MS != 0U || LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0)
+#define LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME 1
+#else
+#define LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME 0
+#endif
+
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME || (CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0)
+#define LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP 1
+#else
+#define LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP 0
+#endif
 
 /**
  * @brief Represents an actuator (relay) attached to a digital pin.
@@ -58,8 +71,8 @@ private:
      * Both the runtime `uint8_t pin` path and the compile-time `PinTag` path
      * collapse here, so the initialization sequence is emitted only once.
      */
-    explicit Actuator(lsh::core::avr::FastOutputPinBinding binding, uint8_t uniqueId, bool normalState) noexcept :
-        pinMask(binding.mask), pinPort(binding.pinPort), flags(initialFlags(normalState)), id(uniqueId)
+    explicit Actuator(lsh::core::avr::FastOutputPinBinding binding, bool normalState) noexcept :
+        pinMask(binding.mask), pinPort(binding.pinPort), flags(initialFlags(normalState))
     {
         // Keep the heavy init path in one non-template constructor so compile-time
         // pins do not clone the whole setup sequence for every instantiation.
@@ -83,22 +96,19 @@ private:
 #endif
     uint8_t index = UINT8_MAX;  //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
     uint8_t flags = 0U;         //!< Packed default/current/protection flags.
-#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     uint32_t lastTimeSwitched = 0U;  //!< Last time the actuator performed a switch
 #endif
-    uint8_t id;  //!< Unique ID of the actuator (numeric)
-
 public:
 #ifndef CONFIG_USE_FAST_ACTUATORS
     /**
      * @brief Construct a new Actuator object, conventional IO version.
      *
      * @param pin pin number
-     * @param uniqueId the actuator unique id.
      * @param normalState the default state of the actuator.
      */
-    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept :
-        pinNumber(pin), flags(initialFlags(normalState)), id(uniqueId)
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, bool normalState = false) noexcept :
+        pinNumber(pin), flags(initialFlags(normalState))
     {
         pinMode(pin, OUTPUT);                                  // PinMode to Output
         digitalWrite(pin, static_cast<uint8_t>(normalState));  // Set the default state
@@ -111,19 +121,17 @@ public:
      * disabled or unavailable for the current build target.
      */
     template <uint8_t Pin>
-    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(lsh::core::PinTag<Pin>, uint8_t uniqueId, bool normalState = false) noexcept :
-        Actuator(static_cast<uint8_t>(Pin), uniqueId, normalState)
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(lsh::core::PinTag<Pin>, bool normalState = false) noexcept :
+        Actuator(static_cast<uint8_t>(Pin), normalState)
     {}
 #else
     /**
      * @brief Construct a new Actuator object, fast IO version.
      *
      * @param pin pin number
-     * @param uniqueId the actuator unique id.
      * @param normalState the default state of the actuator.
      */
-    explicit Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept :
-        Actuator(lsh::core::avr::makeFastOutputPinBinding(pin), uniqueId, normalState)
+    explicit Actuator(uint8_t pin, bool normalState = false) noexcept : Actuator(lsh::core::avr::makeFastOutputPinBinding(pin), normalState)
     {}
 
     /**
@@ -134,8 +142,8 @@ public:
      * the actuator.
      */
     template <uint8_t Pin>
-    explicit Actuator(lsh::core::PinTag<Pin>, uint8_t uniqueId, bool normalState = false) noexcept :
-        Actuator(lsh::core::avr::makeFastOutputPinBinding(lsh::core::PinTag<Pin>{}), uniqueId, normalState)
+    explicit Actuator(lsh::core::PinTag<Pin>, bool normalState = false) noexcept :
+        Actuator(lsh::core::avr::makeFastOutputPinBinding(lsh::core::PinTag<Pin>{}), normalState)
     {}
 #endif
 
@@ -153,13 +161,12 @@ public:
     [[nodiscard]] auto setState(bool state) -> bool;  // Sets the new state of the actuator, respecting debounce time.
 
     void setIndex(uint8_t indexToSet);                     // Set the actuator index on Actuators namespace Array
-    auto setAutoOffTimer(uint32_t time_ms) -> Actuator &;  // Set "turn off" timer in ms. Call after the actuator has been registered.
+    auto setAutoOffTimer(uint32_t time_ms) -> Actuator &;  // Validate static "turn off" timer in ms after registration.
     auto setProtected(bool hasProtection)
         -> Actuator &;  // Set protection against global "turn-off" actions (e.g., a general super long click).
 
     // Getters
     [[nodiscard]] auto getIndex() const -> uint8_t;          // Get the actuator index on Actuators namespace Array
-    [[nodiscard]] auto getId() const -> uint8_t;             // Return unique ID of the actuator
     [[nodiscard]] auto getState() const -> bool;             // Returns the state of the actuator (false=OFF, true=ON)
     [[nodiscard]] auto getDefaultState() const -> bool;      // Returns the default state of the actuator
     [[nodiscard]] auto hasAutoOff() const -> bool;           // Returns if the actuators has a timer set

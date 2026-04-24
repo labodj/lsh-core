@@ -21,29 +21,14 @@
 #ifndef LSH_CORE_CONFIG_CONFIGURATOR_HPP
 #define LSH_CORE_CONFIG_CONFIGURATOR_HPP
 
-#include <stdint.h>
 #include "internal/user_config_bridge.hpp"
 
-// Forward declarations
-class Actuator;
-class Clickable;
-class Indicator;
-
 /**
- * @brief Device-configuration facade used by profile `configure()` functions.
+ * @brief Device-configuration facade backed by the generated static profile.
  */
 class Configurator
 {
 private:
-    // Setup helpers kept private so user profiles can use a compact DSL without exposing manager internals.
-    static void addActuator(Actuator *actuator);     // Helper to add an actuator, for leaner config.
-    static void addClickable(Clickable *clickable);  // Helper to add a clickable, for leaner config.
-    static void addIndicator(Indicator *indicator);  // Helper to add an indicator, for leaner config.
-
-    static auto getIndex(const Actuator &actuator) -> uint8_t;    // Helper to get an actuator index, for leaner config
-    static auto getIndex(const Clickable &clickable) -> uint8_t;  // Helper to get a clickable index, for leaner config
-    static auto getIndex(const Indicator &indicator) -> uint8_t;  // Helper to get a indicator index, for leaner config
-
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
     /**
      * @brief Disable the Controllino RTC chip select during device setup.
@@ -72,7 +57,7 @@ public:
     auto operator=(Configurator &&) -> Configurator & = delete;
 #endif  // (__cplusplus >= 201703L) && (__GNUC__ >= 7)
 
-    /** @brief User-defined device configuration hook implemented in the project source tree. */
+    /** @brief Generated device configuration hook emitted by the selected static profile. */
     static void configure();
     static void finalizeSetup();  // Final setup pass executed after configuration registration.
 };

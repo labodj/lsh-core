@@ -36,22 +36,6 @@ namespace Indicators
 void finalizeActuatorLinkStorage();
 }
 
-namespace lsh::core::detail
-{
-template <bool Use16Bit> struct IndicatorLinkOffsetType
-{
-    using Type = uint16_t;
-};
-
-template <> struct IndicatorLinkOffsetType<false>
-{
-    using Type = uint8_t;
-};
-}  // namespace lsh::core::detail
-
-static constexpr bool INDICATOR_LINK_OFFSETS_NEED_16_BITS = (CONFIG_INDICATOR_ACTUATOR_LINK_STORAGE_CAPACITY > UINT8_MAX);
-using IndicatorActuatorLinkOffset = typename lsh::core::detail::IndicatorLinkOffsetType<INDICATOR_LINK_OFFSETS_NEED_16_BITS>::Type;
-
 /**
  * @brief Represents a state indicator for one or more attached actuators, indicators are normally connected to a digital out.
  *
@@ -80,10 +64,7 @@ private:
     }
 #endif
     uint8_t index = UINT8_MAX;  //!< Indicator index on Indicators namespace Array, or `UINT8_MAX` until registration succeeds.
-    constants::IndicatorMode mode = constants::IndicatorMode::ANY;  //!< Indicator mode
-    IndicatorActuatorLinkOffset controlledActuatorsOffset = 0U;  //!< Offset of the first controlled actuator link inside the shared pool.
-    uint8_t controlledActuatorsCount = 0U;                       //!< Number of actuators attached to this indicator.
-    bool actualState = false;                                    //!< Actual state of the indicator
+    bool actualState = false;   //!< Actual state of the indicator
 
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
@@ -152,15 +133,12 @@ public:
 #endif
     }
     void setIndex(uint8_t indexToSet);                                    // Set the indicator index on Indicators namespace Array
-    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Adds one actuator link after indicator registration
-    auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &;  // Set indicator mode
+    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Kept for source compatibility; TOML links are static.
+    auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &;  // Kept for source compatibility; TOML mode is static.
     void check();                                                         // Perform the actual check
 
     [[nodiscard]] auto getIndex() const -> uint8_t;           // Get the indicator index on Indicators namespace Array
     [[nodiscard]] auto hasAttachedActuators() const -> bool;  // Return true when at least one actuator is attached to this indicator
-    void setControlledActuatorsOffset(IndicatorActuatorLinkOffset offsetToSet);  // Stores the compact shared-pool offset.
-    void shiftControlledActuatorsOffsetAfterInsertion(
-        uint16_t insertionIndex);  // Adjusts the compact slice offset after a setup-time pool insertion.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP

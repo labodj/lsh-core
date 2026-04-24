@@ -42,8 +42,7 @@ struct ReceiveResult
 };
 
 extern uint16_t sendIdleAge_ms;
-extern uint32_t lastReceivedPayloadTime_ms;
-extern bool firstValidPayloadReceived;
+extern uint16_t receiveIdleAge_ms;
 
 void init();                                                              // Initialize the hardware serial link used by the bridge.
 [[nodiscard]] auto sendJson(const JsonDocument &documentToSend) -> bool;  // Send one payload to the bridge using the active codec.

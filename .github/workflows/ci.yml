@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  validate-generated-artifacts:
+  static-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,22 +23,87 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python3 -m pip install --upgrade pip uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: ${{ runner.os }}-uv-
+
+      - name: Install Python tooling
+        run: uv sync --locked --only-group dev
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+          clang-format --version
+
+      - name: Check Python formatting, linting and types
+        run: |
+          uv run ruff format --check tools tests
+          uv run ruff check tools tests
+          uv run mypy
+          uv run pyrefly check
+
+      - name: Run Python tests
+        run: uv run pytest
+
+      - name: Check C++ formatting
+        run: |
+          set -eu
+          files=$(git ls-files \
+            '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' \
+            ':!:vendor/**' \
+            ':!:docs/**' \
+            ':!:src/communication/constants/protocol.hpp' \
+            ':!:src/communication/constants/static_payloads.hpp' \
+            | while IFS= read -r file; do
+                [ -f "$file" ] && printf '%s\n' "$file"
+              done)
+          clang-format --dry-run --Werror --style=file $files
+
       - name: Validate generated protocol artifacts
         run: |
-          python3 tools/update_lsh_protocol.py --check
-          python3 vendor/lsh-protocol/tools/generate_lsh_protocol.py \
+          uv run python tools/update_lsh_protocol.py --check
+          uv run python vendor/lsh-protocol/tools/generate_lsh_protocol.py \
             --target shared-doc \
             --shared-doc-root vendor/lsh-protocol \
             --check
 
+      - name: Validate static TOML generation
+        run: |
+          set -eu
+          uv run python tools/generate_lsh_static_config.py \
+            examples/multi-device-project/lsh_devices.toml \
+            --check
+
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf "$tmpdir"' EXIT
+          cp examples/all-options-toml/lsh_devices.toml "$tmpdir/lsh_devices.toml"
+          uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml"
+          uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml" --check
+          uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml" --list-devices
+          uv run python tools/generate_lsh_static_config.py \
+            "$tmpdir/lsh_devices.toml" \
+            --print-platformio-defines maximal_panel \
+            >/dev/null
+
   build-public-example:
-    needs: validate-generated-artifacts
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        env: ["J1_release", "J2_release"]
+        env: ["J1_release", "J1_debug", "J2_release", "J2_debug"]
 
     steps:
       - name: Checkout repository
@@ -50,6 +115,17 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-platformio-${{ hashFiles('examples/multi-device-project/platformio.ini', 'library.json') }}
+          restore-keys: ${{ runner.os }}-platformio-
 
       - name: Install PlatformIO
         run: python3 -m pip install --upgrade pip "platformio==6.1.19"
@@ -58,7 +134,7 @@ jobs:
         run: platformio run -d examples/multi-device-project -e "${{ matrix.env }}"
 
   release:
-    needs: [validate-generated-artifacts, build-public-example]
+    needs: [static-checks, build-public-example]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

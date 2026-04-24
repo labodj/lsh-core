@@ -38,7 +38,9 @@ static_assert(constants::timings::ACTUATOR_DEBOUNCE_TIME_MS == 0U,
  */
 auto Actuator::setState(bool state) -> bool
 {
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     using constants::timings::ACTUATOR_DEBOUNCE_TIME_MS;
+#endif
     const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
     // Apply new state only if it's different from the stored one
     if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
@@ -46,10 +48,12 @@ auto Actuator::setState(bool state) -> bool
         return false;
     }
 
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
     const uint32_t now = timeKeeper::getTime();
+#endif
 
     // Apply state if debounce is not active (elided at compile time) OR if it's active check if debounce time is elapsed
-#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
     {
         return false;
@@ -75,18 +79,16 @@ auto Actuator::setState(bool state) -> bool
     {
         this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_ACTUAL_STATE);
     }
-#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     this->lastTimeSwitched = now;
 #endif
-    if (this->index != UINT8_MAX)
-    {
-        // Keep the global packed shadow in sync so state serialization never
-        // has to walk the actuator array just to rebuild protocol bytes.
-        Actuators::updatePackedState(this->index, state);
-#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-        Actuators::recordSwitchTime(this->index, now);
+    // Keep the global packed shadow in sync so state serialization never has
+    // to walk the actuator array just to rebuild protocol bytes. Static
+    // profiles register every actuator before the runtime can switch it.
+    Actuators::updatePackedState(this->index, state);
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
+    Actuators::recordSwitchTime(this->index, now);
 #endif
-    }
     return true;
 }
 
@@ -101,9 +103,9 @@ void Actuator::setIndex(uint8_t indexToSet)
 }
 
 /**
- * @brief Set the turn-off timer after actuator registration.
+ * @brief Validate the generated turn-off timer after actuator registration.
  *
- * @param time_ms timer time in ms; zero disables the timer.
+ * @param time_ms timer time in ms; zero is valid only when the static profile has no timer.
  * @return Actuator& the object instance.
  */
 auto Actuator::setAutoOffTimer(uint32_t time_ms) -> Actuator &
@@ -139,16 +141,6 @@ auto Actuator::setProtected(bool hasProtection) -> Actuator &
 auto Actuator::getIndex() const -> uint8_t
 {
     return this->index;
-}
-
-/**
- * @brief Get the unique ID of the actuator.
- *
- * @return uint8_t unique ID of the actuator.
- */
-auto Actuator::getId() const -> uint8_t
-{
-    return this->id;
 }
 
 /**
@@ -225,7 +217,11 @@ auto Actuator::toggleState() -> bool
 auto Actuator::checkAutoOffTimer() -> bool
 {
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+#if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
     return Actuators::checkAutoOffTimer(this->index, this->getAutoOffTimer());
+#else
+    return false;
+#endif
 #else
     return this->checkAutoOffTimer(this->getAutoOffTimer());
 #endif
@@ -241,8 +237,13 @@ auto Actuator::checkAutoOffTimer() -> bool
 auto Actuator::checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool
 {
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+#if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
     return Actuators::checkAutoOffTimer(this->index, autoOffTimer_ms);
 #else
+    static_cast<void>(autoOffTimer_ms);
+    return false;
+#endif
+#elif LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U && autoOffTimer_ms != 0U)
     {
         if (timeKeeper::getTime() - this->lastTimeSwitched >= autoOffTimer_ms)
@@ -250,6 +251,9 @@ auto Actuator::checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool
             return this->setState(false);
         }
     }
+    return false;
+#else
+    static_cast<void>(autoOffTimer_ms);
     return false;
 #endif
 }

@@ -30,7 +30,6 @@ using namespace Debug;
 
 namespace Indicators
 {
-uint8_t totalIndicators = 0U;                                 //!< Device real total indicators
 etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators{};  //!< Device indicators
 
 namespace
@@ -68,11 +67,11 @@ void failNonCompactIndicatorStorage()
  * is exceeded, the device will reset to prevent undefined behavior.
  *
  * @param indicator A pointer to the Indicator object to add.
+ * @param indicatorIndex Dense runtime index of the indicator.
  */
-void addIndicator(Indicator *const indicator)
+void addIndicator(Indicator *const indicator, uint8_t indicatorIndex)
 {
-    const uint8_t currentIndex = totalIndicators;
-    if (currentIndex >= CONFIG_MAX_INDICATORS)
+    if (indicatorIndex >= CONFIG_MAX_INDICATORS || indicators[indicatorIndex] != nullptr)
     {
         using namespace constants::wrongConfigStrings;
         NDSB();  // Begin serial if not in debug mode
@@ -84,9 +83,8 @@ void addIndicator(Indicator *const indicator)
         delay(10000UL);
         deviceReset();
     }
-    indicator->setIndex(currentIndex);  // Store current index inside the object, it can be useful
-    indicators[currentIndex] = indicator;
-    totalIndicators++;
+    indicator->setIndex(indicatorIndex);  // Store current index inside the object, it can be useful
+    indicators[indicatorIndex] = indicator;
 }
 
 /**
@@ -95,7 +93,7 @@ void addIndicator(Indicator *const indicator)
  */
 void indicatorsCheck()
 {
-    for (uint8_t i = 0U; i < totalIndicators; ++i)
+    for (uint8_t i = 0U; i < CONFIG_MAX_INDICATORS; ++i)
     {
         indicators[i]->check();
     }
@@ -114,7 +112,7 @@ void finalizeSetup()
     DP_CONTEXT();
     finalizeActuatorLinkStorage();
 
-    for (uint8_t indicatorIndex = 0U; indicatorIndex < totalIndicators; ++indicatorIndex)
+    for (uint8_t indicatorIndex = 0U; indicatorIndex < CONFIG_MAX_INDICATORS; ++indicatorIndex)
     {
         auto *const indicator = indicators[indicatorIndex];
         if (indicator == nullptr || indicator->getIndex() != indicatorIndex)
@@ -124,13 +122,6 @@ void finalizeSetup()
         if (!indicator->hasAttachedActuators())
         {
             failIndicatorWithoutActuators();
-        }
-    }
-    for (uint8_t indicatorIndex = totalIndicators; indicatorIndex < CONFIG_MAX_INDICATORS; ++indicatorIndex)
-    {
-        if (indicators[indicatorIndex] != nullptr)
-        {
-            failNonCompactIndicatorStorage();
         }
     }
 }

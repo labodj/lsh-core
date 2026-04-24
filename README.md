@@ -91,8 +91,8 @@ the shared contract that keeps the payload model aligned.
 The serial contract between `lsh-core` and `lsh-bridge` is intentionally strict:
 
 - The device topology is built during `Configurator::configure()` and is considered static until the next controller reboot.
-- `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define **maximum accepted capacity**, not the real cardinality of the configured device.
-- The real runtime counts are determined by how many times `addActuator()`, `addClickable()`, and `addIndicator()` are actually called.
+- Generated `LSH_STATIC_CONFIG_ACTUATORS`, `LSH_STATIC_CONFIG_CLICKABLES`, and `LSH_STATIC_CONFIG_INDICATORS` define the exact static capacity of the selected device.
+- The runtime counts are produced by the generated registration pass and must match those static capacities before the controller enters the main loop.
 - `lsh-core` sends a `BOOT` payload at startup. That payload invalidates any cached bridge-side model and forces a fresh `details + state` re-sync.
 - A topology change is only supported through reflashing + reboot. Hot runtime topology changes are out of scope by design.
 - The LSH protocol assumes a trusted environment: there is no built-in authentication or hardening against hostile peers on the serial link or MQTT path.
@@ -192,105 +192,78 @@ This is why the bridge and orchestration layers are treated as additive rather t
    ```text
    LSH-User-Project/
    ├── platformio.ini
+   ├── lsh_devices.toml          # Human-authored device topology
    ├── include/
-   │   ├── lsh_user_config.hpp    # The "router" for your configurations
+   │   ├── lsh_user_config.hpp    # Generated router header
    │   └── lsh_configs/
-   │       └── ... (your device header files go here)
+   │       └── ... generated device headers
    └── src/
-       ├── main.cpp
-       └── configs/
-           └── ... (your device logic files go here)
+       └── main.cpp
    ```
 
 ### Core Configuration Concepts
 
-All device-specific logic is defined in the `Configurator::configure()` function within your `src/configs/your_device.cpp` file. The LSH library provides a set of helper functions within the `Configurator` class to make this process clean and readable.
+Device-specific topology is described in `lsh_devices.toml`. The pre-build
+generator validates that file and emits the static C++ profile consumed by
+`Configurator::configure()`.
+
+The generated profile calls the same low-level registration API that older
+hand-written profiles used, but most users never touch those calls directly:
 
 - `addActuator(Actuator* actuator)`: Registers an actuator with the system.
 - `addClickable(Clickable* clickable)`: Registers a clickable with the system.
 - `addIndicator(Indicator* indicator)`: Registers an indicator with the system.
-- `getIndex(const Actuator& actuator)`: A crucial helper that returns the unique internal index of a registered actuator. You **must** use this function when connecting an actuator to a button or indicator, as shown below:
+- `getIndex(const Actuator& actuator)`: Resolves the dense runtime actuator index used by generated links.
 
-Important capacity rule:
+Keep the TOML as the source of truth and regenerate the headers. The generated
+profile owns registration order, dense indexes, resource counts and lookup
+accessors.
 
-- `LSH_MAX_*` macros size the fixed-capacity containers used by the firmware.
-- The real number of registered devices can be lower than the declared maximum.
-- For best RAM/code efficiency you will often set the maximum equal to the real count, but this is an optimization choice, not a functional requirement.
+Generated capacity rule:
 
-Optional bounded-ID lookup optimization:
+- The generator emits exact `LSH_STATIC_CONFIG_*` resource macros for the selected profile.
+- `src/internal/user_config_bridge.hpp` imports those macros and exposes internal `CONFIG_*` `constexpr` values for allocation code.
+- Fixed-capacity containers are therefore sized from the real topology, not from hand-maintained worst-case numbers.
+- Zero-count resources are still represented with one physical ETL slot where ETL requires a strictly positive array capacity; the logical count remains zero and the extra slot is never used.
 
-- By default, `lsh-core` keeps actuator and clickable ID lookups in `etl::map`.
-- If your IDs are numeric and stay inside a small, dense range, you can enable fixed O(1) lookup tables by also defining:
-  - `LSH_MAX_ACTUATOR_ID`
-  - `LSH_MAX_CLICKABLE_ID`
-- If your IDs are strictly dense (`1..LSH_MAX_ACTUATORS` and `1..LSH_MAX_CLICKABLES` with no gaps), you can use the shorter opt-in flags instead:
-  - `LSH_ASSUME_DENSE_ACTUATOR_IDS`
-  - `LSH_ASSUME_DENSE_CLICKABLE_IDS`
-- When these macros are present, `lsh-core` stores `index + 1` in a fixed ETL array sized to the declared maximum ID (`0` still means "missing").
-- `LSH_MAX_*_ID` takes precedence over `LSH_ASSUME_DENSE_*_IDS`, so explicit max-ID declarations always win when both are present.
-- This stays fully static and heap-free, but it is only RAM-efficient when the maximum ID is reasonably close to the real IDs you use. Sparse ID ranges should keep the default `etl::map`.
+Generated ID lookup:
 
-Optional compact actuator-link pools:
+- Public actuator and clickable IDs may be sparse as long as they stay in `1..255`.
+- The generator emits branch/range accessors for `id -> dense index` and `dense index -> id`; no user-authored lookup tables are needed.
+- The highest accepted ID is generated as `LSH_STATIC_CONFIG_MAX_ACTUATOR_ID` and `LSH_STATIC_CONFIG_MAX_CLICKABLE_ID`.
 
-- By default, `lsh-core` reserves the worst-case link capacity for local logic:
-  - every clickable short-click list can grow up to `LSH_MAX_ACTUATORS`
-  - every clickable long-click list can grow up to `LSH_MAX_ACTUATORS`
-  - every clickable super-long-click list can grow up to `LSH_MAX_ACTUATORS`
-  - every indicator list can grow up to `LSH_MAX_ACTUATORS`
-- If your real configuration uses far fewer links, you can reduce RAM by defining the actual total number of link entries used by the whole device:
-  - `LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS`
-  - `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`
-  - `LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS`
-  - `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
-- These values count real link entries, not devices. For example, one button with three long-click actuators contributes `3` to `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`.
-- Count exactly what the configuration code appends:
-  - every `addActuatorShort(...)` contributes `1` to `LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS`
-  - every `addActuatorLong(...)` contributes `1` to `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`
-  - every `addActuatorSuperLong(...)` contributes `1` to `LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS`
-  - every `Indicator::addActuator(...)` contributes `1` to `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
-- Duplicate local links are rejected during setup. If one click type points to the same actuator twice, the profile is treated as a configuration error instead of letting one action cancel itself out.
-- Links may be appended in any configuration order. During setup, `lsh-core` inserts each link into the owning compact slice and shifts later slices when needed; the runtime still pays only `offset + count` metadata and one actuator-index byte per link.
-- Network-only clicks do not contribute local link entries by themselves. If a `setClickableLong(..., true, ...)` or `setClickableSuperLong(..., true, ...)` has no matching local `addActuatorLong(...)` or `addActuatorSuperLong(...)`, the local pool count for that click type stays unchanged.
-- The storage stays static and heap-free. If you undersize one of these totals, setup aborts with a clear wrong-config reset to protect the compact pools from invalid writes.
-- On AVR, omitting these macros now emits compile-time warnings because the compatibility fallback reserves the full worst-case `devices × actuators` budget in `.bss`.
-- For final AVR builds you will usually want to define the real totals explicitly. The fallback is practical during early bring-up, but it is rarely the RAM-optimal end state.
-- The bundled examples show both sides:
-  - `J1` uses compact pools and disables network clicks completely
-  - `J2` uses compact pools but keeps network clicks enabled
+Generated actuator-link pools:
 
-Optional runtime pools:
+- Short, long, super-long and indicator link totals are counted from the TOML.
+- Duplicate local targets inside one action are rejected by the generator.
+- Network-only clicks do not consume local link entries unless they also list local fallback targets.
+- Runtime storage stays static and heap-free; generated compile-time checks reject counts outside the supported AVR-friendly field widths.
 
-- `LSH_MAX_CLICKABLE_TIMING_OVERRIDES` defines how many clickables may override the global long/super-long timing with `setLongClickTime(...)` or `setSuperLongClickTime(...)`. If omitted, each clickable keeps its own timing fields for compatibility. If defined, only clickables that actually override timings consume pool entries.
-- `LSH_MAX_AUTO_OFF_ACTUATORS` defines how many actuators may have a non-zero `setAutoOffTimer(...)`. If omitted, the pool defaults to `LSH_MAX_ACTUATORS`.
-- `LSH_COMPACT_ACTUATOR_SWITCH_TIMES` removes the per-`Actuator` 32-bit switch timestamp and keeps the auto-off timestamp only in the auto-off pool. This is RAM-positive when only a minority of actuators use auto-off, but it requires `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0` so debounce semantics remain exact. Keep it disabled for profiles where most relays have auto-off timers or actuator debounce is required.
-- `LSH_MAX_ACTIVE_NETWORK_CLICKS` defines the number of concurrent pending network-click transactions. If omitted, the compatibility default reserves up to `2 × LSH_MAX_CLICKABLES` slots, clamped to `255` because the active counter is byte-sized on AVR. A single held button with both long and super-long network clicks enabled needs `2` slots: the long request is emitted first, then the super-long request is emitted while the button is still held.
-- These values have compile-time range checks. Runtime setup also verifies that a single clickable cannot require more simultaneous network-click slots than the configured pool provides.
+Generated runtime pools:
+
+- Per-click timing overrides are counted from `long.time` and `super_long.time`.
+- Auto-off pool size is counted from actuators with non-zero `auto_off`.
+- Active network-click capacity is counted from configured network actions; one held button with both long and super-long network clicks needs two active transactions.
+- `LSH_COMPACT_ACTUATOR_SWITCH_TIMES` remains a user-facing optimization define. It removes the per-`Actuator` 32-bit switch timestamp and keeps timestamps only for auto-off actuators. It requires `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0` so debounce semantics remain exact.
 
 Optional network-click exclusion:
 
-- If a device never uses network clicks, define `LSH_DISABLE_NETWORK_CLICKS`.
-- This removes the network-click runtime state from the firmware instead of keeping dead arrays and timeout logic around.
-- A device is a good candidate for this macro when no call to `setClickableLong(...)` or `setClickableSuperLong(...)` passes `networkClickable = true`.
-- If a clickable is still marked as network-clickable while the feature is disabled, the runtime treats the network path as unavailable:
-  - local fallback still runs when configured
-  - otherwise the network-only action is skipped
+- If a device never uses `network = true`, the generator emits a static profile with the network-click runtime compiled out.
+- `LSH_NETWORK_CLICKS = false` in TOML rejects network-click actions for that profile at generation time.
+- `LSH_NETWORK_CLICKS = true` can force the runtime path on for experiments, but normal profiles should let the generator derive it.
 
-Important registration-order rule:
+Generated validation rule:
 
-- Register every `Clickable` with `addClickable(...)` before calling any `addActuatorShort(...)`, `addActuatorLong(...)`, or `addActuatorSuperLong(...)` on it.
-- Register every `Actuator` with `addActuator(...)` before calling `setAutoOffTimer(...)` or using `getIndex(actuator)` anywhere else.
-- Register every `Indicator` with `addIndicator(...)` before calling `Indicator::addActuator(...)`.
-- The compact pools store links using the dense runtime index assigned at registration time. Wrong object registration order is treated as a setup error, but link append order is free.
-- The manager arrays are expected to stay compact: registered objects occupy indexes `0..total-1`, their internal index must match the array position, and no stale pointer may exist after `total`. `finalizeSetup()` validates this before the runtime starts.
-- Duplicate local links are rejected during setup. Duplicated links are almost always a configuration bug and can produce confusing behavior such as one short click toggling the same relay twice.
-- Every indicator must control at least one actuator. An empty indicator configuration is treated as a setup error.
+- The generator registers actuators, clickables and indicators in a deterministic order.
+- It rejects missing references, duplicated targets, empty indicators, disabled actions with active options and unsupported path/identifier expressions before compilation.
+- `Configurator::finalizeSetup()` still validates compact manager invariants before runtime starts.
 
 Controllino setup helpers:
 
 - On Controllino Maxi / Maxi Automation / Mega profiles, `Configurator::configure()` can call `disableRtc()` and `disableEth()`.
 - `disableRtc()` forces the onboard RTC chip select inactive when the AVR profile does not use the RTC.
 - `disableEth()` forces the Ethernet controller chip select inactive when Ethernet is not owned by the AVR firmware.
-- These helpers are intentionally board-specific and available from inside `Configurator::configure()`, where the rest of the hardware profile is declared.
+- TOML fields `disable_rtc = true` and `disable_eth = true` emit these calls for the selected static profile.
 
 Compile-time constants layout:
 
@@ -306,259 +279,166 @@ Optional receive-path fairness guard:
 - The defaults let one normal bridge burst make progress without allowing serial noise to monopolize the hot loop.
 - Increase them only after measuring the real hardware tradeoff between bridge throughput and local button latency.
 
-```cpp
-// GOOD: Connects the button to the actuator using its safe index.
-btn0.addActuatorShort(getIndex(rel0));
-
-// BAD: This will not compile. You cannot pass the object directly.
-// btn0.addActuatorShort(&rel0);
-```
-
 ### 2. How to Add a New Device (e.g., "LivingRoom")
 
-**Step 1: Create the Device Header (`.hpp`)**
-Create `include/lsh_configs/living_room_config.hpp`. This file defines the hardware and build constants for this specific device.
+**Step 1: Let the Generator Own the Headers**
 
-```cpp
-#ifndef LIVING_ROOM_CONFIG_HPP
-#define LIVING_ROOM_CONFIG_HPP
+Do not write `include/lsh_user_config.hpp`, `include/lsh_configs/*_config.hpp`
+or resource-count macros by hand for new devices. The TOML generator creates
+those files and derives exact counts from the real topology, including sparse
+IDs, link totals, network-click pool size, auto-off timers and timing overrides.
 
-// 1. Define the hardware library to include for this device.
-#define LSH_HARDWARE_INCLUDE <Controllino.h>
+**Step 2: Describe the Device in TOML**
 
-// 2. Define the build constants required by the LSH library.
-#define LSH_DEVICE_NAME "LivingRoom"
-#define LSH_MAX_CLICKABLES 8
-#define LSH_MAX_ACTUATORS 6
-#define LSH_MAX_INDICATORS 2
-#define LSH_MAX_CLICKABLE_ID 8
-#define LSH_MAX_ACTUATOR_ID 6
-#define LSH_MAX_SHORT_CLICK_ACTUATOR_LINKS 8
-#define LSH_MAX_LONG_CLICK_ACTUATOR_LINKS 4
-#define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 2
-#define LSH_MAX_INDICATOR_ACTUATOR_LINKS 3
-#define LSH_COM_SERIAL &Serial1
-#define LSH_DEBUG_SERIAL &Serial
+Create `lsh_devices.toml` in your consumer project. Users configure names,
+public IDs, pins and click behavior; the generator emits the C++ objects,
+resource counts and lookup accessors.
 
-#endif
+```toml
+[generator]
+output_dir = "include"
+config_dir = "lsh_configs"
+user_config_header = "lsh_user_config.hpp"
+
+[common]
+hardware_include = "Controllino.h"
+debug_serial = "Serial"
+com_serial = "Serial2"
+
+[devices.living_room]
+name = "LivingRoom"
+
+[[devices.living_room.actuators]]
+name = "mainLight"
+id = 1
+pin = "CONTROLLINO_R0"
+
+[[devices.living_room.clickables]]
+name = "wallSwitch"
+id = 1
+pin = "CONTROLLINO_A0"
+short = ["mainLight"]
 ```
 
-If that device used dense IDs (`1..8` for clickables and `1..6` for actuators), the same optimization could be enabled with the shorter form:
+**Step 3: Add the Generator to the Build System**
 
-```cpp
-#define LSH_ASSUME_DENSE_CLICKABLE_IDS 1
-#define LSH_ASSUME_DENSE_ACTUATOR_IDS 1
-```
-
-If that device had no network-click logic at all, it could also opt out completely:
-
-```cpp
-#define LSH_DISABLE_NETWORK_CLICKS 1
-```
-
-Those link totals are not guessed. They are meant to be derived from the real configuration source file that belongs to the same profile.
-
-**Step 2: Create the Device Logic File (`.cpp`)**
-Create `src/configs/living_room_config.cpp`. This is where you define your objects (relays, buttons) and their behavior.
-
-```cpp
-#include <lsh.hpp>  // Gives access to LSH_ACTUATOR, etc.
-
-// Define all your device objects in an anonymous namespace to prevent name clashes.
-namespace {
-    LSH_ACTUATOR(mainLight, CONTROLLINO_R0, 1);
-    LSH_BUTTON(wallSwitch, CONTROLLINO_A0, 1);
-}
-
-// Implement the configuration logic for this device.
-void Configurator::configure() {
-    addActuator(&mainLight);
-    addClickable(&wallSwitch);
-    wallSwitch.addActuatorShort(getIndex(mainLight));
-}
-```
-
-**Step 3: Add the Device to the Build System**
-First, tell the "router" header about your new device.
-In `include/lsh_user_config.hpp`:
-
-```cpp
-#if defined(LSH_BUILD_LIVING_ROOM)
-#include "lsh_configs/living_room_config.hpp"
-#endif
-```
-
-Next, create the build environments in `platformio.ini`.
+Create the build environments in `platformio.ini`. The pre-build hook validates
+the TOML, writes `include/lsh_user_config.hpp`, generates the selected static
+profile and adds the correct `LSH_BUILD_*` macro.
 
 ```ini
-[device_LivingRoom]
-device_feature_flags =
-    -D CONFIG_MSG_PACK
+[common_base]
+extra_scripts = pre:path/to/lsh-core/tools/platformio_lsh_static_config.py
+custom_lsh_config = lsh_devices.toml
+build_src_filter = +<*> -<configs/>
 
 [env:LivingRoom_release]
 extends = common_release
-build_src_filter = ${common_base.build_src_filter} +<configs/living_room_config.cpp>
+custom_lsh_device = living_room
+build_src_filter = ${common_base.build_src_filter}
 build_flags =
     ${common_release.build_flags}
     ${common_base.default_feature_flags}
-    ${device_LivingRoom.device_feature_flags}
-    -D LSH_BUILD_LIVING_ROOM
 ```
 
 ## Configuring Device Behavior
 
-All your logic is written inside the `Configurator::configure()` function in your device's `.cpp` file.
+The current public configuration surface is TOML. New profiles should follow
+[docs/static-toml-config.md](docs/static-toml-config.md); the build generates
+the static C++ profile from that file and keeps dense indexes, resource counts
+and lookup accessors out of user-authored code.
+
+The bundled [examples/all-options-toml](examples/all-options-toml) catalog shows
+every accepted TOML option and is validated by CI. Use it as a syntax reference;
+use [examples/multi-device-project](examples/multi-device-project) as the
+buildable starting point.
+
+The sections below use the public TOML format. Generated C++ remains an
+implementation detail.
 
 ### Actuators (Relays)
 
-Declare an actuator using the `LSH_ACTUATOR` macro. IDs must be unique and greater than 0.
+Declare an actuator in TOML. IDs must be unique in the device and stay in the
+wire range `1..255`.
 
-```cpp
-LSH_ACTUATOR(variable_name, PIN, UNIQUE_NUMERIC_ID);
+```toml
+[[devices.living_room.actuators]]
+name = "main_light"
+id = 1
+pin = "CONTROLLINO_R0"
+default_state = false
+protected = false
+auto_off = "10m"
 ```
 
-The `PIN` argument is expected to be a compile-time constant such as a board
-macro (`CONTROLLINO_R0`, `CONTROLLINO_A0`, ...) or a numeric literal. On
-supported AVR boards, `lsh-core` now routes these macro pins through a
-compile-time binding path so the final port/mask pair is resolved without
-touching the Arduino PROGMEM lookup tables in the translation unit that
-instantiates the device.
+The `pin` value must be a compile-time Arduino expression such as a board macro
+(`CONTROLLINO_R0`, `CONTROLLINO_A0`, ...) or a numeric literal. On supported AVR
+boards, the generator lets `lsh-core` resolve the final port/mask binding at
+compile time while keeping the hot write path on direct register access.
 
-#### Auto-Off Timer
-
-Set a relay to automatically turn off after a predefined time (in milliseconds).
-
-```cpp
-rel0.setAutoOffTimer(600000);  // 10-minute timer
-```
-
-#### Protection
-
-Protect a relay from being turned off by a global "all off" command (like a super-long click).
-
-```cpp
-rel0.setProtected(true);
-```
+`auto_off` accepts durations such as `"900ms"`, `"30s"`, `"10m"` or `"1h"`.
+`protected = true` excludes that relay from global all-off super-long actions.
 
 ### Clickables (Buttons)
 
-Declare buttons using the `LSH_BUTTON` macro. IDs must be unique and greater than 0.
+Declare inputs in TOML and reference actuators by name. The generator resolves
+those names into dense indexes and exact link pools before compilation.
 
-```cpp
-LSH_BUTTON(variable_name, PIN, UNIQUE_NUMERIC_ID);
+```toml
+[[devices.living_room.clickables]]
+name = "wall_switch"
+id = 1
+pin = "CONTROLLINO_A0"
+short = ["main_light"]
+long = { targets = ["main_light"], type = "on_only", time = "900ms" }
+super_long = { type = "selective", targets = ["main_light"] }
 ```
 
-As with actuators, the `PIN` argument should be a compile-time constant so the
-fast-I/O backend can resolve the final AVR binding at compile time when the
-selected board is supported.
-
-#### Short Click
-
-A brief press of the button. It toggles the state of all associated relays. This is the default behavior.
-
-```cpp
-// This makes the button toggle rel0 on short click.
-btn0.addActuatorShort(getIndex(rel0));
-```
-
-You can disable this behavior:
-
-```cpp
-btn0.setClickableShort(false);
-```
-
-#### Long Click
-
-A press held longer than a short click.
-
-```cpp
-// Chain methods to add multiple relays to the long click action.
-btn0.addActuatorLong(getIndex(rel1))
-    .addActuatorLong(getIndex(rel2));
-
-// Configure the long click behavior
-btn0.setClickableLong(true, LongClickType::NORMAL);   // Default: turns ON if most are OFF, else turns OFF.
-btn0.setClickableLong(true, LongClickType::ON_ONLY);  // Always turns relays ON.
-btn0.setClickableLong(true, LongClickType::OFF_ONLY); // Always turns relays OFF.
-```
-
-#### Super-Long Click
-
-A press held even longer.
-
-```cpp
-// By default, turns off ALL unprotected relays on the device.
-btn0.setClickableSuperLong(true);
-
-// Or, make it turn off only a specific list of relays.
-btn0.addActuatorSuperLong(getIndex(rel0))
-    .addActuatorSuperLong(getIndex(rel1));
-btn0.setClickableSuperLong(true, SuperLongClickType::SELECTIVE);
-```
-
-#### Network Clicks
-
-Long and super-long clicks can be forwarded over the network. You must specify a fallback behavior in case of network failure.
-
-```cpp
-// If the network fails, execute the long click action locally.
-btn0.setClickableLong(true, LongClickType::ON_ONLY, true, NoNetworkClickType::LOCAL_FALLBACK);
-
-// If the network fails, do nothing.
-btn1.setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
-```
+Short clicks toggle their local targets. Long clicks support `normal`,
+`on_only`/`on-only` and `off_only`/`off-only`. Super-long clicks support
+`normal` global all-off behavior or `selective` target lists. Both long and
+super-long actions can set `network = true` and choose a fallback policy.
 
 ### Indicators (LEDs)
 
-Declare an indicator light using the `LSH_INDICATOR` macro.
+Declare an indicator and the actuators it watches:
 
-```cpp
-LSH_INDICATOR(variable_name, PIN);
+```toml
+[[devices.living_room.indicators]]
+name = "main_light_led"
+pin = "CONTROLLINO_D0"
+actuators = ["main_light"]
+mode = "any"
 ```
 
-Indicators follow the same compile-time pin rule as actuators and clickables.
-
-Link one or more actuators to the indicator. Its behavior depends on the configured mode.
-
-```cpp
-// Link the indicator to two relays
-statusLED.addActuator(getIndex(rel0));
-statusLED.addActuator(getIndex(rel1));
-
-// Configure the operating mode
-statusLED.setMode(constants::IndicatorMode::ANY);      // Default: LED is ON if ANY linked relay is ON.
-statusLED.setMode(constants::IndicatorMode::ALL);      // LED is ON only if ALL linked relays are ON.
-statusLED.setMode(constants::IndicatorMode::MAJORITY); // LED is ON if more than half of the linked relays are ON.
-```
+`mode` can be `any`, `all` or `majority`.
 
 ### Network Clicks and Fallback Logic
 
 A key feature of LSH is its ability to operate reliably both online and offline. Long clicks and super-long clicks can be configured to send a request over the network to `lsh-bridge` and `lsh-logic` for complex, multi-device automations. However, you must define what should happen if the network is unavailable. This is called **fallback logic**.
 
-To enable a network click, set the third parameter of `setClickableLong()` or `setClickableSuperLong()` to `true`. The fourth parameter specifies the fallback behavior.
+To enable a network click, set `network = true` on the TOML `long` or
+`super_long` action. The `fallback` field specifies what happens if the network
+path is unavailable.
 
-If the same button has both long and super-long network clicks enabled, `lsh-core` preserves the natural sequence for a held press: the long network click is requested first, then the super-long network click is requested while the button remains pressed. Size `LSH_MAX_ACTIVE_NETWORK_CLICKS` accordingly; that single button needs two active slots.
+If the same button has both long and super-long network clicks enabled, `lsh-core` preserves the natural sequence for a held press: the long network click is requested first, then the super-long network click is requested while the button remains pressed. The generator accounts for that single button as two active network-click slots.
 
 #### Fallback Types
 
 You can choose between two different fallback types:
 
-1. **`NoNetworkClickType::LOCAL_FALLBACK` (Default)**
-   If a network problem occurs, the click is treated as a standard, local-only action. The actuators defined with `addActuatorLong()` or `addActuatorSuperLong()` for that button will be triggered on the device itself. This ensures the button always does _something_.
+1. **`local` / `local_fallback` (Default)**
+   If a network problem occurs, the click is treated as a standard, local-only action. The actuators listed in the same action's `targets` field will be triggered on the device itself. This ensures the button always does _something_.
 
-   ```cpp
-   // This long click is a network action.
-   // If the network is down, it will fall back to its local long-click logic.
-   btn0.setClickableLong(true, LongClickType::ON_ONLY, true, NoNetworkClickType::LOCAL_FALLBACK);
+   ```toml
+   long = { network = true, fallback = "local", targets = ["main_light"], type = "on_only" }
    ```
 
-2. **`NoNetworkClickType::DO_NOTHING`**
+2. **`do_nothing` / `do-nothing`**
    If a network problem occurs, the click is simply ignored. This is useful for actions that only make sense in a network context (e.g., "All Lights Off" across the entire house).
 
-   ```cpp
-   // This super-long click is a network-only action.
-   // If the network is down, pressing the button will have no effect.
-   btn1.setClickableSuperLong(true, SuperLongClickType::NORMAL, true, NoNetworkClickType::DO_NOTHING);
+   ```toml
+   super_long = { network = true, fallback = "do_nothing" }
    ```
 
 #### The Network Communication Flow
@@ -613,7 +493,9 @@ This robust system ensures that the user gets immediate feedback and predictable
 
 LSH-Core can be fine-tuned at compile-time using feature flags. These flags allow you to enable or disable specific functionalities to optimize for performance, memory usage, or specific hardware capabilities.
 
-You can set these flags globally for all devices or on a per-device basis in your `platformio.ini` file.
+For TOML-backed profiles, put per-device flags in `[devices.<name>.defines]`.
+PlatformIO-only global defaults can still live in `platformio.ini` when they are
+intentionally shared by every environment.
 
 ### Communication Protocol
 
@@ -640,21 +522,21 @@ traditional Arduino table lookup path automatically.
 
 - **Description:** Optimizes the reading of input pins for buttons (`Clickable` objects).
 - **When to use:** Always recommended unless you are using a non-standard board or core where direct port manipulation might not be supported. The performance gain ensures that even very rapid button presses are never missed.
-- **Compile-time path:** With `LSH_BUTTON(...)` and a compile-time pin constant, supported AVR boards avoid the setup-time Arduino lookup tables entirely and still keep the polling path as one direct register read.
+- **Compile-time path:** With a generated static profile and a compile-time pin constant, supported AVR boards avoid the setup-time Arduino lookup tables entirely and still keep the polling path as one direct register read.
 - **Impact:** Faster input polling.
 
 #### `CONFIG_USE_FAST_ACTUATORS`
 
 - **Description:** Optimizes the writing to output pins for relays (`Actuator` objects).
 - **When to use:** Always recommended for performance-critical applications.
-- **Compile-time path:** With `LSH_ACTUATOR(...)` and a compile-time pin constant, supported AVR boards resolve the port binding at compile time while leaving the steady-state write path as a direct register update.
+- **Compile-time path:** With a generated static profile and a compile-time pin constant, supported AVR boards resolve the port binding at compile time while leaving the steady-state write path as a direct register update.
 - **Impact:** Faster relay switching.
 
 #### `CONFIG_USE_FAST_INDICATORS`
 
 - **Description:** Optimizes the writing to output pins for status LEDs (`Indicator` objects).
 - **When to use:** Always recommended.
-- **Compile-time path:** With `LSH_INDICATOR(...)` and a compile-time pin constant, supported AVR boards resolve the indicator binding at compile time and keep runtime LED updates on the direct port path.
+- **Compile-time path:** With a generated static profile and a compile-time pin constant, supported AVR boards resolve the indicator binding at compile time and keep runtime LED updates on the direct port path.
 - **Impact:** Faster LED state changes.
 
 ### Timing Configuration

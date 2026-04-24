@@ -23,12 +23,12 @@
 #include "communication/bridge_sync.hpp"
 #include "communication/constants/protocol.hpp"
 #include "communication/serializer.hpp"
+#include "config/static_config.hpp"
 #include "core/network_clicks.hpp"
 #include "device/actuator_manager.hpp"
 #include "device/clickable_manager.hpp"
 #include "peripherals/output/actuator.hpp"
 #include "util/debug/debug.hpp"
-#include "util/time_keeper.hpp"
 
 namespace Deserializer
 {
@@ -242,33 +242,21 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
             break;
         }
 
-        const uint8_t expectedBytes = static_cast<uint8_t>((Actuators::totalActuators + 7U) / 8U);
+        constexpr uint8_t expectedBytes = CONFIG_PACKED_ACTUATOR_STATE_BYTES;
         if (statesArray.size() != expectedBytes)
         {
             break;
         }
 
-        const uint8_t numBytes = statesArray.size();
-
         bool anyStateChanged = false;
-        uint8_t actuatorIndex = 0;
-        auto *const localActuators = Actuators::actuators.data();
-
-        for (uint8_t byteIndex = 0; byteIndex < numBytes && actuatorIndex < Actuators::totalActuators; ++byteIndex)
+        for (uint8_t byteIndex = 0U; byteIndex < expectedBytes; ++byteIndex)
         {
             uint8_t packedByte = 0U;
             if (!tryGetPackedStateByte(statesArray[byteIndex], packedByte))
             {
                 return result;
             }
-            uint8_t bitMask = 0x01U;
-            for (uint8_t bitIndex = 0; bitIndex < 8 && actuatorIndex < Actuators::totalActuators; ++bitIndex)
-            {
-                const bool state = (packedByte & bitMask) != 0U;
-                anyStateChanged |= localActuators[actuatorIndex]->setState(state);
-                bitMask <<= 1U;
-                ++actuatorIndex;
-            }
+            anyStateChanged |= lsh::core::static_config::applyPackedActuatorStateByte(byteIndex, packedByte);
         }
         result.stateChanged = anyStateChanged;
         break;
@@ -301,7 +289,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
     case Command::REQUEST_DETAILS:
         if (Serializer::serializeDetails())
         {
-            BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
+            BridgeSync::onRequestDetailsServed();
             result.stateChanged = false;
         }
         break;
@@ -311,10 +299,10 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         // static between reboots, so this always means "send fresh details and full state".
         // Re-open the bridge-sync gate first so this resync is reflected by the same
         // state machine that guards later mutating commands.
-        BridgeSync::restartFromBridgeBoot(timeKeeper::getTime());
+        BridgeSync::restartFromBridgeBoot();
         if (Serializer::serializeDetails())
         {
-            BridgeSync::onRequestDetailsServed(timeKeeper::getTime());
+            BridgeSync::onRequestDetailsServed();
             if (Serializer::serializeActuatorsState())
             {
                 BridgeSync::onRequestStateServed();

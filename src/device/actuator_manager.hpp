@@ -24,10 +24,6 @@
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
-#include "internal/etl_bitset.hpp"
-#if !CONFIG_USE_ACTUATOR_ID_LUT
-#include "internal/etl_map.hpp"
-#endif
 #include "internal/user_config_bridge.hpp"
 class Actuator;
 
@@ -43,30 +39,25 @@ namespace Actuators
  *          The serializer can therefore emit `ACTUATORS_STATE` directly from this
  *          cached representation without rescanning every actuator object.
  */
-using PackedActuatorStateBitset = etl::bitset<CONFIG_MAX_ACTUATORS>;
+using PackedActuatorStateBytes = etl::array<uint8_t, CONFIG_PACKED_ACTUATOR_STATE_STORAGE_CAPACITY>;
 
-extern uint8_t totalActuators;
 extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
-#if CONFIG_USE_ACTUATOR_ID_LUT
-extern etl::array<uint8_t, CONFIG_MAX_ACTUATOR_ID + 1U> actuatorIndexById;
-#else
-extern etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap;
-#endif
 /**
  * @brief Canonical packed actuator-state shadow kept aligned with runtime changes.
  * @details The bridge serializer consumes this compact representation directly,
  *          so actuator state reporting no longer has to rebuild protocol bytes
  *          by rescanning every actuator object.
  */
-extern PackedActuatorStateBitset packedActuatorStates;
+extern PackedActuatorStateBytes packedActuatorStates;
 
-void addActuator(Actuator *actuator);                              // Add one actuator to actuators vector and activate it
+void addActuator(Actuator *actuator, uint8_t actuatorId, uint8_t actuatorIndex);  // Add one actuator to actuators vector and activate it
+[[nodiscard]] auto getId(uint8_t actuatorIndex) -> uint8_t;        // Returns the static actuator ID for one dense runtime index
 [[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator, or nullptr if the ID is unknown
 [[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;        // Returns a single actuator index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex)
     -> bool;                                                            // Returns true and writes the actuator index when the ID exists
 [[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;          // Returns true if actuator exists
-void setAutoOffTimer(uint8_t actuatorIndex, uint32_t time_ms);          // Store or remove an actuator auto-off timer
+void setAutoOffTimer(uint8_t actuatorIndex, uint32_t time_ms);          // Validate an actuator auto-off timer against the static profile
 [[nodiscard]] auto hasAutoOffTimer(uint8_t actuatorIndex) -> bool;      // Returns true if an actuator has an auto-off timer
 [[nodiscard]] auto getAutoOffTimer(uint8_t actuatorIndex) -> uint32_t;  // Returns the auto-off timer for an actuator
 [[nodiscard]] auto checkAutoOffTimer(uint8_t actuatorIndex, uint32_t autoOffTimer_ms)

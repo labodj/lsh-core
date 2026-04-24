@@ -1,0 +1,67 @@
+[project]
+name = "lsh-core-tools"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "mypy>=1.18.2",
+  "pyrefly>=0.62.0",
+  "pytest>=9.0.1",
+  "ruff>=0.14.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  # Ruff formatter owns these choices; enabling the lint rules would fight it.
+  "COM812",
+  "ISC001",
+  # Pick the docstring style opposite to D203/D213.
+  "D203",
+  "D213",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  # pytest assertions are intentional and give better failure diffs.
+  "S101",
+]
+
+[tool.mypy]
+files = [
+  "tools/generate_lsh_static_config.py",
+  "tools/lsh_static_config",
+  "tools/platformio_lsh_static_config.py",
+]
+python_version = "3.11"
+strict = true
+
+[tool.pyrefly]
+project-includes = [
+  "tools/*.py",
+  "tools/**/*.py",
+  "tests/*.py",
+  "tests/**/*.py",
+]
+project-excludes = [
+  "**/__pycache__/**",
+  ".mypy_cache/**",
+  ".pytest_cache/**",
+  ".ruff_cache/**",
+  ".venv/**",
+]
+search-path = ["."]
+python-platform = "linux"
+python-version = "3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

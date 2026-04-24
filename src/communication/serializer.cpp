@@ -20,10 +20,13 @@
 
 #include "communication/serializer.hpp"
 
+#include <stddef.h>
+
 #include "communication/constants/config.hpp"
 #include "communication/constants/protocol.hpp"
 #include "communication/bridge_serial.hpp"
-#include "communication/payload_utils.hpp"
+#include "communication/msgpack_serial_framing.hpp"
+#include "config/static_config.hpp"
 #include "device/actuator_manager.hpp"
 #include "device/clickable_manager.hpp"
 #include "internal/user_config_bridge.hpp"
@@ -33,22 +36,202 @@
 
 namespace
 {
-/**
- * @brief A static JsonDocument used as a reusable buffer for all serialization tasks.
- * @details By declaring this document as static within an anonymous namespace, we ensure
- *          it is allocated only once in the .bss segment, not on the stack in every function call.
- *          This significantly improves performance by avoiding repeated construction/destruction
- *          and reduces the risk of stack overflow. The document is cleared before each use.
- *          Its size is determined by the largest possible payload to accommodate all message types.
- */
-static StaticJsonDocument<constants::bridgeSerial::SENT_DOC_MAX_SIZE> serializationDoc;
+[[nodiscard]] auto writeSerialByte(uint8_t byte) -> bool
+{
+    return CONFIG_COM_SERIAL->HardwareSerial::write(byte) == 1U;
+}
+
+template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Size]) -> bool
+{
+    static_assert(Size > 0U, "String literal must include a null terminator.");
+    for (size_t index = 0U; index < (Size - 1U); ++index)
+    {
+        if (!writeSerialByte(static_cast<uint8_t>(literal[index])))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] auto finishSuccessfulPayload() -> bool
+{
+    if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
+    {
+        CONFIG_COM_SERIAL->HardwareSerial::flush();
+    }
+    BridgeSerial::updateLastSentTime();
+    return true;
+}
+
+[[nodiscard]] auto writeStaticPayload(constants::payloads::StaticType payloadType) -> bool
+{
+    using constants::payloads::StaticType;
+#ifdef CONFIG_MSG_PACK
+    switch (payloadType)
+    {
+    case StaticType::BOOT:
+        return writeSerialByte(0xC0U) && writeSerialByte(0x81U) && writeSerialByte(0xA1U) && writeSerialByte(0x70U) &&
+               writeSerialByte(0x04U) && writeSerialByte(0xC0U);
+    case StaticType::PING_:
+        return writeSerialByte(0xC0U) && writeSerialByte(0x81U) && writeSerialByte(0xA1U) && writeSerialByte(0x70U) &&
+               writeSerialByte(0x05U) && writeSerialByte(0xC0U);
+    default:
+        return false;
+    }
+#else
+    switch (payloadType)
+    {
+    case StaticType::BOOT:
+        return writeLiteral("{\"p\":4}\n");
+    case StaticType::PING_:
+        return writeLiteral("{\"p\":5}\n");
+    default:
+        return false;
+    }
+#endif
+}
+
+#ifdef CONFIG_MSG_PACK
+[[nodiscard]] auto writeMsgPackFrameByte(uint8_t byte) -> bool
+{
+    using namespace lsh::core::transport;
+    if (byte == MSGPACK_FRAME_END)
+    {
+        return writeSerialByte(MSGPACK_FRAME_ESCAPE) && writeSerialByte(MSGPACK_FRAME_ESCAPED_END);
+    }
+
+    if (byte == MSGPACK_FRAME_ESCAPE)
+    {
+        return writeSerialByte(MSGPACK_FRAME_ESCAPE) && writeSerialByte(MSGPACK_FRAME_ESCAPED_ESCAPE);
+    }
+
+    return writeSerialByte(byte);
+}
+
+[[nodiscard]] auto writeMsgPackUint(uint8_t value) -> bool
+{
+    if (value <= 0x7FU)
+    {
+        return writeMsgPackFrameByte(value);
+    }
+    return writeMsgPackFrameByte(0xCCU) && writeMsgPackFrameByte(value);
+}
+
+[[nodiscard]] auto writeMsgPackKey(char key) -> bool
+{
+    return writeMsgPackFrameByte(0xA1U) && writeMsgPackFrameByte(static_cast<uint8_t>(key));
+}
+
+[[nodiscard]] auto writeMsgPackArrayHeader(uint8_t elementCount) -> bool
+{
+    if (elementCount < 16U)
+    {
+        return writeMsgPackFrameByte(static_cast<uint8_t>(0x90U | elementCount));
+    }
+    return writeMsgPackFrameByte(0xDCU) && writeMsgPackFrameByte(0x00U) && writeMsgPackFrameByte(elementCount);
+}
+
+[[nodiscard]] auto beginMsgPackFrame() -> bool
+{
+    return writeSerialByte(lsh::core::transport::MSGPACK_FRAME_END);
+}
+
+[[nodiscard]] auto endMsgPackFrame() -> bool
+{
+    return writeSerialByte(lsh::core::transport::MSGPACK_FRAME_END);
+}
+
+[[nodiscard]] auto writeMsgPackActuatorsStatePayload() -> bool
+{
+    using lsh::core::protocol::Command;
+    constexpr uint8_t byteCount = CONFIG_PACKED_ACTUATOR_STATE_BYTES;
+    if (!beginMsgPackFrame() || !writeMsgPackFrameByte(0x82U) || !writeMsgPackKey('p') ||
+        !writeMsgPackUint(static_cast<uint8_t>(Command::ACTUATORS_STATE)) || !writeMsgPackKey('s') || !writeMsgPackArrayHeader(byteCount))
+    {
+        return false;
+    }
+
+    for (uint8_t byteIndex = 0U; byteIndex < byteCount; ++byteIndex)
+    {
+        if (!writeMsgPackUint(Actuators::packedActuatorStates[byteIndex]))
+        {
+            return false;
+        }
+    }
+
+    return endMsgPackFrame();
+}
+
+#if CONFIG_USE_NETWORK_CLICKS
+[[nodiscard]] auto writeMsgPackNetworkClickPayload(uint8_t command, uint8_t protocolClickType, uint8_t clickableId, uint8_t correlationId)
+    -> bool
+{
+    return beginMsgPackFrame() && writeMsgPackFrameByte(0x84U) && writeMsgPackKey('p') && writeMsgPackUint(command) &&
+           writeMsgPackKey('t') && writeMsgPackUint(protocolClickType) && writeMsgPackKey('i') && writeMsgPackUint(clickableId) &&
+           writeMsgPackKey('c') && writeMsgPackUint(correlationId) && endMsgPackFrame();
+}
+#endif
+#else
+[[nodiscard]] auto writeUint8Decimal(uint8_t value) -> bool
+{
+    if (value >= 100U)
+    {
+        const uint8_t hundreds = static_cast<uint8_t>(value / 100U);
+        value = static_cast<uint8_t>(value - (hundreds * 100U));
+        const uint8_t tens = static_cast<uint8_t>(value / 10U);
+        return writeSerialByte(static_cast<uint8_t>('0' + hundreds)) && writeSerialByte(static_cast<uint8_t>('0' + tens)) &&
+               writeSerialByte(static_cast<uint8_t>('0' + (value - (tens * 10U))));
+    }
+
+    if (value >= 10U)
+    {
+        const uint8_t tens = static_cast<uint8_t>(value / 10U);
+        return writeSerialByte(static_cast<uint8_t>('0' + tens)) && writeSerialByte(static_cast<uint8_t>('0' + (value - (tens * 10U))));
+    }
+
+    return writeSerialByte(static_cast<uint8_t>('0' + value));
+}
+
+[[nodiscard]] auto writeJsonActuatorsStatePayload() -> bool
+{
+    if (!writeLiteral("{\"p\":2,\"s\":["))
+    {
+        return false;
+    }
+
+    constexpr uint8_t byteCount = CONFIG_PACKED_ACTUATOR_STATE_BYTES;
+    for (uint8_t byteIndex = 0U; byteIndex < byteCount; ++byteIndex)
+    {
+        if (byteIndex != 0U && !writeSerialByte(static_cast<uint8_t>(',')))
+        {
+            return false;
+        }
+        if (!writeUint8Decimal(Actuators::packedActuatorStates[byteIndex]))
+        {
+            return false;
+        }
+    }
+
+    return writeLiteral("]}\n");
+}
+
+#if CONFIG_USE_NETWORK_CLICKS
+[[nodiscard]] auto writeJsonNetworkClickPayload(uint8_t command, uint8_t protocolClickType, uint8_t clickableId, uint8_t correlationId)
+    -> bool
+{
+    return writeLiteral("{\"p\":") && writeUint8Decimal(command) && writeLiteral(",\"t\":") && writeUint8Decimal(protocolClickType) &&
+           writeLiteral(",\"i\":") && writeUint8Decimal(clickableId) && writeLiteral(",\"c\":") && writeUint8Decimal(correlationId) &&
+           writeLiteral("}\n");
+}
+#endif
+#endif
 }  // namespace
 
 namespace Serializer
 {
 using namespace Debug;
 using lsh::core::protocol::Command;
-using lsh::core::protocol::KEY_PAYLOAD;
 
 /**
  * @brief Send one compile-time pre-serialized static control payload.
@@ -63,98 +246,51 @@ auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool
         return false;
     }
 
-#ifdef CONFIG_MSG_PACK
-    constexpr bool useMsgPack = true;
-#else
-    constexpr bool useMsgPack = false;
-#endif
-
-    const auto payloadToSend = utils::payloads::getSerial<useMsgPack>(payloadType);
-
-    if (!payloadToSend.empty())
+    if (writeStaticPayload(payloadType))
     {
-        const size_t writtenBytes = CONFIG_COM_SERIAL->write(payloadToSend.data(), payloadToSend.size());
-        if (writtenBytes != payloadToSend.size())
-        {
-            return false;
-        }
-        if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
-        {
-            CONFIG_COM_SERIAL->flush();
-        }
-        BridgeSerial::updateLastSentTime();
-        return true;
+        return finishSuccessfulPayload();
     }
 
     return false;
 }
 
 /**
- * @brief Prepare and send json details payload (eg: {"p":1,"v":3,"n":"c1","a":[1,2,...],"b":[1,3,...]}).
+ * @brief Send the generated device-details payload using the active serial codec.
  */
 auto serializeDetails() -> bool
 {
     DP_CONTEXT();
-    using namespace lsh::core::protocol;
-
-    serializationDoc.clear();
-
-    serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::DEVICE_DETAILS);  // "p":"1" (Payload: Device Details)
-    serializationDoc[KEY_PROTOCOL_MAJOR] = WIRE_PROTOCOL_MAJOR;                     // "v":3   (Handshake-only protocol major)
-    serializationDoc[KEY_NAME] = CONFIG_DEVICE_NAME;                                // "n":"c1" (Device Name: c1)
-
-    JsonArray jsonActuators = serializationDoc.createNestedArray(KEY_ACTUATORS_ARRAY);  // "a": (Actuators IDs: ...)
-    auto *const actuatorBegin = Actuators::actuators.data();
-    auto *const actuatorEnd = actuatorBegin + Actuators::totalActuators;
-    for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator)
+    if (!lsh::core::static_config::writeDetailsPayload())
     {
-        jsonActuators.add((*currActuator)->getId());
+        return false;
     }
 
-    JsonArray jsonClickables = serializationDoc.createNestedArray(KEY_BUTTONS_ARRAY);  // "b": (Buttons IDs: ...)
-    auto *const clickableBegin = Clickables::clickables.data();
-    auto *const clickableEnd = clickableBegin + Clickables::totalClickables;
-    for (auto *currentClickable = clickableBegin; currentClickable != clickableEnd; ++currentClickable)
-    {
-        jsonClickables.add((*currentClickable)->getId());
-    }
-
-    // Send the Json
-    return BridgeSerial::sendJson(serializationDoc);
+    return finishSuccessfulPayload();
 }
 
 /**
- * @brief Prepare and send a JSON actuators state payload with bitpacked byte array.
+ * @brief Send an actuator-state payload with a bitpacked byte array.
  * @details The actuator manager keeps a packed state shadow in protocol order,
  *          so this path only appends already-built bytes to the outbound payload.
- *          Output format: {"p":2,"s":[byte0,byte1,...]}.
+ *          JSON output format: {"p":2,"s":[byte0,byte1,...]}.
  */
 auto serializeActuatorsState() -> bool
 {
     DP_CONTEXT();
-    using namespace lsh::core::protocol;
-
-    serializationDoc.clear();
-
-    // The actuator manager already maintains a canonical packed shadow in wire
-    // order, so serialization only has to append the ready-made bytes.
-    const uint8_t numBytes = Actuators::getPackedStateByteCount();
-
-    // Create the JSON structure
-    serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(Command::ACTUATORS_STATE);  // "p":2
-    JsonArray stateArray = serializationDoc.createNestedArray(KEY_STATE);            // "s":[]
-
-    for (uint8_t byteIndex = 0U; byteIndex < numBytes; ++byteIndex)
+#ifdef CONFIG_MSG_PACK
+    if (!writeMsgPackActuatorsStatePayload())
+#else
+    if (!writeJsonActuatorsStatePayload())
+#endif
     {
-        stateArray.add(Actuators::getPackedStateByte(byteIndex));
+        return false;
     }
 
-    // Send the Json
-    return BridgeSerial::sendJson(serializationDoc);
+    return finishSuccessfulPayload();
 }
 
 /**
- * @brief Prepares and sends a JSON network click payload.
+ * @brief Send a network click request/confirmation payload using the active serial codec.
  * @details Uses NETWORK_CLICK_REQUEST (p:3) for network click requests.
  *          Example request:  {"p":3,"t":1,"i":7,"c":42}
  *
@@ -175,32 +311,34 @@ auto serializeNetworkClick(uint8_t clickableIndex, constants::ClickType clickTyp
     static_cast<void>(correlationId);
     return false;
 #else
-    using namespace lsh::core::protocol;
-
-    serializationDoc.clear();
-
     // Select command based on confirm flag
     const Command cmd = confirm ? Command::NETWORK_CLICK_CONFIRM : Command::NETWORK_CLICK_REQUEST;
-    serializationDoc[KEY_PAYLOAD] = static_cast<uint8_t>(cmd);
+    uint8_t protocolClickType = 0U;
 
     switch (clickType)
     {
     case constants::ClickType::LONG:
-        serializationDoc[KEY_TYPE] = static_cast<uint8_t>(lsh::core::protocol::ProtocolClickType::LONG);  // "t":1  (Click Type: Long)
+        protocolClickType = static_cast<uint8_t>(lsh::core::protocol::ProtocolClickType::LONG);
         break;
     case constants::ClickType::SUPER_LONG:
-        serializationDoc[KEY_TYPE] =
-            static_cast<uint8_t>(lsh::core::protocol::ProtocolClickType::SUPER_LONG);  // "t":2  (Click Type: Super Long)
+        protocolClickType = static_cast<uint8_t>(lsh::core::protocol::ProtocolClickType::SUPER_LONG);
         break;
     default:
         return false;  // Not valid click type
     }
 
-    serializationDoc[KEY_ID] = Clickables::clickables[clickableIndex]->getId();  // "i":7 (Button ID: 7)
-    serializationDoc[KEY_CORRELATION_ID] = correlationId;                        // "c":42 (Correlation ID)
+    const uint8_t command = static_cast<uint8_t>(cmd);
+    const uint8_t clickableId = Clickables::getId(clickableIndex);
 
-    // Send the Json
-    return BridgeSerial::sendJson(serializationDoc);
+#ifdef CONFIG_MSG_PACK
+    if (!writeMsgPackNetworkClickPayload(command, protocolClickType, clickableId, correlationId))
+#else
+    if (!writeJsonNetworkClickPayload(command, protocolClickType, clickableId, correlationId))
+#endif
+    {
+        return false;
+    }
+    return finishSuccessfulPayload();
 #endif
 }
 

@@ -34,11 +34,10 @@ class Indicator;
  */
 namespace Indicators
 {
-extern uint8_t totalIndicators;
 extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;
 
-void addIndicator(Indicator *indicator);  // Add one indicator to indicators vector and activate it
-void indicatorsCheck();                   // Performs an  indicator check for every indicator set
+void addIndicator(Indicator *indicator, uint8_t indicatorIndex);  // Add one indicator to indicators vector and activate it
+void indicatorsCheck();                                           // Performs an  indicator check for every indicator set
 void finalizeActuatorLinkStorage();
 void finalizeSetup();
 }  // namespace Indicators

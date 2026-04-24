@@ -24,9 +24,6 @@
 #include <stdint.h>
 
 #include "internal/etl_array.hpp"
-#if !CONFIG_USE_CLICKABLE_ID_LUT
-#include "internal/etl_map.hpp"
-#endif
 #include "internal/user_config_bridge.hpp"
 #include "util/constants/click_types.hpp"
 
@@ -38,15 +35,12 @@ class Clickable;
  */
 namespace Clickables
 {
-extern uint8_t totalClickables;
 extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;
-#if CONFIG_USE_CLICKABLE_ID_LUT
-extern etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U> clickableIndexById;
-#else
-extern etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap;
-#endif
 
-void addClickable(Clickable *clickable);                              // Add one clickable to clickables vector and activate it
+void addClickable(Clickable *clickable,
+                  uint8_t clickableId,
+                  uint8_t clickableIndex);                            // Add one clickable to clickables vector and activate it
+[[nodiscard]] auto getId(uint8_t clickableIndex) -> uint8_t;          // Returns the static clickable ID for one dense runtime index
 [[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable, or nullptr if the ID is unknown
 [[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;          // Returns a single clickable index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex)

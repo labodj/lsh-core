@@ -39,9 +39,8 @@ using lsh::core::transport::MsgPackFrameConsumeResult;
 using lsh::core::transport::MsgPackFrameWriter;
 #endif
 
-uint16_t sendIdleAge_ms = UINT16_MAX;      //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
-uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Loop timestamp assigned when the last valid payload finished deserializing.
-bool firstValidPayloadReceived = false;    //!< True after the first valid payload has been received.
+uint16_t sendIdleAge_ms = UINT16_MAX;     //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
+uint16_t receiveIdleAge_ms = UINT16_MAX;  //!< Elapsed idle time since the last valid payload was received, saturated at 65535 ms.
 
 namespace
 {
@@ -71,7 +70,7 @@ bool discardUntilNewline = false;                                     //!< True 
  */
 void init()
 {
-    CONFIG_COM_SERIAL->begin(constants::bridgeSerial::COM_SERIAL_BAUD, SERIAL_8N1);
+    CONFIG_COM_SERIAL->HardwareSerial::begin(constants::bridgeSerial::COM_SERIAL_BAUD, SERIAL_8N1);
 }
 
 /**
@@ -119,7 +118,7 @@ auto sendJson(const JsonDocument &documentToSend) -> bool
         // Conservative default: this path is the currently validated, known-good setup.
         // The compile-time switch exists only to evaluate whether the link stays
         // resilient even without a blocking flush after each send.
-        CONFIG_COM_SERIAL->flush();
+        CONFIG_COM_SERIAL->HardwareSerial::flush();
     }
     DP(FPSTR(dStr::JSON_SENT), FPSTR(dStr::COLON_SPACE));
     DPJ(documentToSend);
@@ -148,9 +147,9 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
     const uint32_t nowRealTime_ms = timeKeeper::getRealTime();
     msgPackFrameReceiver.resetIfIdle(nowRealTime_ms, constants::bridgeSerial::COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS);
 
-    while (CONFIG_COM_SERIAL->available() && receiveResult.consumedBytes < maxBytesToConsume)
+    while (CONFIG_COM_SERIAL->HardwareSerial::available() && receiveResult.consumedBytes < maxBytesToConsume)
     {
-        const int rawByte = CONFIG_COM_SERIAL->read();
+        const int rawByte = CONFIG_COM_SERIAL->HardwareSerial::read();
         if (rawByte < 0)
         {
             break;
@@ -181,8 +180,7 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
 
         DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
         DPJ(receivedDocument);
-        firstValidPayloadReceived = true;
-        lastReceivedPayloadTime_ms = timeKeeper::getTime();
+        receiveIdleAge_ms = 0U;
         receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
         receiveResult.payloadDispatched = true;
         return receiveResult;
@@ -190,9 +188,14 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
     return receiveResult;
 
 #else
-    while (CONFIG_COM_SERIAL->available() && receiveResult.consumedBytes < maxBytesToConsume)
+    while (CONFIG_COM_SERIAL->HardwareSerial::available() && receiveResult.consumedBytes < maxBytesToConsume)
     {
-        const char receivedChar = CONFIG_COM_SERIAL->read();
+        const int rawByte = CONFIG_COM_SERIAL->HardwareSerial::read();
+        if (rawByte < 0)
+        {
+            break;
+        }
+        const char receivedChar = static_cast<char>(rawByte);
         ++receiveResult.consumedBytes;
 
         if (discardUntilNewline)
@@ -220,8 +223,7 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
                 {
                     DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
                     DPJ(receivedDocument);
-                    firstValidPayloadReceived = true;
-                    lastReceivedPayloadTime_ms = timeKeeper::getTime();
+                    receiveIdleAge_ms = 0U;
                     receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
                     receiveResult.payloadDispatched = true;
                     return receiveResult;
@@ -270,6 +272,7 @@ void tickSendIdleTimer(uint16_t elapsed_ms)
         return;
     }
     sendIdleAge_ms = timeUtils::addElapsedTimeSaturated(sendIdleAge_ms, elapsed_ms);
+    receiveIdleAge_ms = timeUtils::addElapsedTimeSaturated(receiveIdleAge_ms, elapsed_ms);
 }
 
 /**
@@ -302,11 +305,10 @@ void updateLastSentTime()
 /**
  * @brief Check whether the bridge is still considered connected.
  * @details The bridge is considered online only after the first valid payload
- *          has been received and only while the receive timeout window stays
- *          open. The receive timestamp stores the real completion time of the
- *          last accepted payload using the loop cached timestamp, so callers
- *          can reuse that same value and still keep normal unsigned wrap
- *          semantics.
+ *          has reset the receive idle age and only while the receive timeout
+ *          window stays open. The age is advanced once by the main loop using
+ *          the shared bridge-housekeeping delta, avoiding 32-bit timestamp
+ *          subtraction in network-click routing.
  *
  * @return true if the bridge answered recently enough.
  * @return false if the bridge never answered or timed out.
@@ -314,23 +316,23 @@ void updateLastSentTime()
 auto isConnected() -> bool
 {
     DP_CONTEXT();
-    return isConnected(timeKeeper::getRealTime());
+    using constants::bridgeSerial::CONNECTION_TIMEOUT_MS;
+    return receiveIdleAge_ms < CONNECTION_TIMEOUT_MS;
 }
 
 /**
- * @brief Check bridge liveness using a timestamp already available to the caller.
- * @details `lastReceivedPayloadTime_ms` is stamped with the loop cached time,
- *          so the standard unsigned-delta timeout check remains valid across
- *          the natural `millis()` wrap.
+ * @brief Source-compatible bridge liveness overload.
+ * @details Liveness is now tracked by `receiveIdleAge_ms`, so the caller's
+ *          timestamp is ignored.
  *
- * @param now Timestamp to compare against the last valid bridge payload.
+ * @param now Ignored legacy timestamp.
  * @return true if the bridge answered recently enough.
  * @return false if the bridge never answered or timed out.
  */
 auto isConnected(uint32_t now) -> bool
 {
-    using constants::bridgeSerial::CONNECTION_TIMEOUT_MS;
-    return firstValidPayloadReceived && ((now - lastReceivedPayloadTime_ms) < CONNECTION_TIMEOUT_MS);
+    static_cast<void>(now);
+    return isConnected();
 }
 
 }  // namespace BridgeSerial

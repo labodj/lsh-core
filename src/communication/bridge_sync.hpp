@@ -25,10 +25,10 @@
 
 namespace BridgeSync
 {
-void begin(uint32_t now);                             // Start a fresh bridge handshake and send the first BOOT.
-void restartFromBridgeBoot(uint32_t now);             // Re-open the handshake after a runtime BOOT request received from the bridge.
-void tick(uint32_t now);                              // Advance the bridge-sync state machine from the hot loop.
-void onRequestDetailsServed(uint32_t now);            // Record that bridge details were served in the current session.
+void begin();                                         // Start a fresh bridge handshake and send the first BOOT.
+void restartFromBridgeBoot();                         // Re-open the handshake after a runtime BOOT request received from the bridge.
+void tick(uint16_t elapsed_ms);                       // Advance the bridge-sync state machine using the elapsed housekeeping time.
+void onRequestDetailsServed();                        // Record that bridge details were served in the current session.
 void onRequestStateServed();                          // Record that bridge state was served in the current session.
 [[nodiscard]] auto allowsStateRequests() -> bool;     // Return true when REQUEST_STATE can be served safely.
 [[nodiscard]] auto allowsMutatingCommands() -> bool;  // Return true when inbound bridge commands may change state.

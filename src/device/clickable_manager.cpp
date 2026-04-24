@@ -20,6 +20,7 @@
 
 #include "device/clickable_manager.hpp"
 
+#include "config/static_config.hpp"
 #include "device/actuator_manager.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/input/clickable.hpp"
@@ -32,14 +33,7 @@ using namespace Debug;
 
 namespace Clickables
 {
-uint8_t totalClickables = 0U;                                 //!< Device real total Clickables
 etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};  //!< Device clickables
-#if CONFIG_USE_CLICKABLE_ID_LUT
-etl::array<uint8_t, CONFIG_MAX_CLICKABLE_ID + 1U> clickableIndexById{};  //!< Device clickables lookup (UUID -> clickable index + 1)
-static_assert(CONFIG_MAX_CLICKABLE_ID > 0U, "CONFIG_MAX_CLICKABLE_ID must be greater than zero when the clickable ID LUT is enabled.");
-#else
-etl::map<uint8_t, uint8_t, CONFIG_MAX_CLICKABLES> clickablesMap{};  //!< Device clickables map (UUID -> clickables index)
-#endif
 
 namespace
 {
@@ -60,26 +54,6 @@ void failWrongClickableId()
     delay(10000);
     deviceReset();
 }
-
-#if CONFIG_USE_CLICKABLE_ID_LUT
-/**
- * @brief Abort setup when two clickables reuse the same numeric ID.
- * @details The bounded LUT requires a one-to-one mapping between wire ID and
- *          dense runtime index. Duplicate IDs would make later lookups ambiguous.
- */
-void failDuplicateClickableId()
-{
-    using namespace constants::wrongConfigStrings;
-    NDSB();
-    CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-    delay(10000);
-    deviceReset();
-}
-#endif
 
 /**
  * @brief Abort setup when a clickable was registered but has no actionable configuration.
@@ -123,15 +97,16 @@ void failNetworkClickPoolTooSmall()
 /**
  * @brief Adds a clickable to the system.
  *
- * The clickable is stored in the main array and its ID is mapped to its index for fast lookups.
+ * The clickable is stored in the main array slot selected by the generated static profile.
  * If the maximum number of clickables is exceeded, the device will reset to prevent undefined behavior.
  *
  * @param clickable A pointer to the Clickable object to add.
+ * @param clickableId Static wire ID of the clickable.
+ * @param clickableIndex Dense runtime index of the clickable.
  */
-void addClickable(Clickable *const clickable)
+void addClickable(Clickable *const clickable, uint8_t clickableId, uint8_t clickableIndex)
 {
-    const uint8_t currentIndex = totalClickables;
-    if (currentIndex >= CONFIG_MAX_CLICKABLES)
+    if (clickableIndex >= CONFIG_MAX_CLICKABLES || clickables[clickableIndex] != nullptr)
     {
         using namespace constants::wrongConfigStrings;
         NDSB();  // Begin serial if not in debug mode
@@ -144,34 +119,33 @@ void addClickable(Clickable *const clickable)
         deviceReset();
     }
 
-    if (clickable->getId() == 0U)
+    if (clickableId == 0U)
     {
         failWrongClickableId();
     }
 
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    if (clickable->getId() > CONFIG_MAX_CLICKABLE_ID)
+    const uint8_t configuredIndex = lsh::core::static_config::getClickableIndexById(clickableId);
+    if (configuredIndex != clickableIndex)
     {
         failWrongClickableId();
     }
-    if (clickableIndexById[clickable->getId()] != 0U)
-    {
-        failDuplicateClickableId();
-    }
-#endif
 
-    clickable->setIndex(currentIndex);     // Store current index inside the object, it can be useful
-    clickables[currentIndex] = clickable;  // Insert in array of clickables
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    clickableIndexById[clickable->getId()] = static_cast<uint8_t>(currentIndex + 1U);
-#else
-    clickablesMap[clickable->getId()] = currentIndex;  // Insert in map of clickables Map(UUID (integer) -> index in Vector)
-#endif
+    clickable->setIndex(clickableIndex);     // Store current index inside the object, it can be useful
+    clickables[clickableIndex] = clickable;  // Insert in array of clickables
 
-    DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), clickable->getId(), FPSTR(dStr::SPACE),
-        FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), currentIndex);
+    DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), clickableId, FPSTR(dStr::SPACE),
+        FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), clickableIndex);
+}
 
-    totalClickables++;
+/**
+ * @brief Return the static wire ID for one registered clickable index.
+ *
+ * @param clickableIndex dense runtime clickable index.
+ * @return uint8_t clickable ID, or zero when the index is outside the static profile.
+ */
+auto getId(uint8_t clickableIndex) -> uint8_t
+{
+    return lsh::core::static_config::getClickableId(clickableIndex);
 }
 
 /**
@@ -183,26 +157,12 @@ void addClickable(Clickable *const clickable)
  */
 auto getClickable(uint8_t clickableId) -> Clickable *
 {
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    uint8_t clickableIndex = UINT8_MAX;
+    if (!tryGetIndex(clickableId, clickableIndex))
     {
         return nullptr;
     }
-
-    const uint8_t encodedIndex = clickableIndexById[clickableId];
-    if (encodedIndex == 0U)
-    {
-        return nullptr;
-    }
-    return clickables[static_cast<uint8_t>(encodedIndex - 1U)];
-#else
-    const auto it = clickablesMap.find(clickableId);
-    if (it == clickablesMap.end())
-    {
-        return nullptr;
-    }
-    return clickables[it->second];
-#endif
+    return clickables[clickableIndex];
 }
 
 /**
@@ -214,26 +174,12 @@ auto getClickable(uint8_t clickableId) -> Clickable *
  */
 auto getIndex(uint8_t clickableId) -> uint8_t
 {
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    uint8_t clickableIndex = UINT8_MAX;
+    if (!tryGetIndex(clickableId, clickableIndex))
     {
         return UINT8_MAX;
     }
-
-    const uint8_t encodedIndex = clickableIndexById[clickableId];
-    if (encodedIndex == 0U)
-    {
-        return UINT8_MAX;
-    }
-    return static_cast<uint8_t>(encodedIndex - 1U);
-#else
-    const auto it = clickablesMap.find(clickableId);
-    if (it == clickablesMap.end())
-    {
-        return UINT8_MAX;
-    }
-    return it->second;
-#endif
+    return clickableIndex;
 }
 
 /**
@@ -246,26 +192,12 @@ auto getIndex(uint8_t clickableId) -> uint8_t
  */
 auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
 {
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    if (clickableId > CONFIG_MAX_CLICKABLE_ID)
+    const uint8_t configuredIndex = lsh::core::static_config::getClickableIndexById(clickableId);
+    if (configuredIndex >= CONFIG_MAX_CLICKABLES || clickables[configuredIndex] == nullptr)
     {
         return false;
     }
-
-    const uint8_t encodedIndex = clickableIndexById[clickableId];
-    if (encodedIndex == 0U)
-    {
-        return false;
-    }
-    clickableIndex = static_cast<uint8_t>(encodedIndex - 1U);
-#else
-    const auto it = clickablesMap.find(clickableId);
-    if (it == clickablesMap.end())
-    {
-        return false;
-    }
-    clickableIndex = it->second;
-#endif
+    clickableIndex = configuredIndex;
     return true;
 }
 
@@ -278,11 +210,8 @@ auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
  */
 auto clickableExists(uint8_t clickableId) -> bool
 {
-#if CONFIG_USE_CLICKABLE_ID_LUT
-    return (clickableId <= CONFIG_MAX_CLICKABLE_ID && clickableIndexById[clickableId] != 0U);
-#else
-    return (clickablesMap.find(clickableId) != clickablesMap.end());
-#endif
+    uint8_t clickableIndex = UINT8_MAX;
+    return tryGetIndex(clickableId, clickableIndex);
 }
 
 /**
@@ -306,15 +235,7 @@ auto click(const Clickable *const clickable, constants::ClickType clickType) -> 
     case ClickType::LONG:
         return clickable->longClick();
     case ClickType::SUPER_LONG:
-        switch (clickable->getSuperLongClickType())
-        {
-        case SuperLongClickType::NORMAL:
-            return Actuators::turnOffUnprotectedActuators();
-        case SuperLongClickType::SELECTIVE:
-            return clickable->superLongClickSelective();
-        default:
-            return false;
-        }
+        return lsh::core::static_config::runSuperLongClick(clickable->getIndex());
     default:
         return false;
     }
@@ -331,7 +252,7 @@ auto click(const Clickable *const clickable, constants::ClickType clickType) -> 
      */
 auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 {
-    if (clickableIndex >= totalClickables || clickables[clickableIndex] == nullptr)
+    if (clickableIndex >= CONFIG_MAX_CLICKABLES || clickables[clickableIndex] == nullptr)
     {
         return false;
     }
@@ -349,10 +270,12 @@ void finalizeSetup()
 {
     DP_CONTEXT();
     finalizeActuatorLinkStorage();
-    for (uint8_t clickableIndex = 0U; clickableIndex < totalClickables; ++clickableIndex)
+    for (uint8_t clickableIndex = 0U; clickableIndex < CONFIG_MAX_CLICKABLES; ++clickableIndex)
     {
         auto *const currentClickable = clickables[clickableIndex];
-        if (currentClickable == nullptr || currentClickable->getIndex() != clickableIndex)
+        const uint8_t clickableId = getId(clickableIndex);
+        if (currentClickable == nullptr || currentClickable->getIndex() != clickableIndex || clickableId == 0U ||
+            lsh::core::static_config::getClickableIndexById(clickableId) != clickableIndex)
         {
             failNonCompactClickableStorage();
         }
@@ -378,27 +301,6 @@ void finalizeSetup()
             failInvalidClickableConfiguration();
         }
     }
-    for (uint8_t clickableIndex = totalClickables; clickableIndex < CONFIG_MAX_CLICKABLES; ++clickableIndex)
-    {
-        if (clickables[clickableIndex] != nullptr)
-        {
-            failNonCompactClickableStorage();
-        }
-    }
-#if !CONFIG_USE_CLICKABLE_ID_LUT
-    if (clickablesMap.size() != totalClickables)
-    {
-        using namespace constants::wrongConfigStrings;
-        NDSB();  // Begin serial if not in debug mode
-        CONFIG_DEBUG_SERIAL->print(FPSTR(DUPLICATE));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-        delay(10000);
-        deviceReset();
-    }
-#endif
 }
 
 }  // namespace Clickables

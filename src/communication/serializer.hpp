@@ -21,24 +21,23 @@
 #ifndef LSH_CORE_COMMUNICATION_SERIALIZER_HPP
 #define LSH_CORE_COMMUNICATION_SERIALIZER_HPP
 
-#include <ArduinoJson.h>
 #include <stdint.h>
 
 #include "communication/constants/static_payloads.hpp"
 #include "util/constants/click_types.hpp"
 /**
- * @brief Provide functions to prepare and serialize Json payloads.
+ * @brief Provide functions to emit bridge payloads with the active serial codec.
  *
  */
 namespace Serializer
 {
-[[nodiscard]] auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool;  // Send a static json payload
-[[nodiscard]] auto serializeDetails() -> bool;                                                // Prepare and send json details payload
-[[nodiscard]] auto serializeActuatorsState() -> bool;  // Prepare and send a json actuators state payload
+[[nodiscard]] auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool;  // Send a static control payload
+[[nodiscard]] auto serializeDetails() -> bool;                                                // Send generated device details
+[[nodiscard]] auto serializeActuatorsState() -> bool;                                         // Send packed actuator state
 [[nodiscard]] auto serializeNetworkClick(uint8_t clickableIndex,
                                          constants::ClickType clickType,
                                          bool confirm,
-                                         uint8_t correlationId) -> bool;  // Prepare and send a json network click payload
+                                         uint8_t correlationId) -> bool;  // Send a network click payload
 }  // namespace Serializer
 
 #endif  // LSH_CORE_COMMUNICATION_SERIALIZER_HPP

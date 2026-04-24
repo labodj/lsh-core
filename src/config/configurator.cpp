@@ -23,77 +23,6 @@
 #include "device/actuator_manager.hpp"
 #include "device/clickable_manager.hpp"
 #include "device/indicator_manager.hpp"
-#include "peripherals/input/clickable.hpp"
-#include "peripherals/output/actuator.hpp"
-#include "peripherals/output/indicator.hpp"
-#include "util/debug/debug.hpp"
-
-/**
- * @brief Add an actuator to device, shadows Actuators::addActuator for leaner config.
- *
- * @param actuator actuator to add.
- */
-void Configurator::addActuator(Actuator *const actuator)
-{
-    Actuators::addActuator(actuator);
-}
-
-/**
- * @brief Add a clickable to device, shadows Clickables::addClickable for leaner config.
- *
- * @param clickable clickable to add.
- */
-void Configurator::addClickable(Clickable *const clickable)
-{
-    Clickables::addClickable(clickable);
-}
-
-/**
- * @brief Add an indicator to device, shadows Indicators::addIndicator for leaner config.
- *
- * @param Indicator indicator to add.
- */
-void Configurator::addIndicator(Indicator *const indicator)
-{
-    Indicators::addIndicator(indicator);
-}
-
-/**
- * @brief Helper to get an actuator index, for leaner config.
- * @details Before registration the object returns `UINT8_MAX`. Link helpers
- *          treat that sentinel as a configuration error.
- *
- * @param actuator the actuator.
- * @return uint8_t actuator index.
- */
-auto Configurator::getIndex(const Actuator &actuator) -> uint8_t
-{
-    return actuator.getIndex();
-}
-
-/**
- * @brief Helper to get a clickable index, for leaner config.
- * @details Before registration the object returns `UINT8_MAX`.
- *
- * @param clickable the clickable.
- * @return uint8_t clickable index.
- */
-auto Configurator::getIndex(const Clickable &clickable) -> uint8_t
-{
-    return clickable.getIndex();
-}
-
-/**
- * @brief Helper to get an indicator index, for leaner config.
- * @details Before registration the object returns `UINT8_MAX`.
- *
- * @param indicator the indicator
- * @return uint8_t indicator index.
- */
-auto Configurator::getIndex(const Indicator &indicator) -> uint8_t
-{
-    return indicator.getIndex();
-}
 
 /**
  * @brief Final steps of configuration, must be called after configuration().
@@ -101,10 +30,16 @@ auto Configurator::getIndex(const Indicator &indicator) -> uint8_t
  */
 void Configurator::finalizeSetup()
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     Actuators::finalizeSetup();
     Clickables::finalizeSetup();
     Indicators::finalizeSetup();
+#endif
 }
+
+#define LSH_STATIC_CONFIG_IMPLEMENTATION_PASS 1
+#include LSH_STATIC_CONFIG_INCLUDE
+#undef LSH_STATIC_CONFIG_IMPLEMENTATION_PASS
 
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
 /**

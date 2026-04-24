@@ -22,6 +22,7 @@
 
 #include "communication/constants/config.hpp"
 #include "communication/serializer.hpp"
+#include "util/saturating_time.hpp"
 
 namespace BridgeSync
 {
@@ -37,28 +38,27 @@ enum class State : uint8_t
     Synced = 2U,
 };
 
-constexpr uint32_t BOOT_NOT_SENT_YET = UINT32_MAX;  //!< Sentinel meaning that no controller BOOT has been accepted by the UART yet.
+constexpr uint16_t TIMER_READY = UINT16_MAX;  //!< Saturated age used when a retry should be allowed immediately.
 
 /** @brief Current controller-side handshake phase with the bridge runtime. */
 State syncState = State::AwaitBridgeDetails;
-/** @brief Cached timestamp of the last BOOT payload emitted while waiting for bridge details. */
-uint32_t lastBootSentTime_ms = BOOT_NOT_SENT_YET;
-/** @brief Cached timestamp captured when the controller started waiting for `REQUEST_STATE`. */
-uint32_t awaitingStateSince_ms = 0U;
+/** @brief Saturated age since the last BOOT payload accepted by the UART. */
+uint16_t bootRetryAge_ms = TIMER_READY;
+/** @brief Saturated age spent waiting for `REQUEST_STATE` after details were served. */
+uint16_t awaitingStateAge_ms = 0U;
 
 /**
  * @brief Emit one `BOOT` payload and remember when it was sent.
  *
- * @param now Current loop timestamp used to seed the BOOT retry timer.
  */
-auto sendBoot(uint32_t now) -> bool
+auto sendBoot() -> bool
 {
     if (!Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT))
     {
         return false;
     }
 
-    lastBootSentTime_ms = now;
+    bootRetryAge_ms = 0U;
     return true;
 }
 }  // namespace
@@ -69,14 +69,13 @@ auto sendBoot(uint32_t now) -> bool
  *          on the bridge must ask for `REQUEST_DETAILS` and `REQUEST_STATE`
  *          before controller-side mutating commands are trusted.
  *
- * @param now Current loop timestamp.
  */
-void begin(uint32_t now)
+void begin()
 {
     syncState = State::AwaitBridgeDetails;
-    awaitingStateSince_ms = 0U;
-    lastBootSentTime_ms = BOOT_NOT_SENT_YET;
-    (void)sendBoot(now);
+    awaitingStateAge_ms = 0U;
+    bootRetryAge_ms = TIMER_READY;
+    (void)sendBoot();
 }
 
 /**
@@ -85,13 +84,12 @@ void begin(uint32_t now)
  *          bridge. It only resets the controller-side trust gate so the caller can
  *          immediately serve fresh details and state in response to the bridge BOOT.
  *
- * @param now Current loop timestamp.
  */
-void restartFromBridgeBoot(uint32_t now)
+void restartFromBridgeBoot()
 {
     syncState = State::AwaitBridgeDetails;
-    awaitingStateSince_ms = 0U;
-    lastBootSentTime_ms = now;
+    awaitingStateAge_ms = 0U;
+    bootRetryAge_ms = 0U;
 }
 
 /**
@@ -101,12 +99,18 @@ void restartFromBridgeBoot(uint32_t now)
  *          and times out back to the boot phase if the bridge stalls after
  *          requesting details but before requesting state.
  *
- * @param now Current loop timestamp.
+ * @param elapsed_ms Milliseconds elapsed since the previous bridge housekeeping pass.
  */
-void tick(uint32_t now)
+void tick(uint16_t elapsed_ms)
 {
     using constants::bridgeSerial::BRIDGE_AWAIT_STATE_TIMEOUT_MS;
     using constants::bridgeSerial::BRIDGE_BOOT_RETRY_INTERVAL_MS;
+
+    if (elapsed_ms != 0U)
+    {
+        bootRetryAge_ms = timeUtils::addElapsedTimeSaturated(bootRetryAge_ms, elapsed_ms);
+        awaitingStateAge_ms = timeUtils::addElapsedTimeSaturated(awaitingStateAge_ms, elapsed_ms);
+    }
 
     switch (syncState)
     {
@@ -119,18 +123,19 @@ void tick(uint32_t now)
         break;
 
     case State::AwaitBridgeDetails:
-        if (lastBootSentTime_ms == BOOT_NOT_SENT_YET || (now - lastBootSentTime_ms) >= BRIDGE_BOOT_RETRY_INTERVAL_MS)
+        if (bootRetryAge_ms >= BRIDGE_BOOT_RETRY_INTERVAL_MS)
         {
-            (void)sendBoot(now);
+            (void)sendBoot();
         }
         break;
 
     case State::AwaitBridgeState:
-        if ((now - awaitingStateSince_ms) >= BRIDGE_AWAIT_STATE_TIMEOUT_MS)
+        if (awaitingStateAge_ms >= BRIDGE_AWAIT_STATE_TIMEOUT_MS)
         {
             syncState = State::AwaitBridgeDetails;
-            awaitingStateSince_ms = 0U;
-            (void)sendBoot(now);
+            awaitingStateAge_ms = 0U;
+            bootRetryAge_ms = TIMER_READY;
+            (void)sendBoot();
         }
         break;
     }
@@ -142,9 +147,8 @@ void tick(uint32_t now)
  *          into the phase where a subsequent `REQUEST_STATE` is expected.
  *          When already synchronized this remains a harmless read-only refresh.
  *
- * @param now Current loop timestamp.
  */
-void onRequestDetailsServed(uint32_t now)
+void onRequestDetailsServed()
 {
     if (syncState == State::Synced)
     {
@@ -154,7 +158,7 @@ void onRequestDetailsServed(uint32_t now)
     if (syncState == State::AwaitBridgeDetails)
     {
         syncState = State::AwaitBridgeState;
-        awaitingStateSince_ms = now;
+        awaitingStateAge_ms = 0U;
     }
 }
 
@@ -171,7 +175,7 @@ void onRequestStateServed()
     }
 
     syncState = State::Synced;
-    awaitingStateSince_ms = 0U;
+    awaitingStateAge_ms = 0U;
 }
 
 /**

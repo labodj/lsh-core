@@ -40,12 +40,18 @@ namespace bridgeSerial
 #ifndef CONFIG_PING_INTERVAL_MS
 static constexpr const uint16_t PING_INTERVAL_MS = 10000U;  //!< Default Ping interval time in ms
 #else
+static_assert(CONFIG_PING_INTERVAL_MS >= 0, "CONFIG_PING_INTERVAL_MS must be non-negative.");
+static_assert(CONFIG_PING_INTERVAL_MS < UINT16_MAX, "CONFIG_PING_INTERVAL_MS must be below UINT16_MAX so saturated timers can pass it.");
 static constexpr const uint16_t PING_INTERVAL_MS = CONFIG_PING_INTERVAL_MS;  //!< Ping interval time in ms
 #endif  // CONFIG_PING_INTERVAL_MS
 
 #ifndef CONFIG_CONNECTION_TIMEOUT_MS
+static_assert(PING_INTERVAL_MS <= static_cast<uint16_t>(UINT16_MAX - 200U),
+              "CONFIG_PING_INTERVAL_MS is too high for the default CONFIG_CONNECTION_TIMEOUT_MS.");
 static constexpr const uint16_t CONNECTION_TIMEOUT_MS = PING_INTERVAL_MS + 200U;  //!< Default Time for a connection timeout in ms
 #else
+static_assert(CONFIG_CONNECTION_TIMEOUT_MS > 0, "CONFIG_CONNECTION_TIMEOUT_MS must be greater than zero.");
+static_assert(CONFIG_CONNECTION_TIMEOUT_MS <= UINT16_MAX, "CONFIG_CONNECTION_TIMEOUT_MS must fit in uint16_t.");
 static constexpr const uint16_t CONNECTION_TIMEOUT_MS = CONFIG_CONNECTION_TIMEOUT_MS;  //!< Time for a connection timeout in ms
 #endif  // CONFIG_CONNECTION_TIMEOUT_MS
 
@@ -53,6 +59,8 @@ static constexpr const uint16_t CONNECTION_TIMEOUT_MS = CONFIG_CONNECTION_TIMEOU
 static constexpr const uint16_t BRIDGE_BOOT_RETRY_INTERVAL_MS =
     250U;  //!< Retry interval for BOOT while the bridge has not completed its startup handshake.
 #else
+static_assert(CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS > 0, "CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS must be greater than zero.");
+static_assert(CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS <= UINT16_MAX, "CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS must fit in uint16_t.");
 static constexpr const uint16_t BRIDGE_BOOT_RETRY_INTERVAL_MS = CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS;
 #endif  // CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS
 
@@ -60,6 +68,8 @@ static constexpr const uint16_t BRIDGE_BOOT_RETRY_INTERVAL_MS = CONFIG_BRIDGE_BO
 static constexpr const uint16_t BRIDGE_AWAIT_STATE_TIMEOUT_MS =
     1500U;  //!< Maximum time to wait for REQUEST_STATE after REQUEST_DETAILS before restarting the handshake.
 #else
+static_assert(CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS > 0, "CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS must be greater than zero.");
+static_assert(CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS <= UINT16_MAX, "CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS must fit in uint16_t.");
 static constexpr const uint16_t BRIDGE_AWAIT_STATE_TIMEOUT_MS = CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS;
 #endif  // CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS
 
@@ -73,6 +83,8 @@ static constexpr const uint32_t COM_SERIAL_BAUD = CONFIG_COM_SERIAL_BAUD;  //!< 
 static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS =
     5U;  //!< Compatibility fallback used only as the default MsgPack frame idle-timeout value.
 #else
+static_assert(CONFIG_COM_SERIAL_TIMEOUT_MS >= 0, "CONFIG_COM_SERIAL_TIMEOUT_MS must be non-negative.");
+static_assert(CONFIG_COM_SERIAL_TIMEOUT_MS <= UINT8_MAX, "CONFIG_COM_SERIAL_TIMEOUT_MS must fit in uint8_t.");
 static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS =
     CONFIG_COM_SERIAL_TIMEOUT_MS;  //!< Compatibility fallback used only as the default MsgPack frame idle-timeout value.
 #endif  // CONFIG_COM_SERIAL_TIMEOUT_MS
@@ -81,6 +93,10 @@ static constexpr const uint8_t COM_SERIAL_TIMEOUT_MS =
 static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
     COM_SERIAL_TIMEOUT_MS;  //!< Maximum silence while one serial MsgPack frame is still incomplete.
 #else
+static_assert(CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS >= 0,
+              "CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS must be non-negative.");
+static_assert(CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS <= UINT8_MAX,
+              "CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS must fit in uint8_t.");
 static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
     CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS;  //!< Maximum silence while one serial MsgPack frame is still incomplete.
 #endif  // CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS
@@ -89,7 +105,7 @@ static constexpr const uint8_t COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS =
 static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP =
     4U;  //!< Upper bound for fully dispatched bridge payloads in one controller loop iteration.
 #else
-static_assert(CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP > 0U, "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must be greater than zero.");
+static_assert(CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP > 0, "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must be greater than zero.");
 static_assert(CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP <= UINT8_MAX, "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must fit in uint8_t.");
 static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP = CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP;
 #endif  // CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP
@@ -106,7 +122,7 @@ static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = (CONFIG_COM_SERIAL_FLU
 #endif  // CONFIG_COM_SERIAL_FLUSH_AFTER_SEND
 
 constexpr uint16_t PACKED_STATE_BYTES =
-    static_cast<uint16_t>((CONFIG_MAX_ACTUATORS + 7U) / 8U);  //!< Number of bytes required to represent all actuator states on wire.
+    CONFIG_PACKED_ACTUATOR_STATE_BYTES;  //!< Number of bytes required to represent all actuator states on wire.
 
 /*
                 Received Json Document Size, the size is computed here https://arduinojson.org/v6/assistant/
@@ -203,39 +219,13 @@ static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
     RAW_INPUT_BUFFER_SIZE;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
 #endif
 #else
+static_assert(CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP > 0, "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP must be greater than zero.");
+static_assert(CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP <= UINT16_MAX, "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP must fit in uint16_t.");
 static constexpr const uint16_t COM_SERIAL_MAX_RX_BYTES_PER_LOOP =
     CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP;  //!< Upper bound for raw serial bytes consumed in one controller loop iteration.
 #endif  // CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP
 static_assert(COM_SERIAL_MAX_RX_BYTES_PER_LOOP > 0U, "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP must be greater than zero.");
 
-/*
-                Sent details Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
-                IMPORTANT: We are assuming that all keys strings and values strings are const char *
-                {"p":1,"v":3,"n":"c1","a":[1,2,...],"b":[1,3,...]} -> JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) + JSON_OBJECT_SIZE(5)
-                                                                    -> 8*CONFIG_MAX_ACTUATORS + 8*CONFIG_MAX_CLICKABLES + 40
-                The bare minimum is 40 with no actuators nor clickables
-                */
-constexpr uint16_t SENT_DOC_DETAILS_SIZE = JSON_ARRAY_SIZE(CONFIG_MAX_ACTUATORS) + JSON_ARRAY_SIZE(CONFIG_MAX_CLICKABLES) +
-                                           JSON_OBJECT_SIZE(5);  //!< Calculated size for the JSON document sent with device details.
-
-/*
-                Sent state Json Document size, the size is computed here https://arduinojson.org/v6/assistant/
-                IMPORTANT: We are assuming that all keys strings are const char * but not values
-                {"p":2,"s":[90,3]} -> JSON_ARRAY_SIZE(ceil(CONFIG_MAX_ACTUATORS / 8)) + JSON_OBJECT_SIZE(2)
-                because `ACTUATORS_STATE` is serialized as packed bytes.
-                The bare minimum is 16 with no actuators.
-                */
-constexpr uint16_t SENT_DOC_STATE_SIZE =
-    JSON_ARRAY_SIZE(PACKED_STATE_BYTES) + JSON_OBJECT_SIZE(2);  //!< Calculated size for the JSON document sent with packed actuator states.
-
-/*
-                Sent network click Json Document, the size is computed here https://arduinojson.org/v6/assistant/
-                IMPORTANT: We are assuming that all keys strings and values strings are const char *
-                {"p":3,"t":1,"i":1,"c":42} -> JSON_OBJECT_SIZE(4) -> 32
-                */
-constexpr uint16_t SENT_DOC_NETWORK_CLICK_SIZE = JSON_OBJECT_SIZE(4);  //!< Calculated size for the JSON document sent for network clicks.
-
-constexpr uint16_t SENT_DOC_MAX_SIZE = SENT_DOC_DETAILS_SIZE;  //!< The maximum possible size for any JSON document sent by the device.
 }  // namespace bridgeSerial
 }  // namespace constants
 

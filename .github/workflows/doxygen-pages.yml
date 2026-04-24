@@ -45,6 +45,9 @@ jobs:
             --target shared-doc \
             --shared-doc-root vendor/lsh-protocol \
             --check
+          python3 tools/generate_lsh_static_config.py \
+            examples/multi-device-project/lsh_devices.toml \
+            --check
 
       - name: Build Doxygen documentation
         run: doxygen docs/Doxyfile
