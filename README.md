@@ -1,14 +1,21 @@
-# LSH-Core: The Arduino Firmware Engine for Labo Smart Home
+# lsh-core: Controller Firmware for Labo Smart Home
 
 [![Build Status](https://github.com/labodj/lsh-core/actions/workflows/ci.yml/badge.svg)](https://github.com/labodj/lsh-core/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/labodj/lsh-core?display_name=tag&sort=semver)](https://github.com/labodj/lsh-core/releases/latest)
 [![API Documentation](https://img.shields.io/badge/API%20Reference-Doxygen-blue.svg)](https://labodj.github.io/lsh-core/)
 
-Welcome to `lsh-core`, the core firmware engine for the **Labo Smart Home
-(LSH)** ecosystem. This framework was refined in a real-world Controllino-based
-installation to keep the controller side fast, predictable and maintainable.
+`lsh-core` is the controller-side firmware library for the **Labo Smart Home
+(LSH)** ecosystem. It runs on Arduino-compatible controllers, reads wired
+inputs, drives relays and indicators, and talks to an ESP32 bridge over serial.
 
-This document serves as the official guide for using the `lsh-core` library in your own PlatformIO projects.
+The default public path is a Controllino-style AVR controller paired with
+`lsh-bridge`, MQTT and Node-RED. The library is still useful to study or reuse
+on its own, but the documented adoption path assumes the full stack.
+
+Since `v3.0.0`, user configuration is TOML-first. You describe devices,
+buttons, relays, pins and click behavior in `lsh_devices.toml`; the generator
+emits the optimized C++ profile before compilation. A typical device profile
+does not require C++ setup code for topology.
 
 The hosted GitHub Pages API reference tracks the latest tagged release so the
 public class-level documentation stays aligned with released artifacts. This
@@ -20,6 +27,20 @@ reference profile first:
 - [Labo Smart Home landing page](https://github.com/labodj/labo-smart-home)
 - [LSH reference stack](https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md)
 - [LSH glossary](https://github.com/labodj/labo-smart-home/blob/main/GLOSSARY.md)
+
+## What You Need
+
+For the documented controller path:
+
+- PlatformIO
+- Python 3.11 or newer for the TOML generator
+- an Arduino-compatible AVR target; Controllino Maxi is the best documented one
+- an ESP32 running `lsh-bridge` if you want MQTT/Homie integration
+- an MQTT broker and Node-RED if you want the full public reference behavior
+
+The library is optimized for static device topology. If your project needs
+devices to appear and disappear at runtime, this is not the right abstraction
+without additional work.
 
 ## Start Here
 
@@ -42,12 +63,19 @@ The fastest concrete starting point in this repository is:
 - [examples/multi-device-project](./examples/multi-device-project)
 
 It already shows a reusable multi-device PlatformIO layout with separate device
-profiles.
+profiles, a TOML source file and generated headers.
 
 Useful example profiles:
 
 - `J1_release`: leaner profile, MsgPack enabled, no network-click subsystem
 - `J2_release`: richer profile that keeps the network-click path enabled
+
+Build it directly from this repository:
+
+```bash
+platformio run -d examples/multi-device-project -e J1_release
+platformio run -d examples/multi-device-project -e J2_release
+```
 
 For the stack-level bring-up order around this example, use the landing
 [`GETTING_STARTED.md`](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md).
@@ -102,7 +130,8 @@ The serial contract between `lsh-core` and `lsh-bridge` is intentionally strict:
 
 While this README provides a comprehensive guide for getting started and common use cases, a full, in-depth API reference is also available. This documentation is automatically generated using Doxygen from the source code comments and provides detailed information on all public classes, methods, and namespaces.
 
-It is the perfect resource for developers who want to understand the inner workings of the library or explore advanced functionalities beyond the examples provided here.
+Use it when you need class-level details, method signatures or implementation
+notes beyond the examples in this README.
 
 The hosted site tracks the latest tagged release. If you are reading `main`
 between releases, the repository sources and this README may already include
@@ -169,7 +198,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
 ### 1. Project Setup
 
 1. Create a new, blank PlatformIO project.
-2. In your `platformio.ini`, add the LSH-Core library as a dependency:
+2. In your `platformio.ini`, add `lsh-core` as a dependency:
 
    ```ini
     [env:my_device]
@@ -187,7 +216,21 @@ This is why the bridge and orchestration layers are treated as additive rather t
    `lsh-core=symlink://../..` dependency used by
    `examples/multi-device-project/platformio.ini`.
 
-3. Create the following directory structure inside your project:
+3. Add the generator hook and select a device profile:
+
+   ```ini
+   extra_scripts = pre:path/to/lsh-core/tools/platformio_lsh_static_config.py
+   custom_lsh_config = lsh_devices.toml
+
+   [env:my_device]
+   custom_lsh_device = my_device
+   ```
+
+   The `extra_scripts` path must point to an accessible `lsh-core` checkout.
+   The bundled example uses a local symlink dependency; consumer projects can
+   use an adjacent checkout, a submodule or another fixed local path.
+
+4. Create the following directory structure inside your project:
 
    ```text
    LSH-User-Project/
@@ -200,6 +243,14 @@ This is why the bridge and orchestration layers are treated as additive rather t
    └── src/
        └── main.cpp
    ```
+
+5. Write `lsh_devices.toml`, then build. PlatformIO runs the generator before
+   compilation and injects the correct `LSH_BUILD_*` selector for the selected
+   `custom_lsh_device`.
+
+For a complete working layout, copy the shape of
+[examples/multi-device-project](./examples/multi-device-project) instead of
+starting from a blank file.
 
 ### Core Configuration Concepts
 
@@ -487,7 +538,8 @@ The configured fallback logic is applied instantly if any step in this chain fai
 - The `lsh-logic` controller sends a negative acknowledgement (NACK) because the request is invalid or other devices are offline.
 - **Most importantly: If the initial ACK from `lsh-logic` does not arrive back at the `lsh-core` device within the timeout period (typically ~1 second).**
 
-This robust system ensures that the user gets immediate feedback and predictable behavior, whether the network is perfectly responsive or completely offline.
+This keeps user feedback predictable whether the network path is healthy,
+slow or unavailable.
 
 ## Feature Flags
 

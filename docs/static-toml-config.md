@@ -7,6 +7,21 @@ profile and emits the optimized C++ headers consumed by the library.
 Generated headers are an implementation detail. Edit the TOML, regenerate, and
 compile.
 
+## Mental Model
+
+A device profile has two parts:
+
+- human input: `lsh_devices.toml`
+- generated output: C++ headers under `include/`
+
+For most projects, the TOML file is the file people maintain. It contains
+names, public IDs, pins, click behavior, serial choices and compile-time
+defines. The generated C++ contains dense indexes, lookup branches, static
+payload bytes and registration code tailored to that profile.
+
+This split is intentional. It keeps configuration readable while still allowing
+the compiled firmware to be small and predictable on 8-bit AVR targets.
+
 ## Quick Start
 
 Create `lsh_devices.toml` in the consumer project:
@@ -68,6 +83,21 @@ The hook validates the TOML, writes generated headers under `output_dir`, adds
 the selected `LSH_BUILD_*` macro, appends the generated include path, and applies
 the merged TOML build defines.
 
+`extra_scripts` must point to a real `lsh-core` checkout. The public example
+uses a local symlink dependency; a consumer project can use an adjacent checkout
+or a submodule when it wants a fixed release.
+
+The selected device comes from PlatformIO:
+
+```ini
+[env:Kitchen_release]
+custom_lsh_device = kitchen
+```
+
+Device keys may be lowercase, mixed with underscores, and independent from the
+runtime device name sent on the wire. Public actuator and clickable IDs may be
+sparse; users do not need to maintain lookup tables by hand.
+
 For a deliberately exhaustive syntax catalog, see
 `examples/all-options-toml/lsh_devices.toml`. It contains every currently
 accepted field, duration form, click-action form, define value type and indicator
@@ -85,6 +115,53 @@ python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-pla
 
 Python 3.11+ is preferred because it includes `tomllib`. Older Python versions
 need the small `tomli` package.
+
+## Recommended First Profile
+
+For a first controller, keep the profile deliberately small:
+
+```toml
+[common]
+hardware_include = "Controllino.h"
+debug_serial = "Serial"
+com_serial = "Serial2"
+
+[common.defines]
+CONFIG_MSG_PACK = true
+CONFIG_USE_FAST_CLICKABLES = true
+CONFIG_USE_FAST_ACTUATORS = true
+CONFIG_USE_FAST_INDICATORS = true
+
+[devices.first_panel]
+name = "first_panel"
+
+[[devices.first_panel.actuators]]
+name = "relay_1"
+id = 1
+pin = "CONTROLLINO_R0"
+
+[[devices.first_panel.clickables]]
+name = "button_1"
+id = 1
+pin = "CONTROLLINO_A0"
+short = ["relay_1"]
+```
+
+Add indicators, long-clicks, auto-off timers and network-click behavior only
+after this basic path builds and behaves as expected. That keeps first failures
+easy to diagnose.
+
+## Files To Commit
+
+For library examples and reproducible firmware projects, commit:
+
+- `lsh_devices.toml`
+- generated headers under `include/`
+- the PlatformIO configuration that selects `custom_lsh_device`
+
+For experiments where the build environment always runs the generator, generated
+headers can be treated as build artifacts. The public examples commit them so a
+reader can inspect the produced firmware profile without running tools first.
 
 ## Generator Section
 
@@ -364,6 +441,24 @@ The generator fails before compilation when it finds:
 
 This keeps configuration mistakes close to the TOML and avoids runtime defensive
 lookup tables on AVR.
+
+## Migration From Older Hand-Written Profiles
+
+Older consumers used one C++ file per device and selected it with
+`build_src_filter` plus an `LSH_BUILD_*` define. New consumers should move that
+information into TOML:
+
+- actuator constructors become `[[devices.<key>.actuators]]`
+- clickable constructors become `[[devices.<key>.clickables]]`
+- indicator constructors become `[[devices.<key>.indicators]]`
+- manual local target lists become action `targets`
+- per-device build defines move to `[devices.<key>.defines]`
+- shared lsh-core defines move to `[common.defines]`
+
+After the migration, remove legacy `src/configs/*.cpp` files from the build and
+let `platformio_lsh_static_config.py` inject the selected `LSH_BUILD_*` macro.
+Keep compiler, linker, upload and board-specific PlatformIO settings in
+`platformio.ini`.
 
 ## Generated Code Strategy
 
