@@ -207,8 +207,20 @@ auto MsgPackFrameReceiver::frameLength() const -> uint16_t
  *
  * @param destination byte sink that receives the framed payload.
  */
-MsgPackFrameWriter::MsgPackFrameWriter(Print &destination) noexcept : output(destination)
+MsgPackFrameWriter::MsgPackFrameWriter(HardwareSerial &destination) noexcept : output(destination)
 {}
+
+/**
+ * @brief Write one byte to the concrete UART implementation without `Print&` dispatch.
+ *
+ * @param byte byte to send.
+ * @return true if the UART accepted the byte.
+ * @return false otherwise.
+ */
+auto MsgPackFrameWriter::writeByte(uint8_t byte) -> bool
+{
+    return this->output.HardwareSerial::write(byte) == 1U;
+}
 
 /**
  * @brief Emit the delimiter that starts one new framed MsgPack payload.
@@ -220,7 +232,7 @@ MsgPackFrameWriter::MsgPackFrameWriter(Print &destination) noexcept : output(des
  */
 auto MsgPackFrameWriter::beginFrame() -> bool
 {
-    return this->output.write(MSGPACK_FRAME_END) == 1U;
+    return this->writeByte(MSGPACK_FRAME_END);
 }
 
 /**
@@ -231,7 +243,7 @@ auto MsgPackFrameWriter::beginFrame() -> bool
  */
 auto MsgPackFrameWriter::endFrame() -> bool
 {
-    return this->output.write(MSGPACK_FRAME_END) == 1U;
+    return this->writeByte(MSGPACK_FRAME_END);
 }
 
 /**
@@ -245,15 +257,15 @@ auto MsgPackFrameWriter::writeEscapedByte(uint8_t byte) -> bool
 {
     if (byte == MSGPACK_FRAME_END)
     {
-        return this->output.write(MSGPACK_FRAME_ESCAPE) == 1U && this->output.write(MSGPACK_FRAME_ESCAPED_END) == 1U;
+        return this->writeByte(MSGPACK_FRAME_ESCAPE) && this->writeByte(MSGPACK_FRAME_ESCAPED_END);
     }
 
     if (byte == MSGPACK_FRAME_ESCAPE)
     {
-        return this->output.write(MSGPACK_FRAME_ESCAPE) == 1U && this->output.write(MSGPACK_FRAME_ESCAPED_ESCAPE) == 1U;
+        return this->writeByte(MSGPACK_FRAME_ESCAPE) && this->writeByte(MSGPACK_FRAME_ESCAPED_ESCAPE);
     }
 
-    return this->output.write(byte) == 1U;
+    return this->writeByte(byte);
 }
 
 /**
@@ -297,13 +309,15 @@ auto MsgPackFrameWriter::write(const uint8_t *buffer, size_t size) -> size_t
 
         if (contiguousSafeBytes > 0U)
         {
-            const size_t writtenChunkBytes = this->output.write(buffer + writtenPayloadBytes, contiguousSafeBytes);
-            writtenPayloadBytes += writtenChunkBytes;
-            if (writtenChunkBytes != contiguousSafeBytes)
+            for (size_t chunkIndex = 0U; chunkIndex < contiguousSafeBytes; ++chunkIndex)
             {
-                break;
+                if (!this->writeByte(buffer[writtenPayloadBytes + chunkIndex]))
+                {
+                    writtenPayloadBytes += chunkIndex;
+                    return writtenPayloadBytes;
+                }
             }
-
+            writtenPayloadBytes += contiguousSafeBytes;
             if (writtenPayloadBytes == size)
             {
                 break;

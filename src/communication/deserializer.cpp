@@ -250,9 +250,6 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 
         const uint8_t numBytes = statesArray.size();
 
-        // LUT for bit masks (re-using the same pattern as Serializer for consistency)
-        static constexpr uint8_t BIT_MASK_8[8] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
-
         bool anyStateChanged = false;
         uint8_t actuatorIndex = 0;
         auto *const localActuators = Actuators::actuators.data();
@@ -264,10 +261,12 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
             {
                 return result;
             }
+            uint8_t bitMask = 0x01U;
             for (uint8_t bitIndex = 0; bitIndex < 8 && actuatorIndex < Actuators::totalActuators; ++bitIndex)
             {
-                const bool state = (packedByte & BIT_MASK_8[bitIndex]) != 0;
+                const bool state = (packedByte & bitMask) != 0U;
                 anyStateChanged |= localActuators[actuatorIndex]->setState(state);
+                bitMask <<= 1U;
                 ++actuatorIndex;
             }
         }

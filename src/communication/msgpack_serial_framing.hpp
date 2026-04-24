@@ -71,20 +71,21 @@ public:
 /**
  * @brief Streaming writer that applies the MsgPack framing while bytes are emitted on the serial link.
  */
-class MsgPackFrameWriter final : public Print
+class MsgPackFrameWriter final
 {
 private:
-    Print &output;  //!< Byte sink that receives the framed payload.
+    HardwareSerial &output;  //!< Concrete UART sink that receives the framed payload.
 
     [[nodiscard]] auto writeEscapedByte(uint8_t byte) -> bool;
+    [[nodiscard]] auto writeByte(uint8_t byte) -> bool;
 
 public:
-    explicit MsgPackFrameWriter(Print &destination) noexcept;
+    explicit MsgPackFrameWriter(HardwareSerial &destination) noexcept;
 
     auto beginFrame() -> bool;
     auto endFrame() -> bool;
-    auto write(uint8_t byte) -> size_t override;
-    auto write(const uint8_t *buffer, size_t size) -> size_t override;
+    auto write(uint8_t byte) -> size_t;
+    auto write(const uint8_t *buffer, size_t size) -> size_t;
 };
 
 }  // namespace lsh::core::transport

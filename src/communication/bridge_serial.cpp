@@ -40,7 +40,7 @@ using lsh::core::transport::MsgPackFrameWriter;
 #endif
 
 uint16_t sendIdleAge_ms = UINT16_MAX;      //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
-uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Real-time instant at which the last valid payload finished deserializing.
+uint32_t lastReceivedPayloadTime_ms = 0U;  //!< Loop timestamp assigned when the last valid payload finished deserializing.
 bool firstValidPayloadReceived = false;    //!< True after the first valid payload has been received.
 
 namespace
@@ -97,7 +97,7 @@ auto sendJson(const JsonDocument &documentToSend) -> bool
         return false;
     }
 
-    lsh::core::communication::CheckedWriter<Print> checkedWriter(framedWriter);
+    lsh::core::communication::CheckedWriter<MsgPackFrameWriter> checkedWriter(framedWriter);
     const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, checkedWriter);
     const bool frameEnded = framedWriter.endFrame();
     if (writtenPayloadBytes == 0U || checkedWriter.failed() || !frameEnded)
@@ -182,7 +182,7 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
         DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
         DPJ(receivedDocument);
         firstValidPayloadReceived = true;
-        lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
+        lastReceivedPayloadTime_ms = timeKeeper::getTime();
         receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
         receiveResult.payloadDispatched = true;
         return receiveResult;
@@ -221,7 +221,7 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
                     DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
                     DPJ(receivedDocument);
                     firstValidPayloadReceived = true;
-                    lastReceivedPayloadTime_ms = timeKeeper::getRealTime();
+                    lastReceivedPayloadTime_ms = timeKeeper::getTime();
                     receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
                     receiveResult.payloadDispatched = true;
                     return receiveResult;
@@ -304,9 +304,9 @@ void updateLastSentTime()
  * @details The bridge is considered online only after the first valid payload
  *          has been received and only while the receive timeout window stays
  *          open. The receive timestamp stores the real completion time of the
- *          last accepted payload, so the liveness check must use the same
- *          real-time clock to avoid cached-time underflow inside the current
- *          controller loop iteration.
+ *          last accepted payload using the loop cached timestamp, so callers
+ *          can reuse that same value and still keep normal unsigned wrap
+ *          semantics.
  *
  * @return true if the bridge answered recently enough.
  * @return false if the bridge never answered or timed out.
@@ -314,8 +314,23 @@ void updateLastSentTime()
 auto isConnected() -> bool
 {
     DP_CONTEXT();
+    return isConnected(timeKeeper::getRealTime());
+}
+
+/**
+ * @brief Check bridge liveness using a timestamp already available to the caller.
+ * @details `lastReceivedPayloadTime_ms` is stamped with the loop cached time,
+ *          so the standard unsigned-delta timeout check remains valid across
+ *          the natural `millis()` wrap.
+ *
+ * @param now Timestamp to compare against the last valid bridge payload.
+ * @return true if the bridge answered recently enough.
+ * @return false if the bridge never answered or timed out.
+ */
+auto isConnected(uint32_t now) -> bool
+{
     using constants::bridgeSerial::CONNECTION_TIMEOUT_MS;
-    return (firstValidPayloadReceived && ((timeKeeper::getRealTime() - lastReceivedPayloadTime_ms) < CONNECTION_TIMEOUT_MS));
+    return firstValidPayloadReceived && ((now - lastReceivedPayloadTime_ms) < CONNECTION_TIMEOUT_MS);
 }
 
 }  // namespace BridgeSerial

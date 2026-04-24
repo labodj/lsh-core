@@ -128,6 +128,7 @@ void loop()
     // These flags persist across loop iterations so the runtime can defer bridge I/O
     // without losing the fact that a state refresh or timeout scan is still required.
     static bool mustTransmitStateToBridge = false;  //!< True when the bridge must receive a fresh actuator snapshot.
+    static bool mustRefreshIndicators = false;      //!< True when local indicators must be refreshed from actuator states.
 #if CONFIG_USE_NETWORK_CLICKS
     static bool mustPollNetworkClickTimeouts = false;  //!< True while at least one network click transaction still needs timeout handling.
 #endif
@@ -135,6 +136,15 @@ void loop()
     static uint32_t lastClickableScanTime_ms = 0U;       //!< Timestamp of the last input scan pass.
     uint8_t receivedPayloadsThisLoop = 0U;               //!< Number of bridge payloads already dispatched in this loop iteration.
     uint16_t receivedBytesThisLoop = 0U;                 //!< Raw UART bytes already consumed in this loop iteration.
+
+    auto noteActuatorStateChanged = [&](bool stateChanged)
+    {
+        if (stateChanged)
+        {
+            mustTransmitStateToBridge = true;
+            mustRefreshIndicators = true;
+        }
+    };
 
     auto drainBridgeRx = [&](uint8_t maxPayloadsToDispatch, uint16_t maxBytesToConsume)
     {
@@ -149,7 +159,7 @@ void loop()
             }
 
             receivedBytesThisLoop = static_cast<uint16_t>(receivedBytesThisLoop + receiveResult.consumedBytes);
-            mustTransmitStateToBridge |= receiveResult.dispatch.stateChanged;
+            noteActuatorStateChanged(receiveResult.dispatch.stateChanged);
 #if CONFIG_USE_NETWORK_CLICKS
             mustPollNetworkClickTimeouts |= receiveResult.dispatch.networkClickHandled;
 #endif
@@ -181,7 +191,7 @@ void loop()
     // a valid frame already waiting in the UART could only refresh liveness on
     // the next loop iteration and a network-clickable press could spuriously
     // fall back to the local action on the timeout edge.
-    if (CONFIG_COM_SERIAL->available() && !BridgeSerial::isConnected())
+    if (CONFIG_COM_SERIAL->available() && !BridgeSerial::isConnected(now))
     {
         drainBridgeRx(1U, constants::bridgeSerial::COM_SERIAL_MAX_RX_BYTES_PER_LOOP);
     }
@@ -213,7 +223,7 @@ void loop()
             {
                 DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), currentClickable->getId(), FPSTR(dStr::SPACE), FPSTR(dStr::SHORT),
                     FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                mustTransmitStateToBridge |= currentClickable->shortClick();
+                noteActuatorStateChanged(currentClickable->shortClick());
             }
             break;
 
@@ -225,7 +235,7 @@ void loop()
                 if (currentClickable->isNetworkClickable(clickType))
                 {
 #if CONFIG_USE_NETWORK_CLICKS
-                    if (BridgeSerial::isConnected())
+                    if (BridgeSerial::isConnected(now))
                     {
                         const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), clickType);
                         if (requestResult == NetworkClicks::RequestResult::Accepted)
@@ -235,25 +245,25 @@ void loop()
                         else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
                                  currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                         {
-                            mustTransmitStateToBridge |= currentClickable->longClick();
+                            noteActuatorStateChanged(currentClickable->longClick());
                         }
                     }
                     // If the bridge path is unavailable and the device was configured with
                     // local fallback, execute the local action instead of dropping the press.
                     else if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= currentClickable->longClick();
+                        noteActuatorStateChanged(currentClickable->longClick());
                     }
 #else
                     if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= currentClickable->longClick();
+                        noteActuatorStateChanged(currentClickable->longClick());
                     }
 #endif
                 }
                 else
                 {
-                    mustTransmitStateToBridge |= currentClickable->longClick();
+                    noteActuatorStateChanged(currentClickable->longClick());
                 }
             }
             break;
@@ -266,7 +276,7 @@ void loop()
                 if (currentClickable->isNetworkClickable(clickType))
                 {
 #if CONFIG_USE_NETWORK_CLICKS
-                    if (BridgeSerial::isConnected())
+                    if (BridgeSerial::isConnected(now))
                     {
                         const auto requestResult = NetworkClicks::request(currentClickable->getIndex(), clickType);
                         if (requestResult == NetworkClicks::RequestResult::Accepted)
@@ -276,23 +286,23 @@ void loop()
                         else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
                                  currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                         {
-                            mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
+                            noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
                         }
                     }
                     else if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
+                        noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
                     }
 #else
                     if (currentClickable->getNetworkFallback(clickType) == constants::NoNetworkClickType::LOCAL_FALLBACK)
                     {
-                        mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
+                        noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
                     }
 #endif
                 }
                 else
                 {
-                    mustTransmitStateToBridge |= Clickables::click(currentClickable, clickType);
+                    noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
                 }
             }
             break;
@@ -316,7 +326,7 @@ void loop()
         if (now - lastNetworkClickCheckTime_ms > NETWORK_CLICK_CHECK_INTERVAL_MS)  // Check network click timers every N ms
         {
             lastNetworkClickCheckTime_ms = now;
-            mustTransmitStateToBridge |= NetworkClicks::checkAllNetworkClicksTimers(false);
+            noteActuatorStateChanged(NetworkClicks::checkAllNetworkClicksTimers(false));
             mustPollNetworkClickTimeouts = NetworkClicks::thereAreActiveNetworkClicks();
         }
     }
@@ -327,19 +337,23 @@ void loop()
     if (now - lastAutoOffCheckTime_ms > ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS)  // Check every second
     {
         lastAutoOffCheckTime_ms = now;
-        mustTransmitStateToBridge |= Actuators::actuatorsAutoOffTimersCheck();
+        noteActuatorStateChanged(Actuators::actuatorsAutoOffTimersCheck());
+    }
+
+    if (mustRefreshIndicators)
+    {
+        Indicators::indicatorsCheck();
+        mustRefreshIndicators = false;
     }
 
     // Publish the latest controller state to the bridge only after the grace period
     // that protects the link from immediate reply collisions after an inbound frame.
     if (mustTransmitStateToBridge)
     {
-        const uint32_t nowForTransmit_ms = timeKeeper::getRealTime();
-        if (nowForTransmit_ms - BridgeSerial::lastReceivedPayloadTime_ms > DELAY_AFTER_RECEIVE_MS)
+        if (now - BridgeSerial::lastReceivedPayloadTime_ms > DELAY_AFTER_RECEIVE_MS)
         {
             if (Serializer::serializeActuatorsState())
             {
-                Indicators::indicatorsCheck();
                 mustTransmitStateToBridge = false;
             }
         }

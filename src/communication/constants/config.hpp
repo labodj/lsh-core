@@ -96,7 +96,11 @@ static constexpr const uint8_t COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP = CONFIG_COM_
 static_assert(COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP > 0U, "COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP must be greater than zero.");
 
 #ifndef CONFIG_COM_SERIAL_FLUSH_AFTER_SEND
-static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = true;  //!< Conservative default: flush after every payload send.
+#ifdef LSH_DEBUG
+static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = true;  //!< Debug builds keep the conservative flush-after-send behavior.
+#else
+static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = false;  //!< Release builds avoid blocking on every bridge payload by default.
+#endif  // LSH_DEBUG
 #else
 static constexpr const bool COM_SERIAL_FLUSH_AFTER_SEND = (CONFIG_COM_SERIAL_FLUSH_AFTER_SEND != 0);
 #endif  // CONFIG_COM_SERIAL_FLUSH_AFTER_SEND

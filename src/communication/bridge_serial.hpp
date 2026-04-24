@@ -48,11 +48,12 @@ extern bool firstValidPayloadReceived;
 void init();                                                              // Initialize the hardware serial link used by the bridge.
 [[nodiscard]] auto sendJson(const JsonDocument &documentToSend) -> bool;  // Send one payload to the bridge using the active codec.
 auto receiveAndDispatch(uint16_t maxBytesToConsume)
-    -> ReceiveResult;                         // Consume up to N bytes and dispatch at most one complete bridge payload.
-void tickSendIdleTimer(uint16_t elapsed_ms);  // Advance the ping idle timer using the elapsed bridge-housekeeping time.
-[[nodiscard]] auto canPing() -> bool;         // Return true when another heartbeat may be emitted.
-void updateLastSentTime();                    // Reset the ping idle timer after a payload transmission.
-[[nodiscard]] auto isConnected() -> bool;     // Return true when the bridge is still considered online.
+    -> ReceiveResult;                                  // Consume up to N bytes and dispatch at most one complete bridge payload.
+void tickSendIdleTimer(uint16_t elapsed_ms);           // Advance the ping idle timer using the elapsed bridge-housekeeping time.
+[[nodiscard]] auto canPing() -> bool;                  // Return true when another heartbeat may be emitted.
+void updateLastSentTime();                             // Reset the ping idle timer after a payload transmission.
+[[nodiscard]] auto isConnected() -> bool;              // Return true when the bridge is still considered online.
+[[nodiscard]] auto isConnected(uint32_t now) -> bool;  // Return bridge liveness using a caller-provided timestamp.
 }  // namespace BridgeSerial
 
 #endif  // LSH_CORE_COMMUNICATION_BRIDGE_SERIAL_HPP

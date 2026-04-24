@@ -125,15 +125,9 @@ auto serializeDetails() -> bool
 
 /**
  * @brief Prepare and send a JSON actuators state payload with bitpacked byte array.
- * @details AVR-optimized packing using:
- *          - LUT for O(1) bit mask lookup (essential, AVR has no barrel shifter)
- *          - Bit shift `>>3` instead of `/8` (~1 cycle vs ~20-50 cycles)
- *          - Per-byte loop structure (fewer outer iterations)
- *          - Incremental index instead of multiplication (avoids `*8`)
- *
- *          Output format: {"p":2,"s":[byte0,byte1,...]}
- *          Each byte contains 8 actuator states (bit 0 = first actuator in byte).
- *          Example: 12 actuators → {"p":2,"s":[90,15]} (2 bytes vs 12 array elements)
+ * @details The actuator manager keeps a packed state shadow in protocol order,
+ *          so this path only appends already-built bytes to the outbound payload.
+ *          Output format: {"p":2,"s":[byte0,byte1,...]}.
  */
 auto serializeActuatorsState() -> bool
 {
