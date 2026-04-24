@@ -41,11 +41,8 @@ jobs:
       - name: Install Python tooling
         run: uv sync --locked --only-group dev
 
-      - name: Install clang-format
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format
-          clang-format --version
+      - name: Show clang-format version
+        run: uv run clang-format --version
 
       - name: Check Python formatting, linting and types
         run: |
@@ -69,7 +66,7 @@ jobs:
             | while IFS= read -r file; do
                 [ -f "$file" ] && printf '%s\n' "$file"
               done)
-          clang-format --dry-run --Werror --style=file $files
+          uv run clang-format --dry-run --Werror --style=file $files
 
       - name: Validate generated protocol artifacts
         run: |

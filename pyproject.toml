@@ -6,6 +6,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+  "clang-format>=18",
   "mypy>=1.18.2",
   "pyrefly>=0.62.0",
   "pytest>=9.0.1",
