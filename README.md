@@ -248,7 +248,8 @@ Optional compact actuator-link pools:
   - every `addActuatorLong(...)` contributes `1` to `LSH_MAX_LONG_CLICK_ACTUATOR_LINKS`
   - every `addActuatorSuperLong(...)` contributes `1` to `LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS`
   - every `Indicator::addActuator(...)` contributes `1` to `LSH_MAX_INDICATOR_ACTUATOR_LINKS`
-- Duplicates count too. If one clickable intentionally adds the same actuator twice, the pool must reserve two entries because the runtime stores exactly what the configuration asked for.
+- Duplicate local links are rejected during setup. If one click type points to the same actuator twice, the profile is treated as a configuration error instead of letting one action cancel itself out.
+- Links may be appended in any configuration order. During setup, `lsh-core` inserts each link into the owning compact slice and shifts later slices when needed; the runtime still pays only `offset + count` metadata and one actuator-index byte per link.
 - Network-only clicks do not contribute local link entries by themselves. If a `setClickableLong(..., true, ...)` or `setClickableSuperLong(..., true, ...)` has no matching local `addActuatorLong(...)` or `addActuatorSuperLong(...)`, the local pool count for that click type stays unchanged.
 - The storage stays static and heap-free. If you undersize one of these totals, setup aborts with a clear wrong-config reset to protect the compact pools from invalid writes.
 - On AVR, omitting these macros now emits compile-time warnings because the compatibility fallback reserves the full worst-case `devices × actuators` budget in `.bss`.
@@ -256,6 +257,14 @@ Optional compact actuator-link pools:
 - The bundled examples show both sides:
   - `J1` uses compact pools and disables network clicks completely
   - `J2` uses compact pools but keeps network clicks enabled
+
+Optional runtime pools:
+
+- `LSH_MAX_CLICKABLE_TIMING_OVERRIDES` defines how many clickables may override the global long/super-long timing with `setLongClickTime(...)` or `setSuperLongClickTime(...)`. If omitted, each clickable keeps its own timing fields for compatibility. If defined, only clickables that actually override timings consume pool entries.
+- `LSH_MAX_AUTO_OFF_ACTUATORS` defines how many actuators may have a non-zero `setAutoOffTimer(...)`. If omitted, the pool defaults to `LSH_MAX_ACTUATORS`.
+- `LSH_COMPACT_ACTUATOR_SWITCH_TIMES` removes the per-`Actuator` 32-bit switch timestamp and keeps the auto-off timestamp only in the auto-off pool. This is RAM-positive when only a minority of actuators use auto-off, but it requires `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0` so debounce semantics remain exact. Keep it disabled for profiles where most relays have auto-off timers or actuator debounce is required.
+- `LSH_MAX_ACTIVE_NETWORK_CLICKS` defines the number of concurrent pending network-click transactions. If omitted, the compatibility default reserves up to `2 × LSH_MAX_CLICKABLES` slots, clamped to `255` because the active counter is byte-sized on AVR. A single held button with both long and super-long network clicks enabled needs `2` slots: the long request is emitted first, then the super-long request is emitted while the button is still held.
+- These values have compile-time range checks. Runtime setup also verifies that a single clickable cannot require more simultaneous network-click slots than the configured pool provides.
 
 Optional network-click exclusion:
 
@@ -269,11 +278,26 @@ Optional network-click exclusion:
 Important registration-order rule:
 
 - Register every `Clickable` with `addClickable(...)` before calling any `addActuatorShort(...)`, `addActuatorLong(...)`, or `addActuatorSuperLong(...)` on it.
-- Register every `Actuator` with `addActuator(...)` before using `getIndex(actuator)` anywhere else.
+- Register every `Actuator` with `addActuator(...)` before calling `setAutoOffTimer(...)` or using `getIndex(actuator)` anywhere else.
 - Register every `Indicator` with `addIndicator(...)` before calling `Indicator::addActuator(...)`.
-- The compact pools store links using the dense runtime index assigned at registration time. Wrong registration order is treated as a setup error.
-- Duplicate local links are rejected during setup. Duplicated links are almost always a configuration bug and can produce confusing behaviour such as one short click toggling the same relay twice.
+- The compact pools store links using the dense runtime index assigned at registration time. Wrong object registration order is treated as a setup error, but link append order is free.
+- The manager arrays are expected to stay compact: registered objects occupy indexes `0..total-1`, their internal index must match the array position, and no stale pointer may exist after `total`. `finalizeSetup()` validates this before the runtime starts.
+- Duplicate local links are rejected during setup. Duplicated links are almost always a configuration bug and can produce confusing behavior such as one short click toggling the same relay twice.
 - Every indicator must control at least one actuator. An empty indicator configuration is treated as a setup error.
+
+Controllino setup helpers:
+
+- On Controllino Maxi / Maxi Automation / Mega profiles, `Configurator::configure()` can call `disableRtc()` and `disableEth()`.
+- `disableRtc()` forces the onboard RTC chip select inactive when the AVR profile does not use the RTC.
+- `disableEth()` forces the Ethernet controller chip select inactive when Ethernet is not owned by the AVR firmware.
+- These helpers are intentionally board-specific and available from inside `Configurator::configure()`, where the rest of the hardware profile is declared.
+
+Compile-time constants layout:
+
+- User profile macros are imported by `src/internal/user_config_bridge.hpp` and exposed as `CONFIG_*` values used by low-level allocation code.
+- The same resource-limit values are also mirrored under `constants::config` for documentation-oriented code and future references.
+- Timing constants live in `src/util/constants/timing.hpp`.
+- Serial/bridge constants live in `src/communication/constants/config.hpp`.
 
 Optional receive-path fairness guard:
 
@@ -513,6 +537,8 @@ A key feature of LSH is its ability to operate reliably both online and offline.
 
 To enable a network click, set the third parameter of `setClickableLong()` or `setClickableSuperLong()` to `true`. The fourth parameter specifies the fallback behavior.
 
+If the same button has both long and super-long network clicks enabled, `lsh-core` preserves the natural sequence for a held press: the long network click is requested first, then the super-long network click is requested while the button remains pressed. Size `LSH_MAX_ACTIVE_NETWORK_CLICKS` accordingly; that single button needs two active slots.
+
 #### Fallback Types
 
 You can choose between two different fallback types:
@@ -734,14 +760,14 @@ These flags allow you to override the default timing behavior of the framework. 
 
 #### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`
 
-- **Default:** `1` (`enabled`)
+- **Default:** `1` in `LSH_DEBUG` builds, `0` in release builds
 - **Description:** Controls whether `lsh-core` calls `flush()` on the serial link after each payload sent to `lsh-bridge`.
-- **Current status:** The system is currently validated with `flush()` enabled and in this configuration it works correctly and reliably.
-- **Why this exists:** This flag is exposed only to evaluate whether the serial link remains resilient even without `flush()`, potentially reducing blocking time on send.
-- **Recommendation:** Keep it enabled unless you are deliberately benchmarking or stress-testing the serial path without flush.
+- **Current status:** Debug builds keep the conservative validated behavior, while release builds avoid the blocking flush unless explicitly requested.
+- **Why this exists:** This flag lets a profile force the conservative behavior or explicitly benchmark the non-flushing serial path.
+- **Recommendation:** Keep the release default unless hardware tests show that the bridge link needs flushes on that specific installation.
 - **Examples:**
   - Keep the validated behavior: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=1`
-  - Experimental mode without flush: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
+  - Force the release-style non-blocking send path: `-D CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0`
 
 #### `CONFIG_DELAY_AFTER_RECEIVE_MS`
 
