@@ -38,7 +38,23 @@ namespace Clickables
 void finalizeActuatorLinkStorage();
 }
 
-struct ClickableActuatorLinkEntry;
+namespace lsh::core::detail
+{
+template <bool Use16Bit> struct LinkOffsetType
+{
+    using Type = uint16_t;
+};
+
+template <> struct LinkOffsetType<false>
+{
+    using Type = uint8_t;
+};
+}  // namespace lsh::core::detail
+
+static constexpr bool CLICKABLE_LINK_OFFSETS_NEED_16_BITS =
+    (CONFIG_SHORT_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY > UINT8_MAX || CONFIG_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY > UINT8_MAX ||
+     CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY > UINT8_MAX);
+using ClickableActuatorLinkOffset = typename lsh::core::detail::LinkOffsetType<CLICKABLE_LINK_OFFSETS_NEED_16_BITS>::Type;
 
 /**
  * @brief Lightweight read-only view over one clickable actuator-link list.
@@ -57,7 +73,7 @@ public:
     class Iterator
     {
     public:
-        explicit Iterator(const ClickableActuatorLinkEntry *entry = nullptr) noexcept;
+        explicit Iterator(const uint8_t *entry = nullptr) noexcept;
 
         [[nodiscard]] auto operator*() const -> uint8_t;
         auto operator++() -> Iterator &;
@@ -65,11 +81,11 @@ public:
         [[nodiscard]] auto operator!=(const Iterator &other) const -> bool;
 
     private:
-        const ClickableActuatorLinkEntry *currentEntry = nullptr;  //!< Current compact link entry visited by the iterator.
+        const uint8_t *currentEntry = nullptr;  //!< Current compact actuator index visited by the iterator.
     };
 
     ClickableActuatorLinksView() = default;
-    ClickableActuatorLinksView(const ClickableActuatorLinkEntry *entriesBegin, uint8_t linkCount) noexcept;
+    ClickableActuatorLinksView(const uint8_t *entriesBegin, uint8_t linkCount) noexcept;
 
     [[nodiscard]] auto begin() const -> Iterator;
     [[nodiscard]] auto end() const -> Iterator;
@@ -77,8 +93,8 @@ public:
     [[nodiscard]] auto size() const -> uint8_t;
 
 private:
-    const ClickableActuatorLinkEntry *entries = nullptr;  //!< Pointer to the first compact link entry of the exposed slice.
-    uint8_t count = 0U;                                   //!< Number of valid compact link entries in the slice.
+    const uint8_t *entries = nullptr;  //!< Pointer to the first compact actuator index of the exposed slice.
+    uint8_t count = 0U;                //!< Number of valid compact link entries in the slice.
 };
 
 /**
@@ -115,18 +131,19 @@ private:
     // Data structures definitions
     struct ClickableConfigFlags
     {
-        uint8_t isShortClickable : 1;             //!< True if the clickable is short clickable
-        uint8_t isLongClickable : 1;              //!< True if the clickable is long clickable
-        uint8_t isSuperLongClickable : 1;         //!< True if the clickable is super long clickable
-        uint8_t isNetworkLongClickable : 1;       //!< True if this clickable has long click network actuators
-        uint8_t isNetworkSuperLongClickable : 1;  //!< True if this clickable has super long click network actuators
-        uint8_t isQuickClickable : 1;             //!< Derived flag. True for a short click on press when no long/super-long is configured.
-        uint8_t isValid : 1;                      //!< True if it is either clickable, long clickable or super long clickable
-        uint8_t isChecked : 1;                    //!< True if we checked at least once the clickable validity
+        uint8_t isShortClickable : 1;              //!< True if the clickable is short clickable
+        uint8_t isLongClickable : 1;               //!< True if the clickable is long clickable
+        uint8_t isSuperLongClickable : 1;          //!< True if the clickable is super long clickable
+        uint8_t isNetworkLongClickable : 1;        //!< True if this clickable has long click network actuators
+        uint8_t isNetworkSuperLongClickable : 1;   //!< True if this clickable has super long click network actuators
+        uint8_t isQuickClickable : 1;              //!< Derived flag. True for a short click on press when no long/super-long is configured.
+        uint8_t longNetworkFallbackDoNothing : 1;  //!< True when long network-click fallback must skip local action.
+        uint8_t superLongNetworkFallbackDoNothing : 1;  //!< True when super-long network-click fallback must skip local action.
 
         LSH_CONSTEXPR ClickableConfigFlags() noexcept :
             isShortClickable(true), isLongClickable(false), isSuperLongClickable(false), isNetworkLongClickable(false),
-            isNetworkSuperLongClickable(false), isQuickClickable(false), isValid(false), isChecked(false)
+            isNetworkSuperLongClickable(false), isQuickClickable(false), longNetworkFallbackDoNothing(false),
+            superLongNetworkFallbackDoNothing(false)
         {}
     };
 
@@ -161,27 +178,31 @@ private:
     uint16_t stateAge_ms = 0U;                        //!< Elapsed time spent in the current non-idle state, saturated at 65535 ms.
     ActionFired lastActionFired = ActionFired::NONE;  //!< Tracks which timed action has already been triggered.
 
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+    uint8_t timingOverrideIndexEncoded = 0U;  //!< One-based timing override index, zero when this clickable uses global defaults.
+#else
     // Timings ("hot" configuration, move to top)
     uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;             //!< Long click time in ms
     uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS;  //!< Super long click time in ms
+#endif
 protected:
     uint8_t debounce_ms = constants::timings::CLICKABLE_DEBOUNCE_TIME_MS;  //!< Debounce time in ms
 private:
     // Non-boolean configuration properties (Cold data, rarely accessed in tight loops)
     constants::LongClickType longClickType = constants::LongClickType::NONE;                 //!< Long clickability setting
-    constants::NoNetworkClickType longClickFallback = constants::NoNetworkClickType::NONE;   //!< Fallback for long click over network
     constants::SuperLongClickType superLongClickType = constants::SuperLongClickType::NONE;  //!< Super long clickability setting
-    constants::NoNetworkClickType superLongClickFallback =
-        constants::NoNetworkClickType::NONE;  //!< Fallback for super long click over network
 
     // Compact actuator-link metadata.
     // The real link entries live in shared pools managed by clickable.cpp.
-    uint16_t shortLinksOffset = 0U;      //!< Offset of the first short-click actuator link inside the shared pool.
-    uint16_t longLinksOffset = 0U;       //!< Offset of the first long-click actuator link inside the shared pool.
-    uint16_t superLongLinksOffset = 0U;  //!< Offset of the first super-long-click actuator link inside the shared pool.
-    uint8_t shortLinksCount = 0U;        //!< Number of short-click actuator links attached to this clickable.
-    uint8_t longLinksCount = 0U;         //!< Number of long-click actuator links attached to this clickable.
-    uint8_t superLongLinksCount = 0U;    //!< Number of super-long-click actuator links attached to this clickable.
+    ClickableActuatorLinkOffset shortLinksOffset = 0U;      //!< Offset of the first short-click actuator link inside the shared pool.
+    ClickableActuatorLinkOffset longLinksOffset = 0U;       //!< Offset of the first long-click actuator link inside the shared pool.
+    ClickableActuatorLinkOffset superLongLinksOffset = 0U;  //!< Offset of the first super-long-click actuator link inside the shared pool.
+    uint8_t shortLinksCount = 0U;                           //!< Number of short-click actuator links attached to this clickable.
+    uint8_t longLinksCount = 0U;                            //!< Number of long-click actuator links attached to this clickable.
+    uint8_t superLongLinksCount = 0U;                       //!< Number of super-long-click actuator links attached to this clickable.
+
+    [[nodiscard]] auto getLongClickTime() const -> uint16_t;
+    [[nodiscard]] auto getSuperLongClickTime() const -> uint16_t;
 
 public:
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -300,8 +321,12 @@ public:
     [[nodiscard]] auto superLongClickSelective() const -> bool;  // Perform a selective super long click;
     [[nodiscard]] auto clickDetection(uint16_t elapsed_ms)
         -> constants::ClickResult;  // Advances the click FSM using the elapsed scan time and returns the detected click type.
-    void setActuatorLinksOffset(constants::ClickType actuatorType,
-                                uint16_t offsetToSet);  // Stores the compact shared-pool offset for one actuator-link list.
+    void
+    setActuatorLinksOffset(constants::ClickType actuatorType,
+                           ClickableActuatorLinkOffset offsetToSet);  // Stores the compact shared-pool offset for one actuator-link list.
+    void
+    shiftActuatorLinksOffsetAfterInsertion(constants::ClickType actuatorType,
+                                           uint16_t insertionIndex);  // Adjusts one compact slice offset after a setup-time pool insertion.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP

@@ -30,13 +30,12 @@ class Clickable;
 class Indicator;
 
 /**
- * @brief "static class" used to configure the device.
- *
+ * @brief Device-configuration facade used by profile `configure()` functions.
  */
 class Configurator
 {
 private:
-    // Helper functions for leaner config
+    // Setup helpers kept private so user profiles can use a compact DSL without exposing manager internals.
     static void addActuator(Actuator *actuator);     // Helper to add an actuator, for leaner config.
     static void addClickable(Clickable *clickable);  // Helper to add a clickable, for leaner config.
     static void addIndicator(Indicator *indicator);  // Helper to add an indicator, for leaner config.
@@ -46,8 +45,19 @@ private:
     static auto getIndex(const Indicator &indicator) -> uint8_t;  // Helper to get a indicator index, for leaner config
 
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
-    static void disableRtc();  // Disable Controllino RTC
-    static void disableEth();  // Disable COntrollino Ethernet
+    /**
+     * @brief Disable the Controllino RTC chip select during device setup.
+     * @details Call from `Configurator::configure()` when the profile does not
+     *          use the onboard RTC and wants the peripheral forced inactive.
+     */
+    static void disableRtc();
+
+    /**
+     * @brief Disable the Controllino Ethernet chip select during device setup.
+     * @details Call from `Configurator::configure()` when Ethernet is not used
+     *          by the AVR side and the SPI peripheral must stay deselected.
+     */
+    static void disableEth();
 #endif
 
 public:

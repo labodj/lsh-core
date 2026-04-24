@@ -29,17 +29,6 @@
 #include "util/reset.hpp"
 #include "util/saturating_time.hpp"
 
-/**
- * @brief One compact clickable-to-actuator link record stored inside the shared pools.
- * @details The owner index is stored as `index + 1` so zero remains available as
- *          a cheap always-invalid sentinel during setup-time sorting and scans.
- */
-struct ClickableActuatorLinkEntry
-{
-    uint8_t ownerIndexEncoded = 0U;  //!< One-based clickable index. Zero is reserved as "unused".
-    uint8_t actuatorIndex = 0U;      //!< Dense actuator index returned by `Configurator::getIndex()`.
-};
-
 using constants::ClickType;
 using namespace Debug;
 
@@ -48,7 +37,7 @@ using namespace Debug;
  *
  * @param entry Pointer to the current compact link entry.
  */
-ClickableActuatorLinksView::Iterator::Iterator(const ClickableActuatorLinkEntry *entry) noexcept : currentEntry(entry)
+ClickableActuatorLinksView::Iterator::Iterator(const uint8_t *entry) noexcept : currentEntry(entry)
 {}
 
 /**
@@ -58,7 +47,7 @@ ClickableActuatorLinksView::Iterator::Iterator(const ClickableActuatorLinkEntry 
  */
 auto ClickableActuatorLinksView::Iterator::operator*() const -> uint8_t
 {
-    return this->currentEntry->actuatorIndex;
+    return *this->currentEntry;
 }
 
 /**
@@ -102,7 +91,7 @@ auto ClickableActuatorLinksView::Iterator::operator!=(const Iterator &other) con
  * @param entriesBegin Pointer to the first compact link entry of the slice.
  * @param linkCount Number of valid entries in the slice.
  */
-ClickableActuatorLinksView::ClickableActuatorLinksView(const ClickableActuatorLinkEntry *entriesBegin, uint8_t linkCount) noexcept :
+ClickableActuatorLinksView::ClickableActuatorLinksView(const uint8_t *entriesBegin, uint8_t linkCount) noexcept :
     entries(entriesBegin), count(linkCount)
 {}
 
@@ -153,21 +142,33 @@ auto ClickableActuatorLinksView::size() const -> uint8_t
 
 namespace
 {
-etl::array<ClickableActuatorLinkEntry, CONFIG_SHORT_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
+etl::array<uint8_t, CONFIG_SHORT_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
     shortClickActuatorLinks{};  //!< Shared storage for all short-click actuator links.
-etl::array<ClickableActuatorLinkEntry, CONFIG_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
+etl::array<uint8_t, CONFIG_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
     longClickActuatorLinks{};  //!< Shared storage for all long-click actuator links.
-etl::array<ClickableActuatorLinkEntry, CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
+etl::array<uint8_t, CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINK_STORAGE_CAPACITY>
     superLongClickActuatorLinks{};               //!< Shared storage for all super-long-click actuator links.
 uint16_t totalShortClickActuatorLinks = 0U;      //!< Number of valid entries stored in `shortClickActuatorLinks`.
 uint16_t totalLongClickActuatorLinks = 0U;       //!< Number of valid entries stored in `longClickActuatorLinks`.
 uint16_t totalSuperLongClickActuatorLinks = 0U;  //!< Number of valid entries stored in `superLongClickActuatorLinks`.
 
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+struct ClickableTimingOverride
+{
+    uint16_t longClick_ms = 0U;
+    uint16_t superLongClick_ms = 0U;
+};
+
+etl::array<ClickableTimingOverride, CONFIG_CLICKABLE_TIMING_STORAGE_CAPACITY>
+    clickableTimingOverrides{};  //!< Shared storage for clickables that override default timings.
+uint8_t totalClickableTimingOverrides = 0U;
+#endif
+
 /**
  * @brief Abort setup when a clickable receives links before registration.
- * @details Compact pools store only dense owner indexes, not raw pointers. A
- *          clickable therefore must already be present in `Clickables::clickables`
- *          before any `addActuator...()` call can append a link for it.
+ * @details Compact pools store only actuator indexes at runtime. A clickable
+ *          must already have a dense runtime index so setup can maintain its
+ *          `offset + count` slice while links are appended in any order.
  */
 void failUnregisteredClickable()
 {
@@ -224,6 +225,57 @@ void failDuplicateActuatorLink(const __FlashStringHelper *linkKind)
 }
 
 /**
+ * @brief Abort setup when compact clickable slice metadata is internally inconsistent.
+ *
+ * @param linkKind Human-readable click type label used in the debug error message.
+ */
+void failCorruptActuatorLinks(const __FlashStringHelper *linkKind)
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(F("Corrupt "));
+    CONFIG_DEBUG_SERIAL->print(linkKind);
+    CONFIG_DEBUG_SERIAL->println(F(" actuator links"));
+    delay(10000);
+    deviceReset();
+}
+
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+void failClickableTimingOverrideOverflow()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong clickable timing overrides number"));
+    delay(10000);
+    deviceReset();
+}
+
+auto getTimingOverride(uint8_t encodedIndex) -> ClickableTimingOverride *
+{
+    if (encodedIndex == 0U || encodedIndex > totalClickableTimingOverrides)
+    {
+        return nullptr;
+    }
+    return &clickableTimingOverrides[static_cast<uint8_t>(encodedIndex - 1U)];
+}
+
+auto getOrCreateTimingOverride(uint8_t &encodedIndex) -> ClickableTimingOverride &
+{
+    if (encodedIndex == 0U)
+    {
+        if (totalClickableTimingOverrides >= CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES)
+        {
+            failClickableTimingOverrideOverflow();
+        }
+        ++totalClickableTimingOverrides;
+        encodedIndex = totalClickableTimingOverrides;
+        auto &entry = clickableTimingOverrides[static_cast<uint8_t>(encodedIndex - 1U)];
+        entry.longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;
+        entry.superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS;
+    }
+    return clickableTimingOverrides[static_cast<uint8_t>(encodedIndex - 1U)];
+}
+#endif
+
+/**
  * @brief Resolve the dense runtime index of one already-registered clickable.
  * @details This double-checks both the stored index and the manager array slot so
  *          every compact link is attached to the intended clickable owner.
@@ -254,61 +306,15 @@ auto isRegisteredActuatorIndex(uint8_t actuatorIndex) -> bool
     return actuatorIndex < Actuators::totalActuators && Actuators::actuators[actuatorIndex] != nullptr;
 }
 
-/**
- * @brief Append one compact clickable-to-actuator link to a shared pool.
- * @details The owner index is stored as `index + 1` so zero remains available as
- *          an always-invalid sentinel. This keeps sorting and debugging simple.
- *
- * @tparam StorageCapacity Compile-time ETL storage size of the destination pool.
- * @param storage Shared compact pool that receives the new entry.
- * @param storageLimit Real logical maximum accepted for this link category.
- * @param usedEntries Current number of valid entries already stored in the pool.
- * @param ownerIndex Dense runtime clickable index that owns the new link.
- * @param actuatorIndex Dense runtime actuator index referenced by the new link.
- * @param linkKind Human-readable pool label used if the logical limit is exceeded.
- */
 template <size_t StorageCapacity>
-void appendActuatorLink(etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage,
-                        uint16_t storageLimit,
-                        uint16_t &usedEntries,
-                        uint8_t ownerIndex,
-                        uint8_t actuatorIndex,
-                        const __FlashStringHelper *linkKind)
-{
-    if (usedEntries >= storageLimit)
-    {
-        failActuatorLinkOverflow(linkKind);
-    }
-
-    storage[usedEntries].ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
-    storage[usedEntries].actuatorIndex = actuatorIndex;
-    ++usedEntries;
-}
-
-/**
- * @brief Return whether one compact clickable pool already contains the same owner/actuator pair.
- * @details This linear scan runs only during setup, so keeping it simple avoids
- *          extra RAM while still preventing duplicate links from slipping into
- *          the runtime pools.
- *
- * @tparam StorageCapacity Compile-time ETL storage size of the destination pool.
- * @param storage Shared compact pool to inspect.
- * @param usedEntries Number of valid entries currently stored in the pool.
- * @param ownerIndex Dense runtime clickable index that owns the link.
- * @param actuatorIndex Dense runtime actuator index referenced by the link.
- * @return true if the exact owner/actuator pair already exists in the pool.
- * @return false otherwise.
- */
-template <size_t StorageCapacity>
-auto containsActuatorLink(const etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage,
-                          uint16_t usedEntries,
-                          uint8_t ownerIndex,
+auto containsActuatorLink(const etl::array<uint8_t, StorageCapacity> &storage,
+                          ClickableActuatorLinkOffset offset,
+                          uint8_t count,
                           uint8_t actuatorIndex) -> bool
 {
-    const uint8_t ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
-    for (uint16_t entryIndex = 0U; entryIndex < usedEntries; ++entryIndex)
+    for (uint8_t relativeIndex = 0U; relativeIndex < count; ++relativeIndex)
     {
-        if (storage[entryIndex].ownerIndexEncoded == ownerIndexEncoded && storage[entryIndex].actuatorIndex == actuatorIndex)
+        if (storage[static_cast<uint16_t>(offset) + relativeIndex] == actuatorIndex)
         {
             return true;
         }
@@ -317,42 +323,76 @@ auto containsActuatorLink(const etl::array<ClickableActuatorLinkEntry, StorageCa
 }
 
 /**
- * @brief Sort one compact clickable pool by owner index.
- * @details Setup runs once, so a tiny insertion sort keeps the implementation
- *          small and predictable on AVR while still producing contiguous slices
- *          for each clickable.
- *
- * @tparam StorageCapacity Compile-time ETL storage size of the destination pool.
- * @param storage Pool to sort in place.
- * @param usedEntries Number of valid entries currently stored in the pool.
+ * @brief Shift compact slice offsets after inserting inside the middle of one shared pool.
  */
-template <size_t StorageCapacity>
-void sortActuatorLinksByOwner(etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage, uint16_t usedEntries)
+void shiftClickableOffsetsAfterInsertion(constants::ClickType actuatorType, uint16_t insertionIndex)
 {
-    for (uint16_t i = 1U; i < usedEntries; ++i)
+    for (uint8_t clickableIndex = 0U; clickableIndex < Clickables::totalClickables; ++clickableIndex)
     {
-        const ClickableActuatorLinkEntry entryToInsert = storage[i];
-        uint16_t insertIndex = i;
-        while (insertIndex > 0U && storage[insertIndex - 1U].ownerIndexEncoded > entryToInsert.ownerIndexEncoded)
+        auto *const clickable = Clickables::clickables[clickableIndex];
+        if (clickable != nullptr)
         {
-            storage[insertIndex] = storage[insertIndex - 1U];
-            --insertIndex;
+            clickable->shiftActuatorLinksOffsetAfterInsertion(actuatorType, insertionIndex);
         }
-        storage[insertIndex] = entryToInsert;
     }
 }
 
 /**
- * @brief Create a lightweight view over one compact clickable pool slice.
- *
- * @tparam StorageCapacity Compile-time ETL storage size of the source pool.
- * @param storage Shared compact pool that owns the entries.
- * @param offset First valid entry of the slice for the current clickable.
- * @param count Number of valid entries in the slice.
- * @return ClickableActuatorLinksView Read-only iterable view for runtime traversal.
+ * @brief Insert one actuator index into the owner's compact slice.
+ * @details Setup may append links in arbitrary owner order. When the target
+ *          slice is not at the end of the pool, later entries are shifted by
+ *          one slot and their owner offsets are updated. Runtime storage still
+ *          contains only actuator indexes.
  */
 template <size_t StorageCapacity>
-auto makeLinksView(const etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage, uint16_t offset, uint8_t count)
+void appendActuatorLink(etl::array<uint8_t, StorageCapacity> &storage,
+                        uint16_t storageLimit,
+                        uint16_t &usedEntries,
+                        ClickableActuatorLinkOffset &offset,
+                        uint8_t &count,
+                        uint8_t actuatorIndex,
+                        constants::ClickType actuatorType,
+                        const __FlashStringHelper *linkKind)
+{
+    if (usedEntries >= storageLimit)
+    {
+        failActuatorLinkOverflow(linkKind);
+    }
+
+    if (containsActuatorLink(storage, offset, count, actuatorIndex))
+    {
+        failDuplicateActuatorLink(linkKind);
+    }
+
+    uint16_t insertionIndex = usedEntries;
+    if (count == 0U)
+    {
+        offset = static_cast<ClickableActuatorLinkOffset>(usedEntries);
+    }
+    else
+    {
+        insertionIndex = static_cast<uint16_t>(offset) + count;
+        if (insertionIndex > usedEntries)
+        {
+            failCorruptActuatorLinks(linkKind);
+        }
+        for (uint16_t moveIndex = usedEntries; moveIndex > insertionIndex; --moveIndex)
+        {
+            storage[moveIndex] = storage[static_cast<uint16_t>(moveIndex - 1U)];
+        }
+        if (insertionIndex != usedEntries)
+        {
+            shiftClickableOffsetsAfterInsertion(actuatorType, insertionIndex);
+        }
+    }
+
+    storage[insertionIndex] = actuatorIndex;
+    ++usedEntries;
+    ++count;
+}
+
+template <size_t StorageCapacity>
+auto makeLinksView(const etl::array<uint8_t, StorageCapacity> &storage, ClickableActuatorLinkOffset offset, uint8_t count)
     -> ClickableActuatorLinksView
 {
     if (count == 0U)
@@ -361,56 +401,18 @@ auto makeLinksView(const etl::array<ClickableActuatorLinkEntry, StorageCapacity>
     }
 
     const auto storageSize = static_cast<uint16_t>(storage.size());
-    // cppcheck-suppress unsignedPositive
-    if (offset >= storageSize)
+    if (static_cast<uint16_t>(offset) >= storageSize)
     {
         return {};
     }
 
-    const uint16_t remainingEntries = static_cast<uint16_t>(storageSize - offset);
+    const uint16_t remainingEntries = static_cast<uint16_t>(storageSize - static_cast<uint16_t>(offset));
     if (count > remainingEntries)
     {
         return {};
     }
 
-    return ClickableActuatorLinksView(&storage[offset], count);
-}
-
-/**
- * @brief Finalize one compact clickable pool after user configuration.
- * @details Once links are sorted by owner, each clickable only needs the offset
- *          of its first entry plus the count it already tracked while links were
- *          being appended. Runtime iteration then becomes a simple contiguous walk.
- *
- * @tparam StorageCapacity Compile-time ETL storage size of the source pool.
- * @param storage Shared compact pool to finalize.
- * @param usedEntries Number of valid entries currently stored in the pool.
- * @param clickType Click type represented by the pool being finalized.
- */
-template <size_t StorageCapacity>
-void assignActuatorLinksOffsets(etl::array<ClickableActuatorLinkEntry, StorageCapacity> &storage,
-                                uint16_t usedEntries,
-                                constants::ClickType clickType)
-{
-    if (usedEntries == 0U)
-    {
-        return;
-    }
-
-    sortActuatorLinksByOwner(storage, usedEntries);
-
-    uint8_t currentOwnerIndexEncoded = 0U;
-    for (uint16_t entryIndex = 0U; entryIndex < usedEntries; ++entryIndex)
-    {
-        const uint8_t ownerIndexEncoded = storage[entryIndex].ownerIndexEncoded;
-        if (ownerIndexEncoded == currentOwnerIndexEncoded)
-        {
-            continue;
-        }
-
-        currentOwnerIndexEncoded = ownerIndexEncoded;
-        Clickables::clickables[ownerIndexEncoded - 1U]->setActuatorLinksOffset(clickType, entryIndex);
-    }
+    return ClickableActuatorLinksView(&storage[static_cast<uint16_t>(offset)], count);
 }
 
 }  // namespace
@@ -454,7 +456,7 @@ auto Clickable::setClickableLong(bool longClickable,
     this->configFlags.isLongClickable = longClickable;
     this->longClickType = clickType;
     this->configFlags.isNetworkLongClickable = networkClickable;
-    this->longClickFallback = fallback;
+    this->configFlags.longNetworkFallbackDoNothing = fallback != constants::NoNetworkClickType::LOCAL_FALLBACK;
     return *this;
 }
 
@@ -475,14 +477,15 @@ auto Clickable::setClickableSuperLong(bool superLongClickable,
     this->configFlags.isSuperLongClickable = superLongClickable;
     this->superLongClickType = clickType;
     this->configFlags.isNetworkSuperLongClickable = networkClickable;
-    this->superLongClickFallback = fallback;
+    this->configFlags.superLongNetworkFallbackDoNothing = fallback != constants::NoNetworkClickType::LOCAL_FALLBACK;
     return *this;
 }
 
 /**
  * @brief Add an actuator to a list of actuators controlled by the clickable.
  * @details The clickable must already be registered in `Clickables`, because the
- *          compact pool stores the dense owner index assigned during registration.
+ *          compact pool needs the owner's stable dense index to maintain its
+ *          `offset + count` slice while setup inserts links in any order.
  *
  * @param actuatorIndex the actuator index to be attached.
  * @param actuatorType the type of the actuator.
@@ -490,7 +493,7 @@ auto Clickable::setClickableSuperLong(bool superLongClickable,
  */
 auto Clickable::addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType) -> Clickable &
 {
-    const uint8_t clickableIndex = getRegisteredClickableIndex(this);
+    static_cast<void>(getRegisteredClickableIndex(this));
     if (!isRegisteredActuatorIndex(actuatorIndex))
     {
         failInvalidActuatorLink();
@@ -499,31 +502,17 @@ auto Clickable::addActuator(uint8_t actuatorIndex, constants::ClickType actuator
     switch (actuatorType)
     {
     case ClickType::SHORT:
-        if (containsActuatorLink(shortClickActuatorLinks, totalShortClickActuatorLinks, clickableIndex, actuatorIndex))
-        {
-            failDuplicateActuatorLink(F("short click"));
-        }
-        appendActuatorLink(shortClickActuatorLinks, CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS, totalShortClickActuatorLinks, clickableIndex,
-                           actuatorIndex, F("short click"));
-        ++this->shortLinksCount;
+        appendActuatorLink(shortClickActuatorLinks, CONFIG_MAX_SHORT_CLICK_ACTUATOR_LINKS, totalShortClickActuatorLinks,
+                           this->shortLinksOffset, this->shortLinksCount, actuatorIndex, ClickType::SHORT, F("short click"));
         break;
     case ClickType::LONG:
-        if (containsActuatorLink(longClickActuatorLinks, totalLongClickActuatorLinks, clickableIndex, actuatorIndex))
-        {
-            failDuplicateActuatorLink(F("long click"));
-        }
-        appendActuatorLink(longClickActuatorLinks, CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS, totalLongClickActuatorLinks, clickableIndex,
-                           actuatorIndex, F("long click"));
-        ++this->longLinksCount;
+        appendActuatorLink(longClickActuatorLinks, CONFIG_MAX_LONG_CLICK_ACTUATOR_LINKS, totalLongClickActuatorLinks, this->longLinksOffset,
+                           this->longLinksCount, actuatorIndex, ClickType::LONG, F("long click"));
         break;
     case ClickType::SUPER_LONG:
-        if (containsActuatorLink(superLongClickActuatorLinks, totalSuperLongClickActuatorLinks, clickableIndex, actuatorIndex))
-        {
-            failDuplicateActuatorLink(F("super long click"));
-        }
         appendActuatorLink(superLongClickActuatorLinks, CONFIG_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS, totalSuperLongClickActuatorLinks,
-                           clickableIndex, actuatorIndex, F("super long click"));
-        ++this->superLongLinksCount;
+                           this->superLongLinksOffset, this->superLongLinksCount, actuatorIndex, ClickType::SUPER_LONG,
+                           F("super long click"));
         break;
     default:
         break;  // Actuator Type mismatch
@@ -587,7 +576,11 @@ auto Clickable::setDebounceTime(uint8_t timeToSet_ms) -> Clickable &
  */
 auto Clickable::setLongClickTime(uint16_t timeToSet_ms) -> Clickable &
 {
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+    getOrCreateTimingOverride(this->timingOverrideIndexEncoded).longClick_ms = timeToSet_ms;
+#else
     this->longClick_ms = timeToSet_ms;
+#endif
     return *this;
 }
 
@@ -599,8 +592,32 @@ auto Clickable::setLongClickTime(uint16_t timeToSet_ms) -> Clickable &
  */
 auto Clickable::setSuperLongClickTime(uint16_t timeToSet_ms) -> Clickable &
 {
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+    getOrCreateTimingOverride(this->timingOverrideIndexEncoded).superLongClick_ms = timeToSet_ms;
+#else
     this->superLongClick_ms = timeToSet_ms;
+#endif
     return *this;
+}
+
+auto Clickable::getLongClickTime() const -> uint16_t
+{
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+    const auto *const timingOverride = getTimingOverride(this->timingOverrideIndexEncoded);
+    return timingOverride == nullptr ? constants::timings::CLICKABLE_LONG_CLICK_TIME_MS : timingOverride->longClick_ms;
+#else
+    return this->longClick_ms;
+#endif
+}
+
+auto Clickable::getSuperLongClickTime() const -> uint16_t
+{
+#if CONFIG_USE_CLICKABLE_TIMING_POOL
+    const auto *const timingOverride = getTimingOverride(this->timingOverrideIndexEncoded);
+    return timingOverride == nullptr ? constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS : timingOverride->superLongClick_ms;
+#else
+    return this->superLongClick_ms;
+#endif
 }
 
 /**
@@ -709,9 +726,17 @@ auto Clickable::getNetworkFallback(constants::ClickType clickType) const -> cons
     switch (clickType)
     {
     case ClickType::LONG:
-        return this->longClickFallback;
+        if (!this->configFlags.isNetworkLongClickable)
+        {
+            return NoNetworkClickType::NONE;
+        }
+        return this->configFlags.longNetworkFallbackDoNothing ? NoNetworkClickType::DO_NOTHING : NoNetworkClickType::LOCAL_FALLBACK;
     case ClickType::SUPER_LONG:
-        return this->superLongClickFallback;
+        if (!this->configFlags.isNetworkSuperLongClickable)
+        {
+            return NoNetworkClickType::NONE;
+        }
+        return this->configFlags.superLongNetworkFallbackDoNothing ? NoNetworkClickType::DO_NOTHING : NoNetworkClickType::LOCAL_FALLBACK;
     default:
         return NoNetworkClickType::NONE;
     }
@@ -744,7 +769,6 @@ auto Clickable::getSuperLongClickType() const -> constants::SuperLongClickType
  */
 auto Clickable::check() -> bool
 {
-    this->configFlags.isChecked = true;  // We have checked the clickable
     this->configFlags.isQuickClickable =
         (this->configFlags.isShortClickable && !this->configFlags.isLongClickable && !this->configFlags.isSuperLongClickable);
 
@@ -752,10 +776,8 @@ auto Clickable::check() -> bool
     const bool hasNetworkAction = ((this->configFlags.isLongClickable && this->configFlags.isNetworkLongClickable) ||
                                    (this->configFlags.isSuperLongClickable && this->configFlags.isNetworkSuperLongClickable));
 
-    this->configFlags.isValid =
-        ((this->configFlags.isShortClickable || this->configFlags.isLongClickable || this->configFlags.isSuperLongClickable) &&
-         (hasLocalAction || hasNetworkAction));
-    return this->configFlags.isValid;
+    return ((this->configFlags.isShortClickable || this->configFlags.isLongClickable || this->configFlags.isSuperLongClickable) &&
+            (hasLocalAction || hasNetworkAction));
 }
 
 /**
@@ -817,12 +839,11 @@ auto Clickable::longClick() const -> bool
             etl::accumulate(longActuators.begin(), longActuators.end(), static_cast<uint8_t>(0U), [&](uint8_t total, uint8_t actuatorIndex)
                             { return static_cast<uint8_t>(total + static_cast<uint8_t>(localActuators[actuatorIndex]->getState())); });
         /*
-        Less than half of attached long actuators are ON -> stateToSet = true
-        More or equal than half of attached long actuators are ON -> stateToSet = false
-        The formula is(Long actuators ON < Total actuators / 2)
-        To avoid float arithmetics and to speed things up use shift operator and swap the division with a multiplication
-        (Long actuators ON x 2 < Total actuators)
-        */
+         * If fewer than half of the attached long-click actuators are ON, turn
+         * them ON; otherwise turn them OFF. Doubling the left side avoids
+         * floating-point arithmetic and division:
+         *   long actuators ON * 2 < total long actuators
+         */
         stateToSet = ((actuatorsLongOn << 1U) < this->longLinksCount);
         break;
     case LongClickType::ON_ONLY:
@@ -888,11 +909,6 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
 {
     using constants::ClickResult;
 
-    // --- Optimization: Cache the config flags ---
-    // Read the entire bitfield from RAM into a local variable once.
-    // The compiler will very likely keep this in a CPU register for the fastest possible access.
-    const ClickableConfigFlags localFlags = this->configFlags;
-
     // Read pin state once per call for consistency.
     const bool isPressed = this->getState();
     if (this->currentState != State::IDLE)
@@ -921,6 +937,7 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
                 this->lastActionFired = ActionFired::NONE;
 
                 // If it's a "quick click" button, fire the action on press.
+                const ClickableConfigFlags localFlags = this->configFlags;
                 if (localFlags.isQuickClickable)
                 {
                     return ClickResult::SHORT_CLICK_QUICK;
@@ -937,19 +954,22 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
     case State::PRESSED:
         if (isPressed)
         {
-            // Check for super long press first (higher priority).
-            if (localFlags.isSuperLongClickable && this->lastActionFired < ActionFired::SUPER_LONG &&
-                this->stateAge_ms >= this->superLongClick_ms)
-            {
-                this->lastActionFired = ActionFired::SUPER_LONG;
-                return ClickResult::SUPER_LONG_CLICK;
-            }
-
-            // Then check for long press.
-            if (localFlags.isLongClickable && this->lastActionFired < ActionFired::LONG && this->stateAge_ms >= this->longClick_ms)
+            const ClickableConfigFlags localFlags = this->configFlags;
+            // Long must be emitted before super-long even if a slow scan jumps
+            // directly beyond both thresholds. This lets one held button send
+            // the long network click first and the super-long network click on
+            // the following scan, preserving the intended action sequence.
+            if (localFlags.isLongClickable && this->lastActionFired < ActionFired::LONG && this->stateAge_ms >= this->getLongClickTime())
             {
                 this->lastActionFired = ActionFired::LONG;
                 return ClickResult::LONG_CLICK;
+            }
+
+            if (localFlags.isSuperLongClickable && this->lastActionFired < ActionFired::SUPER_LONG &&
+                this->stateAge_ms >= this->getSuperLongClickTime())
+            {
+                this->lastActionFired = ActionFired::SUPER_LONG;
+                return ClickResult::SUPER_LONG_CLICK;
             }
 
             return ClickResult::NO_CLICK_KEEPING_CLICKED;
@@ -962,6 +982,7 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
 
     case State::RELEASED:
     {
+        const ClickableConfigFlags localFlags = this->configFlags;
         // This state is entered immediately after a release.
         // The FSM is now reset for the next cycle.
         this->currentState = State::IDLE;
@@ -992,7 +1013,7 @@ auto Clickable::clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
  * @param actuatorType Click type whose compact slice offset must be updated.
  * @param offsetToSet First entry offset inside the shared compact pool.
  */
-void Clickable::setActuatorLinksOffset(constants::ClickType actuatorType, uint16_t offsetToSet)
+void Clickable::setActuatorLinksOffset(constants::ClickType actuatorType, ClickableActuatorLinkOffset offsetToSet)
 {
     switch (actuatorType)
     {
@@ -1010,19 +1031,46 @@ void Clickable::setActuatorLinksOffset(constants::ClickType actuatorType, uint16
     }
 }
 
+/**
+ * @brief Shift one click-type slice when setup inserts before it in a shared pool.
+ *
+ * @param actuatorType Click type whose pool received the inserted link.
+ * @param insertionIndex Shared-pool index where the new link was inserted.
+ */
+void Clickable::shiftActuatorLinksOffsetAfterInsertion(constants::ClickType actuatorType, uint16_t insertionIndex)
+{
+    auto shiftIfAffected = [insertionIndex](ClickableActuatorLinkOffset &offset, uint8_t count)
+    {
+        if (count != 0U && static_cast<uint16_t>(offset) >= insertionIndex)
+        {
+            ++offset;
+        }
+    };
+
+    switch (actuatorType)
+    {
+    case ClickType::SHORT:
+        shiftIfAffected(this->shortLinksOffset, this->shortLinksCount);
+        break;
+    case ClickType::LONG:
+        shiftIfAffected(this->longLinksOffset, this->longLinksCount);
+        break;
+    case ClickType::SUPER_LONG:
+        shiftIfAffected(this->superLongLinksOffset, this->superLongLinksCount);
+        break;
+    default:
+        break;
+    }
+}
+
 namespace Clickables
 {
 /**
- * @brief Sort and compact all clickable-to-actuator shared pools after user configuration.
- * @details `Configurator::configure()` may append links in any order. This helper
- *          runs once during setup, sorts every shared pool by clickable index, and
- *          stores the final slice offset inside each Clickable object. Runtime code
- *          then needs only `offset + count` to iterate over the compact pool.
+ * @brief Finalize clickable-to-actuator shared pools after user configuration.
+ * @details Links are inserted directly into compact per-clickable slices during
+ *          setup. This keeps runtime storage to one byte per link while still
+ *          accepting configuration code that appends links in arbitrary order.
  */
 void finalizeActuatorLinkStorage()
-{
-    assignActuatorLinksOffsets(shortClickActuatorLinks, totalShortClickActuatorLinks, ClickType::SHORT);
-    assignActuatorLinksOffsets(longClickActuatorLinks, totalLongClickActuatorLinks, ClickType::LONG);
-    assignActuatorLinksOffsets(superLongClickActuatorLinks, totalSuperLongClickActuatorLinks, ClickType::SUPER_LONG);
-}
+{}
 }  // namespace Clickables

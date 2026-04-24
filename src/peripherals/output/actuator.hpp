@@ -37,6 +37,15 @@
 class Actuator
 {
 private:
+    static constexpr uint8_t ACTUATOR_FLAG_DEFAULT_STATE = 0x01U;
+    static constexpr uint8_t ACTUATOR_FLAG_ACTUAL_STATE = 0x02U;
+    static constexpr uint8_t ACTUATOR_FLAG_PROTECTED = 0x04U;
+
+    static constexpr auto initialFlags(bool normalState) noexcept -> uint8_t
+    {
+        return normalState ? static_cast<uint8_t>(ACTUATOR_FLAG_DEFAULT_STATE | ACTUATOR_FLAG_ACTUAL_STATE) : 0U;
+    }
+
 #ifndef CONFIG_USE_FAST_ACTUATORS
     const uint8_t pinNumber;  //!< The pin to which the actuator is connected to, for conventional IO
 #else
@@ -50,7 +59,7 @@ private:
      * collapse here, so the initialization sequence is emitted only once.
      */
     explicit Actuator(lsh::core::avr::FastOutputPinBinding binding, uint8_t uniqueId, bool normalState) noexcept :
-        pinMask(binding.mask), pinPort(binding.pinPort), defaultState(normalState), actualState(normalState), id(uniqueId)
+        pinMask(binding.mask), pinPort(binding.pinPort), flags(initialFlags(normalState)), id(uniqueId)
     {
         // Keep the heavy init path in one non-template constructor so compile-time
         // pins do not clone the whole setup sequence for every instantiation.
@@ -72,14 +81,12 @@ private:
         }
     }
 #endif
-    uint8_t index = UINT8_MAX;       //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
-    const bool defaultState;         //!< Default state of the actuator (false=OFF, true=ON)
-    bool actualState = false;        //!< Actual state of the actuator (false=OFF, true=ON)
+    uint8_t index = UINT8_MAX;  //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
+    uint8_t flags = 0U;         //!< Packed default/current/protection flags.
+#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
     uint32_t lastTimeSwitched = 0U;  //!< Last time the actuator performed a switch
-    bool isProtected = false;        //!< True if it's protected against some turn ON/OFF behaviour
-    uint8_t id;                      //!< Unique ID of the actuator (numeric)
-    bool hasAutoOffTimer = false;    //!< True if auto-off timer is > 0
-    uint32_t autoOffTimer_ms = 0U;   //!< Auto-off timer, 0:disabled, other value: actuator turned off after timer_ms
+#endif
+    uint8_t id;  //!< Unique ID of the actuator (numeric)
 
 public:
 #ifndef CONFIG_USE_FAST_ACTUATORS
@@ -91,7 +98,7 @@ public:
      * @param normalState the default state of the actuator.
      */
     explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, uint8_t uniqueId, bool normalState = false) noexcept :
-        pinNumber(pin), defaultState(normalState), actualState(normalState), id(uniqueId)
+        pinNumber(pin), flags(initialFlags(normalState)), id(uniqueId)
     {
         pinMode(pin, OUTPUT);                                  // PinMode to Output
         digitalWrite(pin, static_cast<uint8_t>(normalState));  // Set the default state
@@ -146,7 +153,7 @@ public:
     [[nodiscard]] auto setState(bool state) -> bool;  // Sets the new state of the actuator, respecting debounce time.
 
     void setIndex(uint8_t indexToSet);                     // Set the actuator index on Actuators namespace Array
-    auto setAutoOffTimer(uint32_t time_ms) -> Actuator &;  // Set "turn off" timer in ms
+    auto setAutoOffTimer(uint32_t time_ms) -> Actuator &;  // Set "turn off" timer in ms. Call after the actuator has been registered.
     auto setProtected(bool hasProtection)
         -> Actuator &;  // Set protection against global "turn-off" actions (e.g., a general super long click).
 
@@ -160,8 +167,9 @@ public:
     [[nodiscard]] auto hasProtection() const -> bool;        // Returns true if the actuator is protected from global "turn-off" actions.
 
     // Utils
-    [[nodiscard]] auto toggleState() -> bool;        // Switch the actuator
-    [[nodiscard]] auto checkAutoOffTimer() -> bool;  // Checks if auto off timer is over, turn off if it's over
+    [[nodiscard]] auto toggleState() -> bool;                                // Switch the actuator
+    [[nodiscard]] auto checkAutoOffTimer() -> bool;                          // Checks if auto off timer is over.
+    [[nodiscard]] auto checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool;  // Checks the provided auto-off timer.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_OUTPUT_ACTUATOR_HPP

@@ -31,25 +31,16 @@ namespace
 {
 using namespace Debug;
 
-/**
- * @brief One compact indicator-to-actuator link record stored inside the shared pool.
- * @details The owner index is stored as `index + 1` so zero remains available as
- *          a cheap always-invalid sentinel during setup-time sorting and scans.
- */
-struct IndicatorActuatorLinkEntry
-{
-    uint8_t ownerIndexEncoded = 0U;  //!< One-based indicator index. Zero is reserved as "unused".
-    uint8_t actuatorIndex = 0U;      //!< Dense actuator index returned by `Configurator::getIndex()`.
-};
-
-etl::array<IndicatorActuatorLinkEntry, CONFIG_INDICATOR_ACTUATOR_LINK_STORAGE_CAPACITY>
+etl::array<uint8_t, CONFIG_INDICATOR_ACTUATOR_LINK_STORAGE_CAPACITY>
     indicatorActuatorLinks{};               //!< Shared storage for all indicator-to-actuator links.
 uint16_t totalIndicatorActuatorLinks = 0U;  //!< Number of valid entries stored in `indicatorActuatorLinks`.
 
 /**
  * @brief Abort setup when an indicator receives links before registration.
- * @details The compact pool stores only the dense runtime owner index, so the
- *          indicator must already be present in `Indicators::indicators`.
+ * @details The compact pool stores only actuator indexes at runtime. The
+ *          indicator must already have a dense runtime index so setup can
+ *          maintain its `offset + count` slice while links are appended in any
+ *          order.
  */
 void failUnregisteredIndicator()
 {
@@ -95,6 +86,17 @@ void failDuplicateIndicatorActuatorLink()
 }
 
 /**
+ * @brief Abort setup when compact indicator slice metadata is internally inconsistent.
+ */
+void failCorruptIndicatorActuatorLinks()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Corrupt indicator actuator links"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
  * @brief Resolve the dense runtime index of one already-registered indicator.
  *
  * @param indicator Indicator that is about to receive a compact actuator link.
@@ -122,20 +124,19 @@ auto isRegisteredActuatorIndex(uint8_t actuatorIndex) -> bool
 }
 
 /**
- * @brief Return whether the shared indicator pool already contains the same owner/actuator pair.
+ * @brief Return whether the indicator slice already contains the same actuator link.
  *
- * @param ownerIndex Dense runtime indicator index that owns the link.
+ * @param offset First entry of the indicator slice inside the shared pool.
+ * @param count Number of links already attached to the indicator.
  * @param actuatorIndex Dense runtime actuator index referenced by the link.
- * @return true if the exact owner/actuator pair already exists.
+ * @return true if the exact actuator link already exists in the indicator slice.
  * @return false otherwise.
  */
-auto containsIndicatorActuatorLink(uint8_t ownerIndex, uint8_t actuatorIndex) -> bool
+auto containsIndicatorActuatorLink(IndicatorActuatorLinkOffset offset, uint8_t count, uint8_t actuatorIndex) -> bool
 {
-    const uint8_t ownerIndexEncoded = static_cast<uint8_t>(ownerIndex + 1U);
-    for (uint16_t entryIndex = 0U; entryIndex < totalIndicatorActuatorLinks; ++entryIndex)
+    for (uint8_t relativeIndex = 0U; relativeIndex < count; ++relativeIndex)
     {
-        if (indicatorActuatorLinks[entryIndex].ownerIndexEncoded == ownerIndexEncoded &&
-            indicatorActuatorLinks[entryIndex].actuatorIndex == actuatorIndex)
+        if (indicatorActuatorLinks[static_cast<uint16_t>(offset) + relativeIndex] == actuatorIndex)
         {
             return true;
         }
@@ -143,23 +144,15 @@ auto containsIndicatorActuatorLink(uint8_t ownerIndex, uint8_t actuatorIndex) ->
     return false;
 }
 
-/**
- * @brief Sort the shared indicator compact pool by owner index.
- * @details Setup runs once, so insertion sort keeps the implementation small and
- *          stable while still producing contiguous per-indicator slices.
- */
-void sortIndicatorActuatorLinksByOwner()
+void shiftIndicatorOffsetsAfterInsertion(uint16_t insertionIndex)
 {
-    for (uint16_t i = 1U; i < totalIndicatorActuatorLinks; ++i)
+    for (uint8_t indicatorIndex = 0U; indicatorIndex < Indicators::totalIndicators; ++indicatorIndex)
     {
-        const IndicatorActuatorLinkEntry entryToInsert = indicatorActuatorLinks[i];
-        uint16_t insertIndex = i;
-        while (insertIndex > 0U && indicatorActuatorLinks[insertIndex - 1U].ownerIndexEncoded > entryToInsert.ownerIndexEncoded)
+        auto *const indicator = Indicators::indicators[indicatorIndex];
+        if (indicator != nullptr)
         {
-            indicatorActuatorLinks[insertIndex] = indicatorActuatorLinks[insertIndex - 1U];
-            --insertIndex;
+            indicator->shiftControlledActuatorsOffsetAfterInsertion(insertionIndex);
         }
-        indicatorActuatorLinks[insertIndex] = entryToInsert;
     }
 }
 }  // namespace
@@ -176,15 +169,15 @@ void Indicator::setIndex(uint8_t indexToSet)
 
 /**
  * @brief Add one actuator to the compact list controlled by this indicator.
- * @details The indicator must already be registered, otherwise no dense owner
- *          index exists yet for the shared compact pool.
+ * @details The indicator must already be registered so setup can maintain its
+ *          stable `offset + count` slice while links are inserted in any order.
  *
  * @param actuatorIndex index of actuator to be added.
  * @return Indicator& the object instance.
  */
 auto Indicator::addActuator(uint8_t actuatorIndex) -> Indicator &
 {
-    const uint8_t indicatorIndex = getRegisteredIndicatorIndex(this);
+    static_cast<void>(getRegisteredIndicatorIndex(this));
     if (!isRegisteredActuatorIndex(actuatorIndex))
     {
         failInvalidIndicatorActuatorLink();
@@ -193,13 +186,34 @@ auto Indicator::addActuator(uint8_t actuatorIndex) -> Indicator &
     {
         failIndicatorActuatorLinkOverflow();
     }
-    if (containsIndicatorActuatorLink(indicatorIndex, actuatorIndex))
+    if (containsIndicatorActuatorLink(this->controlledActuatorsOffset, this->controlledActuatorsCount, actuatorIndex))
     {
         failDuplicateIndicatorActuatorLink();
     }
 
-    indicatorActuatorLinks[totalIndicatorActuatorLinks].ownerIndexEncoded = static_cast<uint8_t>(indicatorIndex + 1U);
-    indicatorActuatorLinks[totalIndicatorActuatorLinks].actuatorIndex = actuatorIndex;
+    uint16_t insertionIndex = totalIndicatorActuatorLinks;
+    if (this->controlledActuatorsCount == 0U)
+    {
+        this->controlledActuatorsOffset = static_cast<IndicatorActuatorLinkOffset>(totalIndicatorActuatorLinks);
+    }
+    else
+    {
+        insertionIndex = static_cast<uint16_t>(this->controlledActuatorsOffset) + this->controlledActuatorsCount;
+        if (insertionIndex > totalIndicatorActuatorLinks)
+        {
+            failCorruptIndicatorActuatorLinks();
+        }
+        for (uint16_t moveIndex = totalIndicatorActuatorLinks; moveIndex > insertionIndex; --moveIndex)
+        {
+            indicatorActuatorLinks[moveIndex] = indicatorActuatorLinks[static_cast<uint16_t>(moveIndex - 1U)];
+        }
+        if (insertionIndex != totalIndicatorActuatorLinks)
+        {
+            shiftIndicatorOffsetsAfterInsertion(insertionIndex);
+        }
+    }
+
+    indicatorActuatorLinks[insertionIndex] = actuatorIndex;
     ++totalIndicatorActuatorLinks;
     ++this->controlledActuatorsCount;
     return *this;
@@ -266,9 +280,9 @@ void Indicator::check()
         newState = false;
         const auto *const linksBegin = indicatorActuatorLinks.data() + this->controlledActuatorsOffset;
         const auto *const linksEnd = linksBegin + this->controlledActuatorsCount;
-        for (auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
+        for (const auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
         {
-            newState |= actuators[currentLink->actuatorIndex]->getState();
+            newState |= actuators[*currentLink]->getState();
             if (newState)
             {
                 break;
@@ -281,9 +295,9 @@ void Indicator::check()
         newState = true;
         const auto *const linksBegin = indicatorActuatorLinks.data() + this->controlledActuatorsOffset;
         const auto *const linksEnd = linksBegin + this->controlledActuatorsCount;
-        for (auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
+        for (const auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
         {
-            newState &= actuators[currentLink->actuatorIndex]->getState();
+            newState &= actuators[*currentLink]->getState();
             if (!newState)
             {
                 break;
@@ -296,15 +310,14 @@ void Indicator::check()
         uint8_t totalControlledActuatorsOn = 0U;
         const auto *const linksBegin = indicatorActuatorLinks.data() + this->controlledActuatorsOffset;
         const auto *const linksEnd = linksBegin + this->controlledActuatorsCount;
-        for (auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
+        for (const auto *currentLink = linksBegin; currentLink != linksEnd; ++currentLink)
         {
-            totalControlledActuatorsOn += static_cast<uint8_t>(actuators[currentLink->actuatorIndex]->getState());
+            totalControlledActuatorsOn += static_cast<uint8_t>(actuators[*currentLink]->getState());
         }
 
         /*
-         * The formula is (Total Actuators ON > Controlled actuators / 2)
-         * To avoid float arithmetics and to speed things up use shift operator and swap the division with a multiplication
-         * (Total actuators On x 2 > controlled actuators)
+         * Equivalent to: actuators ON > controlled actuators / 2.
+         * Doubling the left side avoids floating-point arithmetic and division.
          */
         newState = (totalControlledActuatorsOn << 1U) > this->controlledActuatorsCount;
     }
@@ -313,7 +326,7 @@ void Indicator::check()
         return;  // Wrong IndicatorMode config
     }
 
-    // If the state is the same as old one exit
+    // If the state did not change, avoid touching the output pin.
     if (newState == this->actualState)
     {
         return;  // Same state, do nothing
@@ -348,40 +361,32 @@ auto Indicator::hasAttachedActuators() const -> bool
  *
  * @param offsetToSet First entry offset inside the shared indicator-to-actuator pool.
  */
-void Indicator::setControlledActuatorsOffset(uint16_t offsetToSet)
+void Indicator::setControlledActuatorsOffset(IndicatorActuatorLinkOffset offsetToSet)
 {
     this->controlledActuatorsOffset = offsetToSet;
+}
+
+/**
+ * @brief Shift this indicator slice when setup inserts before it in the shared pool.
+ *
+ * @param insertionIndex Shared-pool index where a new indicator link was inserted.
+ */
+void Indicator::shiftControlledActuatorsOffsetAfterInsertion(uint16_t insertionIndex)
+{
+    if (this->controlledActuatorsCount != 0U && static_cast<uint16_t>(this->controlledActuatorsOffset) >= insertionIndex)
+    {
+        ++this->controlledActuatorsOffset;
+    }
 }
 
 namespace Indicators
 {
 /**
- * @brief Sort and compact the shared indicator-to-actuator pool after user configuration.
- * @details Indicators append links while the user configuration runs. This helper
- *          sorts the shared pool by indicator index once, then stores the final
- *          compact slice offset inside each Indicator object. Runtime checks then
- *          only need `offset + count`, with no per-indicator ETL vector buffers.
+ * @brief Finalize the shared indicator-to-actuator pool after user configuration.
+ * @details Links are inserted directly into compact per-indicator slices during
+ *          setup. This keeps runtime storage to one byte per link while still
+ *          accepting configuration code that appends links in arbitrary order.
  */
 void finalizeActuatorLinkStorage()
-{
-    if (totalIndicatorActuatorLinks == 0U)
-    {
-        return;
-    }
-
-    sortIndicatorActuatorLinksByOwner();
-
-    uint8_t currentOwnerIndexEncoded = 0U;
-    for (uint16_t entryIndex = 0U; entryIndex < totalIndicatorActuatorLinks; ++entryIndex)
-    {
-        const uint8_t ownerIndexEncoded = indicatorActuatorLinks[entryIndex].ownerIndexEncoded;
-        if (ownerIndexEncoded == currentOwnerIndexEncoded)
-        {
-            continue;
-        }
-
-        currentOwnerIndexEncoded = ownerIndexEncoded;
-        indicators[ownerIndexEncoded - 1U]->setControlledActuatorsOffset(entryIndex);
-    }
-}
+{}
 }  // namespace Indicators

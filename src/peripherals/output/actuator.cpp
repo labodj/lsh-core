@@ -24,6 +24,11 @@
 #include "util/constants/timing.hpp"
 #include "util/time_keeper.hpp"
 
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+static_assert(constants::timings::ACTUATOR_DEBOUNCE_TIME_MS == 0U,
+              "LSH_COMPACT_ACTUATOR_SWITCH_TIMES requires CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0 to preserve exact debounce semantics.");
+#endif
+
 /**
  * @brief Set the new actuator state if the new state can be set.
  *
@@ -34,8 +39,9 @@
 auto Actuator::setState(bool state) -> bool
 {
     using constants::timings::ACTUATOR_DEBOUNCE_TIME_MS;
+    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
     // Apply new state only if it's different from the stored one
-    if (this->actualState == state)
+    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
     {
         return false;
     }
@@ -43,10 +49,12 @@ auto Actuator::setState(bool state) -> bool
     const uint32_t now = timeKeeper::getTime();
 
     // Apply state if debounce is not active (elided at compile time) OR if it's active check if debounce time is elapsed
+#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
     if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
     {
         return false;
     }
+#endif
 #ifdef CONFIG_USE_FAST_ACTUATORS
     if (!state)
     {
@@ -59,13 +67,25 @@ auto Actuator::setState(bool state) -> bool
 #else
     digitalWrite(this->pinNumber, static_cast<uint8_t>(state));  // Perform the switch
 #endif
-    this->actualState = state;  // Store the new state
+    if (state)
+    {
+        this->flags |= ACTUATOR_FLAG_ACTUAL_STATE;
+    }
+    else
+    {
+        this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_ACTUAL_STATE);
+    }
+#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
     this->lastTimeSwitched = now;
+#endif
     if (this->index != UINT8_MAX)
     {
         // Keep the global packed shadow in sync so state serialization never
         // has to walk the actuator array just to rebuild protocol bytes.
         Actuators::updatePackedState(this->index, state);
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+        Actuators::recordSwitchTime(this->index, now);
+#endif
     }
     return true;
 }
@@ -81,15 +101,14 @@ void Actuator::setIndex(uint8_t indexToSet)
 }
 
 /**
- * @brief Set turn off timer, it represents the timer after that the actuator will be switched off.
+ * @brief Set the turn-off timer after actuator registration.
  *
- * @param time_ms timer time in ms, if set to 0 disable timer.
+ * @param time_ms timer time in ms; zero disables the timer.
  * @return Actuator& the object instance.
  */
 auto Actuator::setAutoOffTimer(uint32_t time_ms) -> Actuator &
 {
-    this->hasAutoOffTimer = time_ms != 0U;
-    this->autoOffTimer_ms = time_ms;
+    Actuators::setAutoOffTimer(this->index, time_ms);
     return *this;
 }
 
@@ -101,7 +120,14 @@ auto Actuator::setAutoOffTimer(uint32_t time_ms) -> Actuator &
  */
 auto Actuator::setProtected(bool hasProtection) -> Actuator &
 {
-    this->isProtected = hasProtection;
+    if (hasProtection)
+    {
+        this->flags |= ACTUATOR_FLAG_PROTECTED;
+    }
+    else
+    {
+        this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_PROTECTED);
+    }
     return *this;
 }
 
@@ -133,18 +159,18 @@ auto Actuator::getId() const -> uint8_t
  */
 auto Actuator::getState() const -> bool
 {
-    return this->actualState;
+    return (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U;
 }
 
 /**
  * @brief Get the default state of the actuator.
  *
- * @return true if ON.
- * @return false if OFF.
+ * @return true if ON by default.
+ * @return false if OFF by default.
  */
 auto Actuator::getDefaultState() const -> bool
 {
-    return this->defaultState;
+    return (this->flags & ACTUATOR_FLAG_DEFAULT_STATE) != 0U;
 }
 
 /**
@@ -155,7 +181,7 @@ auto Actuator::getDefaultState() const -> bool
  */
 auto Actuator::hasAutoOff() const -> bool
 {
-    return this->hasAutoOffTimer;
+    return Actuators::hasAutoOffTimer(this->index);
 }
 
 /**
@@ -165,7 +191,7 @@ auto Actuator::hasAutoOff() const -> bool
  */
 auto Actuator::getAutoOffTimer() const -> uint32_t
 {
-    return this->autoOffTimer_ms;
+    return Actuators::getAutoOffTimer(this->index);
 }
 
 /**
@@ -176,7 +202,7 @@ auto Actuator::getAutoOffTimer() const -> uint32_t
  */
 auto Actuator::hasProtection() const -> bool
 {
-    return this->isProtected;
+    return (this->flags & ACTUATOR_FLAG_PROTECTED) != 0U;
 }
 
 /**
@@ -187,7 +213,7 @@ auto Actuator::hasProtection() const -> bool
  */
 auto Actuator::toggleState() -> bool
 {
-    return setState(!this->actualState);
+    return this->setState((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U);
 }
 
 /**
@@ -198,12 +224,32 @@ auto Actuator::toggleState() -> bool
  */
 auto Actuator::checkAutoOffTimer() -> bool
 {
-    if (this->actualState && this->hasAutoOff())
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    return Actuators::checkAutoOffTimer(this->index, this->getAutoOffTimer());
+#else
+    return this->checkAutoOffTimer(this->getAutoOffTimer());
+#endif
+}
+
+/**
+ * @brief Checks the provided auto-off timer, switch OFF the actuator if it's over.
+ *
+ * @param autoOffTimer_ms auto-off timer to test.
+ * @return true if the state has been changed.
+ * @return false otherwise.
+ */
+auto Actuator::checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool
+{
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    return Actuators::checkAutoOffTimer(this->index, autoOffTimer_ms);
+#else
+    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U && autoOffTimer_ms != 0U)
     {
-        if (timeKeeper::getTime() - this->lastTimeSwitched >= this->getAutoOffTimer())
+        if (timeKeeper::getTime() - this->lastTimeSwitched >= autoOffTimer_ms)
         {
             return this->setState(false);
         }
     }
     return false;
+#endif
 }

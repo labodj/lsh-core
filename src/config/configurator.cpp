@@ -107,28 +107,26 @@ void Configurator::finalizeSetup()
 }
 
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
-#include "internal/user_config_bridge.hpp"
-
-#ifdef CONFIG_USE_DIRECT_IO
-#include <DirectIO.h>
-#endif
 /**
- * @brief Disables the Controllino's Real-Time Clock (RTC).
- *
+ * @brief Disable the Controllino's Real-Time Clock chip select.
+ * @details This helper is intentionally kept on `Configurator` so a device
+ *          profile can opt out of the onboard RTC from inside `configure()`
+ *          without spreading board-specific pin knowledge across user code.
  */
 void Configurator::disableRtc()
 {
     pinMode(CONTROLLINO_RTC_CHIP_SELECT, OUTPUT);
-    digitalWrite(CONTROLLINO_RTC_CHIP_SELECT, LOW);  // Disable RTC
+    digitalWrite(CONTROLLINO_RTC_CHIP_SELECT, LOW);
 }
 
 /**
- * @brief Disables the Controllino's Ethernet controller.
- *
+ * @brief Disable the Controllino Ethernet controller chip select.
+ * @details Use this from `Configurator::configure()` when the AVR firmware does
+ *          not own Ethernet and the controller must remain deselected on SPI.
  */
 void Configurator::disableEth()
 {
     pinMode(CONTROLLINO_ETHERNET_CHIP_SELECT, OUTPUT);
-    digitalWrite(CONTROLLINO_ETHERNET_CHIP_SELECT, HIGH);  // Disable Ethernet
+    digitalWrite(CONTROLLINO_ETHERNET_CHIP_SELECT, HIGH);
 }
 #endif  // defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)

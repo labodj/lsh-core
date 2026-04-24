@@ -41,6 +41,9 @@
 // so the firmware keeps only the clamped minimal storage slot for that pool.
 #define LSH_MAX_SUPER_LONG_CLICK_ACTUATOR_LINKS 0
 #define LSH_MAX_INDICATOR_ACTUATOR_LINKS 3
+#define LSH_MAX_CLICKABLE_TIMING_OVERRIDES 0
+#define LSH_MAX_AUTO_OFF_ACTUATORS 2
+#define LSH_MAX_ACTIVE_NETWORK_CLICKS 2
 #define LSH_COM_SERIAL &Serial2
 #define LSH_DEBUG_SERIAL &Serial
 

@@ -25,14 +25,15 @@
 
 #include "util/constants/click_types.hpp"
 /**
- * @brief "static class" Used to store and check network clicks
+ * @brief Namespace-level storage and helpers for bridge-assisted click actions.
  *
  * @details Network clicks are intentionally rare in this system. To keep RAM
- * usage low on embedded targets, this module stores pending click metadata in
- * fixed arrays indexed by clickable index and only keeps small active counters.
- * Timeout sweeps scan the clickable prefix only while at least one click of the
- * corresponding type is pending. Each clickable/type pair can hold at most one
- * in-flight network transaction at a time. Callers must inspect the returned
+ * usage low on embedded targets, this module stores only pending transactions
+ * in one fixed active pool. Timeout sweeps walk that compact pool only while
+ * at least one click is pending. Each clickable/type pair can hold at most one
+ * in-flight network transaction at a time, so one held button may legitimately
+ * occupy two slots when both long and super-long network clicks are enabled.
+ * Callers must inspect the returned
  * `RequestResult`: only `TransportRejected` means the network path is
  * unavailable for this click, while `AlreadyPending` means the press was
  * intentionally ignored because the previous transaction is still open.
@@ -51,17 +52,16 @@ enum class RequestResult : uint8_t
     -> RequestResult;  // Initiates a network click action and reports whether the transaction was accepted, already pending, or rejected.
 [[nodiscard]] auto confirm(uint8_t clickableIndex, constants::ClickType clickType)
     -> bool;  // Confirms a pending network click action after receiving an ACK
-void storeNetworkClickTime(uint8_t clickableIndex, constants::ClickType clickType);  // Store click time for a network attached clickable
 [[nodiscard]] auto matchesCorrelationId(uint8_t clickableIndex, constants::ClickType clickType, uint8_t correlationId)
     -> bool;                                               // Returns true if the active click matches the given correlation ID.
 [[nodiscard]] auto thereAreActiveNetworkClicks() -> bool;  // Returns if there are active stored network clicks
 void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType);  // Erase a stored network click
 [[nodiscard]] auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickType)
-    -> bool;  // Returns true if the timer of the clickable has passed the threshold, false otherwise
+    -> bool;  // Returns true if the pending network click has expired or is no longer active.
 [[nodiscard]] auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickType, bool failover)
-    -> bool;  // Timeout checks for network clicked clickable, if the time it's over it performs local action and resets its timer
+    -> bool;  // Checks one pending network click and runs local fallback when it expires or failover is forced.
 [[nodiscard]] auto checkAllNetworkClicksTimers(bool failover)
-    -> bool;  // Timeout checks for all network clicked clickables, if the time it's over it performs local action and resets its timer
+    -> bool;  // Checks all pending network clicks and runs local fallbacks for expired or forced entries.
 }  // namespace NetworkClicks
 
 #endif  // LSH_CORE_CORE_NETWORK_CLICKS_HPP

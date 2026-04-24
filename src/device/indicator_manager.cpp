@@ -48,6 +48,17 @@ void failIndicatorWithoutActuators()
     delay(10000UL);
     deviceReset();
 }
+
+/**
+ * @brief Abort setup when the dense indicator prefix was corrupted.
+ */
+void failNonCompactIndicatorStorage()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong indicator storage"));
+    delay(10000UL);
+    deviceReset();
+}
 }  // namespace
 
 /**
@@ -105,9 +116,21 @@ void finalizeSetup()
 
     for (uint8_t indicatorIndex = 0U; indicatorIndex < totalIndicators; ++indicatorIndex)
     {
-        if (!indicators[indicatorIndex]->hasAttachedActuators())
+        auto *const indicator = indicators[indicatorIndex];
+        if (indicator == nullptr || indicator->getIndex() != indicatorIndex)
+        {
+            failNonCompactIndicatorStorage();
+        }
+        if (!indicator->hasAttachedActuators())
         {
             failIndicatorWithoutActuators();
+        }
+    }
+    for (uint8_t indicatorIndex = totalIndicators; indicatorIndex < CONFIG_MAX_INDICATORS; ++indicatorIndex)
+    {
+        if (indicators[indicatorIndex] != nullptr)
+        {
+            failNonCompactIndicatorStorage();
         }
     }
 }

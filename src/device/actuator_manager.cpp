@@ -22,9 +22,11 @@
 
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/output/actuator.hpp"
+#include "util/constants/config.hpp"
 #include "util/constants/wrong_config_strings.hpp"
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
+#include "util/time_keeper.hpp"
 
 namespace Actuators
 {
@@ -37,11 +39,23 @@ static_assert(CONFIG_MAX_ACTUATOR_ID > 0U, "CONFIG_MAX_ACTUATOR_ID must be great
 #else
 etl::map<uint8_t, uint8_t, CONFIG_MAX_ACTUATORS> actuatorsMap{};  //!< Device actuators map (UUID -> actuator index)
 #endif
-etl::vector<uint8_t, CONFIG_MAX_ACTUATORS> actuatorsWithAutoOffIndexes{};  //!< Indexes of actuators with auto off functionality active
 PackedActuatorStateBitset packedActuatorStates{};  //!< Canonical packed actuator-state shadow kept in sync with `Actuator::setState()`.
 
 namespace
 {
+struct AutoOffTimerEntry
+{
+    uint32_t timer_ms = 0U;
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    uint32_t lastSwitchTime_ms = 0U;
+#endif
+    uint8_t actuatorIndex = 0U;
+};
+
+etl::array<AutoOffTimerEntry, constants::config::AUTO_OFF_STORAGE_CAPACITY>
+    autoOffTimers{};              //!< Shared storage for actuators that actually have an auto-off timer.
+uint8_t totalAutoOffTimers = 0U;  //!< Number of active entries inside `autoOffTimers`.
+
 /**
  * @brief Abort setup when one actuator uses an invalid numeric ID.
  * @details Actuator ID zero is reserved as "missing" inside the wire protocol
@@ -58,6 +72,72 @@ void failWrongActuatorId()
     CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
     delay(10000);
     deviceReset();
+}
+
+/**
+ * @brief Abort setup when an auto-off timer is attached to an unregistered actuator.
+ */
+void failWrongAutoOffActuator()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(F("auto-off"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
+ * @brief Abort setup when the configured auto-off pool is too small.
+ */
+void failAutoOffTimerOverflow()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(F("auto-off timers number"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
+ * @brief Abort setup when the dense actuator prefix was corrupted.
+ */
+void failNonCompactActuatorStorage()
+{
+    using namespace constants::wrongConfigStrings;
+    NDSB();
+    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(ACTUATORS));
+    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
+    CONFIG_DEBUG_SERIAL->println(F("storage"));
+    delay(10000);
+    deviceReset();
+}
+
+/**
+ * @brief Find the shared auto-off timer entry for an actuator.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @return uint8_t entry index, or UINT8_MAX when no timer is configured.
+ */
+auto findAutoOffTimerEntry(uint8_t actuatorIndex) -> uint8_t
+{
+    for (uint8_t entryIndex = 0U; entryIndex < totalAutoOffTimers; ++entryIndex)
+    {
+        if (autoOffTimers[entryIndex].actuatorIndex == actuatorIndex)
+        {
+            return entryIndex;
+        }
+    }
+    return UINT8_MAX;
 }
 
 #if CONFIG_USE_ACTUATOR_ID_LUT
@@ -248,6 +328,133 @@ auto actuatorExists(uint8_t actuatorId) -> bool
 }
 
 /**
+ * @brief Store or remove an auto-off timer in the compact shared timer pool.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @param time_ms timer duration; zero disables the timer.
+ */
+void setAutoOffTimer(uint8_t actuatorIndex, uint32_t time_ms)
+{
+    if (actuatorIndex >= totalActuators || actuators[actuatorIndex] == nullptr)
+    {
+        failWrongAutoOffActuator();
+    }
+
+    const uint8_t entryIndex = findAutoOffTimerEntry(actuatorIndex);
+    if (time_ms == 0U)
+    {
+        if (entryIndex != UINT8_MAX)
+        {
+            --totalAutoOffTimers;
+            autoOffTimers[entryIndex] = autoOffTimers[totalAutoOffTimers];
+            autoOffTimers[totalAutoOffTimers].timer_ms = 0U;
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+            autoOffTimers[totalAutoOffTimers].lastSwitchTime_ms = 0U;
+#endif
+            autoOffTimers[totalAutoOffTimers].actuatorIndex = 0U;
+        }
+        return;
+    }
+
+    if (entryIndex != UINT8_MAX)
+    {
+        autoOffTimers[entryIndex].timer_ms = time_ms;
+        return;
+    }
+
+    if (totalAutoOffTimers >= constants::config::MAX_AUTO_OFF_ACTUATORS)
+    {
+        failAutoOffTimerOverflow();
+    }
+
+    auto &entry = autoOffTimers[totalAutoOffTimers];
+    entry.timer_ms = time_ms;
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    entry.lastSwitchTime_ms = timeKeeper::getTime();
+#endif
+    entry.actuatorIndex = actuatorIndex;
+    ++totalAutoOffTimers;
+}
+
+/**
+ * @brief Return true when one actuator has an active auto-off timer.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @return true if a non-zero timer is configured.
+ * @return false otherwise.
+ */
+auto hasAutoOffTimer(uint8_t actuatorIndex) -> bool
+{
+    return findAutoOffTimerEntry(actuatorIndex) != UINT8_MAX;
+}
+
+/**
+ * @brief Return an actuator auto-off timer.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @return uint32_t timer duration, or zero when disabled.
+ */
+auto getAutoOffTimer(uint8_t actuatorIndex) -> uint32_t
+{
+    const uint8_t entryIndex = findAutoOffTimerEntry(actuatorIndex);
+    return entryIndex == UINT8_MAX ? 0U : autoOffTimers[entryIndex].timer_ms;
+}
+
+/**
+ * @brief Records the latest switch time for an actuator when compact actuator
+ *        timer storage is enabled.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @param now_ms cached switch timestamp.
+ */
+void recordSwitchTime(uint8_t actuatorIndex, uint32_t now_ms)
+{
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    const uint8_t entryIndex = findAutoOffTimerEntry(actuatorIndex);
+    if (entryIndex != UINT8_MAX)
+    {
+        autoOffTimers[entryIndex].lastSwitchTime_ms = now_ms;
+    }
+#else
+    static_cast<void>(actuatorIndex);
+    static_cast<void>(now_ms);
+#endif
+}
+
+/**
+ * @brief Check one actuator auto-off deadline using manager-owned compact state.
+ *
+ * @param actuatorIndex dense runtime actuator index.
+ * @param autoOffTimer_ms auto-off timeout to evaluate.
+ * @return true if the actuator was switched off.
+ * @return false otherwise.
+ */
+auto checkAutoOffTimer(uint8_t actuatorIndex, uint32_t autoOffTimer_ms) -> bool
+{
+    if (actuatorIndex >= totalActuators || actuators[actuatorIndex] == nullptr || autoOffTimer_ms == 0U)
+    {
+        return false;
+    }
+
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    const uint8_t entryIndex = findAutoOffTimerEntry(actuatorIndex);
+    if (entryIndex == UINT8_MAX)
+    {
+        return false;
+    }
+
+    auto *const actuator = actuators[actuatorIndex];
+    if (actuator->getState() && (timeKeeper::getTime() - autoOffTimers[entryIndex].lastSwitchTime_ms >= autoOffTimer_ms))
+    {
+        return actuator->setState(false);
+    }
+    return false;
+#else
+    return actuators[actuatorIndex]->checkAutoOffTimer(autoOffTimer_ms);
+#endif
+}
+
+/**
  * @brief Performs an auto-off timers check for actuators.
  *
  * @return true if any actuator has been automatically switched off.
@@ -257,9 +464,21 @@ auto actuatorsAutoOffTimersCheck() -> bool
 {
     auto *const local_actuators = actuators.data();  // Cache the pointer to the actuators array
     bool somethingSwitchedOff = false;
-    for (const auto actuatorIndex : actuatorsWithAutoOffIndexes)
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    const uint32_t now = timeKeeper::getTime();
+#endif
+    for (uint8_t entryIndex = 0U; entryIndex < totalAutoOffTimers; ++entryIndex)
     {
-        somethingSwitchedOff |= local_actuators[actuatorIndex]->checkAutoOffTimer();
+        const auto &entry = autoOffTimers[entryIndex];
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+        auto *const actuator = local_actuators[entry.actuatorIndex];
+        if (actuator->getState() && (now - entry.lastSwitchTime_ms >= entry.timer_ms))
+        {
+            somethingSwitchedOff |= actuator->setState(false);
+        }
+#else
+        somethingSwitchedOff |= local_actuators[entry.actuatorIndex]->checkAutoOffTimer(entry.timer_ms);
+#endif
     }
     return somethingSwitchedOff;
 }
@@ -371,26 +590,32 @@ auto getPackedStateByte(uint8_t byteIndex) -> uint8_t
 }
 
 /**
- * @brief Populates actuatorsWithAutoOffIndexes.
+ * @brief Final validation after actuator registration.
  *
  */
 void finalizeSetup()
 {
     DP_CONTEXT();
-    // If this function has been called actuatorsWithAutoOffIndexes is already full
-    if (!actuatorsWithAutoOffIndexes.empty())
+    for (uint8_t actuatorIndex = 0U; actuatorIndex < totalActuators; ++actuatorIndex)
     {
-        return;
-    }
-
-    auto *const actuatorBegin = actuators.data();
-    auto *const actuatorEnd = actuatorBegin + totalActuators;
-    uint8_t i = 0U;
-    for (auto *currActuator = actuatorBegin; currActuator != actuatorEnd; ++currActuator, ++i)
-    {
-        if ((*currActuator)->hasAutoOff())
+        if (actuators[actuatorIndex] == nullptr || actuators[actuatorIndex]->getIndex() != actuatorIndex)
         {
-            actuatorsWithAutoOffIndexes.push_back(i);
+            failNonCompactActuatorStorage();
+        }
+    }
+    for (uint8_t actuatorIndex = totalActuators; actuatorIndex < CONFIG_MAX_ACTUATORS; ++actuatorIndex)
+    {
+        if (actuators[actuatorIndex] != nullptr)
+        {
+            failNonCompactActuatorStorage();
+        }
+    }
+    for (uint8_t entryIndex = 0U; entryIndex < totalAutoOffTimers; ++entryIndex)
+    {
+        const uint8_t actuatorIndex = autoOffTimers[entryIndex].actuatorIndex;
+        if (actuatorIndex >= totalActuators || actuators[actuatorIndex] == nullptr)
+        {
+            failNonCompactActuatorStorage();
         }
     }
 

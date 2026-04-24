@@ -23,6 +23,7 @@
 #include "device/actuator_manager.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/input/clickable.hpp"
+#include "util/constants/config.hpp"
 #include "util/constants/wrong_config_strings.hpp"
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
@@ -93,6 +94,30 @@ void failInvalidClickableConfiguration()
     delay(10000);
     deviceReset();
 }
+
+/**
+ * @brief Abort setup when the dense clickable prefix was corrupted.
+ */
+void failNonCompactClickableStorage()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong clickable storage"));
+    delay(10000);
+    deviceReset();
+}
+
+#if CONFIG_USE_NETWORK_CLICKS
+/**
+ * @brief Abort setup when one held button can exceed the active network-click pool.
+ */
+void failNetworkClickPoolTooSmall()
+{
+    NDSB();
+    CONFIG_DEBUG_SERIAL->println(F("Wrong active network clicks number"));
+    delay(10000);
+    deviceReset();
+}
+#endif
 }  // namespace
 
 /**
@@ -324,13 +349,40 @@ void finalizeSetup()
 {
     DP_CONTEXT();
     finalizeActuatorLinkStorage();
-    auto *const clickableBegin = clickables.data();
-    auto *const clickableEnd = clickableBegin + totalClickables;
-    for (auto *currentClickable = clickableBegin; currentClickable != clickableEnd; ++currentClickable)
+    for (uint8_t clickableIndex = 0U; clickableIndex < totalClickables; ++clickableIndex)
     {
-        if (!(*currentClickable)->check())
+        auto *const currentClickable = clickables[clickableIndex];
+        if (currentClickable == nullptr || currentClickable->getIndex() != clickableIndex)
+        {
+            failNonCompactClickableStorage();
+        }
+
+#if CONFIG_USE_NETWORK_CLICKS
+        uint8_t networkSlotsNeededForOneHold = 0U;
+        if (currentClickable->isNetworkClickable(constants::ClickType::LONG))
+        {
+            ++networkSlotsNeededForOneHold;
+        }
+        if (currentClickable->isNetworkClickable(constants::ClickType::SUPER_LONG))
+        {
+            ++networkSlotsNeededForOneHold;
+        }
+        if (networkSlotsNeededForOneHold > constants::config::MAX_ACTIVE_NETWORK_CLICKS)
+        {
+            failNetworkClickPoolTooSmall();
+        }
+#endif
+
+        if (!currentClickable->check())
         {
             failInvalidClickableConfiguration();
+        }
+    }
+    for (uint8_t clickableIndex = totalClickables; clickableIndex < CONFIG_MAX_CLICKABLES; ++clickableIndex)
+    {
+        if (clickables[clickableIndex] != nullptr)
+        {
+            failNonCompactClickableStorage();
         }
     }
 #if !CONFIG_USE_CLICKABLE_ID_LUT
