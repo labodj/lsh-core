@@ -67,8 +67,8 @@ profiles, a TOML source file and generated headers.
 
 Useful example profiles:
 
-- `J1_release`: leaner profile, MsgPack enabled, no network-click subsystem
-- `J2_release`: richer profile that keeps the network-click path enabled
+- `J1_release`: leaner MsgPack profile, no network-click subsystem
+- `J2_release`: richer MsgPack profile that keeps the network-click path enabled
 
 Build it directly from this repository:
 
@@ -295,13 +295,13 @@ Generated runtime pools:
 - Per-click timing overrides are counted from `long.time` and `super_long.time`.
 - Auto-off pool size is counted from actuators with non-zero `auto_off`.
 - Active network-click capacity is counted from configured network actions; one held button with both long and super-long network clicks needs two active transactions.
-- `LSH_COMPACT_ACTUATOR_SWITCH_TIMES` remains a user-facing optimization define. It removes the per-`Actuator` 32-bit switch timestamp and keeps timestamps only for auto-off actuators. It requires `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0` so debounce semantics remain exact.
+- Compact actuator switch-time storage is selected automatically when a profile has auto-off actuators and `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0`. Otherwise each actuator keeps the timestamp needed to preserve debounce and auto-off semantics exactly.
 
-Optional network-click exclusion:
+Network-click derivation:
 
 - If a device never uses `network = true`, the generator emits a static profile with the network-click runtime compiled out.
-- `LSH_NETWORK_CLICKS = false` in TOML rejects network-click actions for that profile at generation time.
-- `LSH_NETWORK_CLICKS = true` can force the runtime path on for experiments, but normal profiles should let the generator derive it.
+- If at least one enabled long or super-long action uses `network = true`, the generated resource macros size the pending-click pool exactly for that profile.
+- There is no network-click feature flag in TOML; remove `network = true` from the actions that should stay local-only.
 
 Generated validation rule:
 
@@ -545,23 +545,30 @@ slow or unavailable.
 
 LSH-Core can be fine-tuned at compile-time using feature flags. These flags allow you to enable or disable specific functionalities to optimize for performance, memory usage, or specific hardware capabilities.
 
-For TOML-backed profiles, put per-device flags in `[devices.<name>.defines]`.
-PlatformIO-only global defaults can still live in `platformio.ini` when they are
-intentionally shared by every environment.
+For TOML-backed profiles, put shared feature flags in `[common.defines]` and
+per-device overrides in `[devices.<name>.defines]`. PlatformIO-only global
+defaults can still live in `platformio.ini` when they are intentionally shared
+by every environment.
+
+For AVR static profiles, the recommended baseline assumes this priority order:
+runtime speed first, SRAM second, flash third. In that mode, enable
+`CONFIG_MSG_PACK` and the three `CONFIG_USE_FAST_*` flags by default. Disable
+MsgPack only when bridge compatibility, flash size or human-readable serial
+frames matter more than runtime throughput.
 
 ### Communication Protocol
 
 #### `CONFIG_MSG_PACK`
 
-- **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from human-readable JSON to the more efficient, binary MessagePack format.
-- **When to use:** Recommended for most production environments. MessagePack significantly reduces the size of the payloads, leading to faster and more reliable serial communication. This also reduces the RAM required for serialization buffers on both the Controllino and the ESP32.
+- **Description:** Switches the serial communication protocol between `lsh-core` and `lsh-bridge` from newline-delimited JSON to framed binary MessagePack.
+- **When to use:** Recommended for AVR profiles where the priority is runtime speed first, SRAM second and flash last. The public J2 profile saves about 98 bytes of SRAM and cuts common bridge frames by roughly 6-37 UART bytes, at the cost of about 1.1 KB of flash compared with JSON.
 - **Serial transport:** When this flag is enabled, the controller uses a framed MessagePack serial transport: `END + escaped(payload) + END`. JSON mode continues to use newline-delimited text frames.
 - **Compile-time static payloads:** Static control payloads such as `BOOT` and `PING` are generated in both raw and serial-ready forms. `lsh-core` writes the serial-ready bytes directly to the UART, so static MessagePack control frames do not pay framing work at runtime.
-- **Impact:** Smaller firmware size and lower RAM usage. Requires the `lsh-bridge` firmware to also be configured for MessagePack.
+- **Impact:** Lower runtime buffers, fewer wire bytes and less text-number formatting/parsing on dynamic payloads, but more codec/framing code in flash. Keep JSON only when bridge compatibility, flash size or inspectability matter more than runtime throughput. Requires the `lsh-bridge` firmware to use the same codec.
 
 ### I/O Performance
 
-These flags replace standard `digitalRead()` and `digitalWrite()` calls with direct port manipulation for maximum speed. This is especially useful on AVR-based controllers like the ATmega2560, where it can dramatically reduce I/O latency.
+These flags replace standard `digitalRead()` and `digitalWrite()` calls with direct port manipulation for maximum speed. They are recommended defaults for AVR static profiles, especially on ATmega2560/Controllino-class controllers where the button scan path is hot.
 
 When the device is declared through the public `LSH_*` macros and the selected
 pin is a compile-time constant, the AVR fast-I/O path also resolves the final
@@ -676,7 +683,7 @@ These flags allow you to override the default timing behavior of the framework. 
 
 - **Default:** `5U` (5 milliseconds)
 - **Description:** Defines the compatibility fallback used as the default value for `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`.
-- **Behavior note:** The current receive path does not use timeout-based framing. Changing this flag only changes the default housekeeping timeout for incomplete MsgPack frames unless you also override `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`.
+- **Behavior note:** MsgPack frame boundaries are delimiter-based, not timeout-based. Changing this flag only changes the default cleanup timeout for incomplete framed MsgPack payloads unless you also override `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`.
 - **Example:** `-D CONFIG_COM_SERIAL_TIMEOUT_MS=10U`
 
 #### `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS`
@@ -689,7 +696,7 @@ These flags allow you to override the default timing behavior of the framework. 
 
 - **Default:** `RAW_INPUT_BUFFER_SIZE` in JSON mode, `MSGPACK_SERIAL_MAX_FRAME_SIZE` in MsgPack mode
 - **Description:** Bounds the total number of raw UART bytes that `lsh-core` may drain in one `loop()` iteration before returning to local input scanning and logic.
-- **When to tune:** Raise it only if the bridge regularly delivers bursts that should be drained faster and hardware tests confirm that button latency stays acceptable.
+- **When to tune:** Keep the mode-derived default for the speed-first baseline. Raise it only if the bridge regularly delivers bursts that should be drained faster and hardware tests confirm that button latency stays acceptable. Lower it only when local input latency is more important than draining bridge traffic promptly.
 - **Example:** `-D CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP=48U`
 
 #### `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`

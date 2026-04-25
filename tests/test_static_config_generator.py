@@ -304,7 +304,6 @@ def test_renders_extreme_static_profiles() -> None:
                     CONFIG_USE_FAST_ACTUATORS = true
                     CONFIG_USE_FAST_INDICATORS = true
                     CONFIG_ACTUATOR_DEBOUNCE_TIME_MS = 0
-                    LSH_COMPACT_ACTUATOR_SWITCH_TIMES = true
                     """,
                     actuators=actuators,
                     clickables=clickables,
@@ -450,7 +449,18 @@ def test_all_options_catalog_renders_every_profile() -> None:
                     ),
                 ),
             ),
-            "disables network clicks",
+            "LSH_NETWORK_CLICKS is no longer supported",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(
+                    extra_sections="""
+                    [devices.panel.defines]
+                    LSH_COMPACT_ACTUATOR_SWITCH_TIMES = true
+                    """,
+                ),
+            ),
+            "LSH_COMPACT_ACTUATOR_SWITCH_TIMES is no longer supported",
         ),
         (
             minimal_profile(

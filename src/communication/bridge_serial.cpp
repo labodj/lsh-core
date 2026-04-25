@@ -74,13 +74,13 @@ void init()
 }
 
 /**
- * @brief Send one JSON document to the bridge.
+ * @brief Send one protocol document to the bridge using the selected serial codec.
  *
  * This helper centralizes the actual wire write so every payload goes through
  * the same codec selection, optional framing, optional flush policy and
  * timestamp bookkeeping.
  *
- * @param documentToSend JsonDocument to be sent.
+ * @param documentToSend ArduinoJson document to serialize as JSON or MsgPack.
  * @return true if the full payload and any required transport delimiters were
  *         accepted by the UART.
  * @return false if serialization produced no payload bytes or if the UART

@@ -125,7 +125,9 @@ constexpr uint16_t PACKED_STATE_BYTES =
     CONFIG_PACKED_ACTUATOR_STATE_BYTES;  //!< Number of bytes required to represent all actuator states on wire.
 
 /*
-                Received Json Document Size, the size is computed here https://arduinojson.org/v6/assistant/
+                Received ArduinoJson document storage, computed from the widest
+                decoded bridge command. Both JSON and MsgPack deserialize into
+                this JsonDocument-shaped pool.
                 Processor: AVR, Mode: Deserialize, Input Type: Stream
                 {"p":10} -> min: 10, recommended: 24
                               -> (JSON_OBJECT_SIZE(1) + number of strings + string characters number)
@@ -139,11 +141,11 @@ constexpr uint16_t PACKED_STATE_BYTES =
                 We can use 48 as base minimum size
                 */
 constexpr uint16_t RECEIVED_DOC_MIN_SIZE = etl::bit_ceil(JSON_ARRAY_SIZE(PACKED_STATE_BYTES) + JSON_OBJECT_SIZE(2) +
-                                                         4U);  //!< Calculated minimum size for the JSON document received from the bridge.
+                                                         4U);  //!< Calculated minimum size for the decoded bridge document.
 constexpr uint16_t RECEIVED_DOC_SIZE =
     RECEIVED_DOC_MIN_SIZE <= 48U
         ? 48U
-        : RECEIVED_DOC_MIN_SIZE;  //!< Final allocated size for the received JSON document, ensuring a minimum of 48 bytes.
+        : RECEIVED_DOC_MIN_SIZE;  //!< Final allocated size for the received document, ensuring a minimum of 48 bytes.
 static_assert(RECEIVED_DOC_SIZE >= JSON_OBJECT_SIZE(4), "RECEIVED_DOC_SIZE must fit network click responses with correlation ID.");
 
 #ifdef CONFIG_MSG_PACK

@@ -378,43 +378,57 @@ For flags that must replace PlatformIO defaults, keep using `build_unflags` in
 These are the user-facing defines currently intended for TOML define tables or
 PlatformIO `build_flags`.
 
-| Define                                            | Default                        | Meaning                                                                                                                                                |
-| ------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CONFIG_MSG_PACK`                                 | undefined                      | Use framed MessagePack instead of newline-delimited JSON.                                                                                              |
-| `CONFIG_USE_FAST_CLICKABLES`                      | undefined                      | Use direct port reads for clickables when supported.                                                                                                   |
-| `CONFIG_USE_FAST_ACTUATORS`                       | undefined                      | Use direct port writes for actuators when supported.                                                                                                   |
-| `CONFIG_USE_FAST_INDICATORS`                      | undefined                      | Use direct port writes for indicators when supported.                                                                                                  |
-| `LSH_NETWORK_CLICKS`                              | auto                           | Set to `false` to reject `network = true` actions in this profile. By default, the generator enables the runtime pool only when network actions exist. |
-| `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`                | `100U`                         | Minimum actuator switch interval.                                                                                                                      |
-| `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`               | `20U`                          | Button debounce time.                                                                                                                                  |
-| `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`               | `1U`                           | Minimum elapsed time between local input scan passes.                                                                                                  |
-| `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`             | `400U`                         | Default long-click threshold.                                                                                                                          |
-| `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS`       | `1000U`                        | Default super-long-click threshold.                                                                                                                    |
-| `CONFIG_LCNB_TIMEOUT_MS`                          | `1000U`                        | Network-click ACK timeout.                                                                                                                             |
-| `CONFIG_PING_INTERVAL_MS`                         | `10000U`                       | Bridge ping interval.                                                                                                                                  |
-| `CONFIG_CONNECTION_TIMEOUT_MS`                    | ping interval + `200U`         | Link liveness timeout.                                                                                                                                 |
-| `CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS`            | `250U`                         | BOOT retry interval while bridge is not ready.                                                                                                         |
-| `CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS`            | `1500U`                        | Timeout while waiting for bridge state request.                                                                                                        |
-| `CONFIG_DEBUG_SERIAL_BAUD`                        | `115200U`                      | Debug UART speed in debug builds.                                                                                                                      |
-| `CONFIG_COM_SERIAL_BAUD`                          | `250000U`                      | Controller-to-bridge UART speed.                                                                                                                       |
-| `CONFIG_COM_SERIAL_TIMEOUT_MS`                    | `5U`                           | Compatibility default for MsgPack idle timeout.                                                                                                        |
-| `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS` | `CONFIG_COM_SERIAL_TIMEOUT_MS` | Timeout used to discard one incomplete MsgPack frame.                                                                                                  |
-| `CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP`      | `4U`                           | Max fully dispatched bridge payloads per loop iteration.                                                                                               |
-| `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP`         | mode-dependent                 | Max raw UART bytes drained per loop iteration.                                                                                                         |
-| `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`              | debug: `1`, release: `0`       | Force `Serial.flush()` after bridge sends.                                                                                                             |
-| `CONFIG_DELAY_AFTER_RECEIVE_MS`                   | `50U`                          | Quiet window after received bridge state changes.                                                                                                      |
-| `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`          | `50U`                          | Pending network-click timeout polling interval.                                                                                                        |
-| `CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS`     | `1000U`                        | Auto-off scan interval.                                                                                                                                |
-| `CONFIG_LSH_BENCH`                                | undefined                      | Enable developer loop benchmark.                                                                                                                       |
-| `CONFIG_BENCH_ITERATIONS`                         | `1000000U`                     | Benchmark loop iteration count.                                                                                                                        |
-| `LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS`           | auto                           | Force aggressive constexpr constructors when supported.                                                                                                |
-| `LSH_DISABLE_AGGRESSIVE_CONSTEXPR_CTORS`          | undefined                      | Disable aggressive constexpr constructors.                                                                                                             |
-| `LSH_COMPACT_ACTUATOR_SWITCH_TIMES`               | undefined                      | Store actuator switch times only for auto-off actuators. Requires actuator debounce `0`.                                                               |
-| `LSH_ETL_PROFILE_OVERRIDE_HEADER`                 | undefined                      | Include a consumer-provided ETL profile override header. Prefer `platformio.ini` for quoted include values.                                            |
+For AVR static profiles, the recommended default priority is runtime speed
+first, SRAM second and flash third. Put `CONFIG_MSG_PACK = true` and the three
+`CONFIG_USE_FAST_* = true` flags in `[common.defines]` unless a specific
+installation needs JSON compatibility, lower flash use or slower portable I/O.
+
+| Define                                            | Default                        | Meaning                                                                                                                   |
+| ------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `CONFIG_MSG_PACK`                                 | undefined                      | Use framed MessagePack instead of newline-delimited JSON. Recommended when runtime speed and SRAM matter more than flash. |
+| `CONFIG_USE_FAST_CLICKABLES`                      | undefined                      | Use direct port reads for clickables when supported. Recommended for AVR static profiles.                                 |
+| `CONFIG_USE_FAST_ACTUATORS`                       | undefined                      | Use direct port writes for actuators when supported. Recommended for AVR static profiles.                                 |
+| `CONFIG_USE_FAST_INDICATORS`                      | undefined                      | Use direct port writes for indicators when supported. Recommended for AVR static profiles.                                |
+| `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`                | `100U`                         | Minimum actuator switch interval.                                                                                         |
+| `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`               | `20U`                          | Button debounce time.                                                                                                     |
+| `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`               | `1U`                           | Minimum elapsed time between local input scan passes.                                                                     |
+| `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`             | `400U`                         | Default long-click threshold.                                                                                             |
+| `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS`       | `1000U`                        | Default super-long-click threshold.                                                                                       |
+| `CONFIG_LCNB_TIMEOUT_MS`                          | `1000U`                        | Network-click ACK timeout.                                                                                                |
+| `CONFIG_PING_INTERVAL_MS`                         | `10000U`                       | Bridge ping interval.                                                                                                     |
+| `CONFIG_CONNECTION_TIMEOUT_MS`                    | ping interval + `200U`         | Link liveness timeout.                                                                                                    |
+| `CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS`            | `250U`                         | BOOT retry interval while bridge is not ready.                                                                            |
+| `CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS`            | `1500U`                        | Timeout while waiting for bridge state request.                                                                           |
+| `CONFIG_DEBUG_SERIAL_BAUD`                        | `115200U`                      | Debug UART speed in debug builds.                                                                                         |
+| `CONFIG_COM_SERIAL_BAUD`                          | `250000U`                      | Controller-to-bridge UART speed.                                                                                          |
+| `CONFIG_COM_SERIAL_TIMEOUT_MS`                    | `5U`                           | Compatibility default for MsgPack idle timeout.                                                                           |
+| `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS` | `CONFIG_COM_SERIAL_TIMEOUT_MS` | Timeout used to discard one incomplete MsgPack frame.                                                                     |
+| `CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP`      | `4U`                           | Max fully dispatched bridge payloads per loop iteration.                                                                  |
+| `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP`         | mode-dependent                 | Max raw UART bytes drained per loop iteration.                                                                            |
+| `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`              | debug: `1`, release: `0`       | Force `Serial.flush()` after bridge sends.                                                                                |
+| `CONFIG_DELAY_AFTER_RECEIVE_MS`                   | `50U`                          | Quiet window after received bridge state changes.                                                                         |
+| `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`          | `50U`                          | Pending network-click timeout polling interval.                                                                           |
+| `CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS`     | `1000U`                        | Auto-off scan interval.                                                                                                   |
+| `CONFIG_LSH_BENCH`                                | undefined                      | Enable developer loop benchmark.                                                                                          |
+| `CONFIG_BENCH_ITERATIONS`                         | `1000000U`                     | Benchmark loop iteration count.                                                                                           |
+| `LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS`           | auto                           | Force aggressive constexpr constructors when supported.                                                                   |
+| `LSH_DISABLE_AGGRESSIVE_CONSTEXPR_CTORS`          | undefined                      | Disable aggressive constexpr constructors.                                                                                |
+| `LSH_ETL_PROFILE_OVERRIDE_HEADER`                 | undefined                      | Include a consumer-provided ETL profile override header. Prefer `platformio.ini` for quoted include values.               |
 
 Static resource macros such as `LSH_STATIC_CONFIG_ACTUATORS`,
-`LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS` and `CONFIG_MAX_ACTUATORS` are
-generated or derived internally. Do not write them by hand in TOML.
+`LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS`, `CONFIG_MAX_ACTUATORS` and
+`CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES` are generated or derived internally.
+Do not write them by hand in TOML.
+
+Network-click support is inferred from click actions. If at least one enabled
+long or super-long action has `network = true`, the generated profile sizes and
+enables the active network-click pool. If no action uses the bridge, the runtime
+path is compiled out.
+
+Compact actuator switch-time storage is automatic. It is enabled only when the
+profile has auto-off actuators and `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS` is
+explicitly `0`; otherwise each actuator keeps the timestamp required to preserve
+debounce and auto-off semantics exactly.
 
 PlatformIO-only flags such as `NDEBUG`, `LSH_DEBUG`, `SERIAL_RX_BUFFER_SIZE`,
 `SERIAL_TX_BUFFER_SIZE`, compiler optimization flags and linker flags can stay
@@ -435,7 +449,7 @@ The generator fails before compilation when it finds:
 - disabled actions with active targets/options;
 - enabled long clicks with no local target and no network action;
 - indicators with no targets;
-- network clicks disabled by define while `network = true` is configured;
+- removed internal defines such as `LSH_NETWORK_CLICKS` or `LSH_COMPACT_ACTUATOR_SWITCH_TIMES`;
 - unsafe C++ pin or serial expressions;
 - generated paths that escape the output directory.
 
@@ -475,6 +489,8 @@ The generated profile avoids SRAM tables for static facts:
   generation time and stored in flash on AVR targets;
 - network-click pools are sized exactly for the profile and are compiled out
   when no `network = true` action exists.
+- compact actuator switch-time storage is selected automatically when actuator
+  debounce is disabled and only auto-off actuators need switch timestamps.
 
 Keyword policy:
 

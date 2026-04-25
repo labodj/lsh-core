@@ -14,14 +14,14 @@ hardware_include = "Controllino.h"
 debug_serial = "Serial"
 com_serial = "Serial2"
 
-[devices.j1]
-name = "j1"
-
-[devices.j1.defines]
+[common.defines]
 CONFIG_MSG_PACK = true
 CONFIG_USE_FAST_CLICKABLES = true
 CONFIG_USE_FAST_ACTUATORS = true
 CONFIG_USE_FAST_INDICATORS = true
+
+[devices.j1]
+name = "j1"
 
 [[devices.j1.actuators]]
 name = "rel0"

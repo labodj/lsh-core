@@ -20,7 +20,6 @@ from .constants import (
     UINT32_MAX,
 )
 from .errors import fail
-from .metrics import count_active_network_clicks
 from .models import (
     ActuatorConfig,
     ClickableConfig,
@@ -363,13 +362,25 @@ def parse_click_action(
 
 
 def parse_define_table(raw: TomlValue | None, path: str) -> DefineMap:
-    """Parse a define table while validating only macro names early."""
+    """Parse a define table while validating lsh-core define names early."""
     if raw is None:
         return {}
     table = expect_table(raw, path)
     parsed: DefineMap = {}
     for name, value in table.items():
-        parsed[validate_macro(name, f"{path}.{name}")] = value
+        macro = validate_macro(name, f"{path}.{name}")
+        if macro == "LSH_NETWORK_CLICKS":
+            fail(
+                f"{path}.{name} is no longer supported; remove it and use "
+                "network=true only on the click actions that need the bridge."
+            )
+        if macro == "LSH_COMPACT_ACTUATOR_SWITCH_TIMES":
+            fail(
+                f"{path}.{name} is no longer supported; compact actuator "
+                "switch-time storage is selected automatically when "
+                "CONFIG_ACTUATOR_DEBOUNCE_TIME_MS is 0."
+            )
+        parsed[macro] = value
     return parsed
 
 
@@ -622,24 +633,12 @@ def _validate_indicator_targets(device: DeviceConfig) -> None:
             )
 
 
-def _validate_network_click_settings(device: DeviceConfig) -> None:
-    """Validate device-level network-click defines against click actions."""
-    active_network_clicks = count_active_network_clicks(device)
-    network_setting = device.defines.get("LSH_NETWORK_CLICKS")
-    if network_setting is False and active_network_clicks != 0:
-        fail(
-            f"devices.{device.key} disables network clicks but contains "
-            "network=true click actions."
-        )
-
-
 def validate_device(device: DeviceConfig) -> None:
     """Validate cross-resource references and static resource limits."""
     _validate_resource_counts(device)
     _validate_unique_fields(device)
     _validate_clickable_targets(device)
     _validate_indicator_targets(device)
-    _validate_network_click_settings(device)
 
 
 def validate_target_set(targets: Sequence[str], allowed: set[str], path: str) -> None:

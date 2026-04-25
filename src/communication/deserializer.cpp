@@ -153,8 +153,8 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
 }  // namespace
 
 /**
- * @brief Main entry point for command processing. Deserializes a JSON document
- * and immediately dispatches the corresponding action.
+ * @brief Main entry point for command processing. Consumes one decoded bridge
+ * document and immediately dispatches the corresponding action.
  * @details This function acts as a command dispatcher. It reads the command ID
  * from the 'p' key and uses a switch statement for O(1) dispatching.
  * It directly calls functions in other modules (Serializer, Actuators, NetworkClicks)
@@ -167,7 +167,8 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
  * bridge payloads are rejected here instead of being silently coerced by
  * ArduinoJson conversions.
  *
- * @param doc A const reference to the parsed JsonDocument from BridgeSerial.
+ * @param doc Parsed ArduinoJson document from BridgeSerial, regardless of the
+ *            active wire codec.
  * @return DispatchResult A struct indicating the side-effects of the command,
  * telling the main loop if a general state update needs to be sent or if
  * network click timers need to be checked.

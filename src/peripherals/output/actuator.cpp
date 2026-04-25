@@ -26,7 +26,7 @@
 
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
 static_assert(constants::timings::ACTUATOR_DEBOUNCE_TIME_MS == 0U,
-              "LSH_COMPACT_ACTUATOR_SWITCH_TIMES requires CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0 to preserve exact debounce semantics.");
+              "Compact actuator switch-time storage requires CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0 to preserve exact debounce semantics.");
 #endif
 
 /**

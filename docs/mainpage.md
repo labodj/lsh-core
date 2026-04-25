@@ -65,6 +65,11 @@ The codebase is optimized for embedded determinism:
 - compile-time AVR pin binding when public device macros use constant pins on supported boards
 - explicit fallback behaviour when the network path is unavailable
 
+For AVR static profiles, the project defaults assume runtime speed first, SRAM
+second and flash third. That is why the reference TOML profiles prefer framed
+MsgPack and direct-port I/O even when they cost more flash than the equivalent
+JSON or Arduino helper path.
+
 That optimization target matters when reviewing or extending the code. Prefer
 changes that preserve RAM predictability, keep hot paths branch-light, and do
 not relax the boot/resync contract between `lsh-core` and `lsh-bridge`.
