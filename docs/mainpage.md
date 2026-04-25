@@ -37,10 +37,11 @@ README / protocol pages when you need the system contract around the library.
 The firmware is intentionally strict about a few invariants:
 
 - The configured topology is static between two controller boots.
-- `LSH_MAX_ACTUATORS`, `LSH_MAX_CLICKABLES`, and `LSH_MAX_INDICATORS` define fixed-capacity limits, not the real runtime cardinality.
-- The real cardinality is the number of successful `addActuator()`, `addClickable()`, and `addIndicator()` registrations performed by `Configurator::configure()`.
-- Registered object arrays are dense by contract. Setup validation rejects null holes, stale pointers after `total`, and mismatched object indexes before the runtime loop starts.
-- Compact actuator-link pools are dense runtime slices. Setup accepts arbitrary link append order and shifts later slices so runtime traversal remains `offset + count`.
+- Generated `LSH_STATIC_CONFIG_*` values define the exact runtime cardinality for actuators, clickables, indicators, network-click slots and auto-off entries.
+- `Configurator::configure()` is generated from TOML and directly assigns dense object indexes and manager-array slots. Users should not hand-write registration code.
+- Registered object arrays are dense by contract. Debug/runtime setup validation rejects null holes and mismatched object indexes before the runtime loop starts.
+- Click actions, clickable scan routing, indicator refreshes and auto-off checks are generated from the static topology instead of traversing runtime link tables.
+- Generated click scanners pass compile-time flags and thresholds to the button FSM, and generated multi-actuator actions reuse one timestamp when switch-time bookkeeping is active.
 - Device IDs exposed on the wire are positive non-zero `uint8_t` values and must stay unique within their domain.
 - `BOOT` is the re-synchronization trigger used to invalidate cached models in the bridge and force a fresh `details + state` cycle.
 - Serial transport depends on the selected codec: JSON uses newline-delimited frames, while MsgPack uses a framed delimiter-and-escape transport on top of the pure payload bytes.

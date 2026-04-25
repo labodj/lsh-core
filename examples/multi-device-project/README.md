@@ -8,6 +8,7 @@ The important files are:
 - `lsh_devices.toml`: human-authored device topology and feature defines
 - `platformio.ini`: PlatformIO environments and the static-config pre-build hook
 - `include/lsh_user_config.hpp`: generated profile router
+- `include/lsh_static_config_router.hpp`: generated internal two-pass static-profile router
 - `include/lsh_configs/*_config.hpp`: generated per-device compile-time options
 - `include/lsh_configs/*_static_config.hpp`: generated static topology and
   behavior implementation

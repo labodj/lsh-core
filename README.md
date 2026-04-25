@@ -238,6 +238,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    ├── lsh_devices.toml          # Human-authored device topology
    ├── include/
    │   ├── lsh_user_config.hpp    # Generated router header
+   │   ├── lsh_static_config_router.hpp
    │   └── lsh_configs/
    │       └── ... generated device headers
    └── src/
@@ -258,17 +259,16 @@ Device-specific topology is described in `lsh_devices.toml`. The pre-build
 generator validates that file and emits the static C++ profile consumed by
 `Configurator::configure()`.
 
-The generated profile calls the same low-level registration API that older
-hand-written profiles used, but most users never touch those calls directly:
-
-- `addActuator(Actuator* actuator)`: Registers an actuator with the system.
-- `addClickable(Clickable* clickable)`: Registers a clickable with the system.
-- `addIndicator(Indicator* indicator)`: Registers an indicator with the system.
-- `getIndex(const Actuator& actuator)`: Resolves the dense runtime actuator index used by generated links.
+The generated profile owns object construction, release dispatch and optional
+debug/runtime-check registration. Users should not write C++ registration code:
+the TOML profile is the public configuration surface, while the generated C++
+uses direct assignments and direct action bodies optimized for the selected
+device.
 
 Keep the TOML as the source of truth and regenerate the headers. The generated
-profile owns registration order, dense indexes, resource counts and lookup
-accessors.
+profile owns registration order, dense indexes when validation needs them,
+resource counts, lookup helpers, direct action bodies, the clickable scan path,
+indicator refreshes and auto-off checks.
 
 Generated capacity rule:
 
@@ -280,7 +280,7 @@ Generated capacity rule:
 Generated ID lookup:
 
 - Public actuator and clickable IDs may be sparse as long as they stay in `1..255`.
-- The generator emits branch/range accessors for `id -> dense index` and `dense index -> id`; no user-authored lookup tables are needed.
+- The generator emits branch/range accessors for dense IDs and switches for sparse IDs; no user-authored lookup tables are needed.
 - The highest accepted ID is generated as `LSH_STATIC_CONFIG_MAX_ACTUATOR_ID` and `LSH_STATIC_CONFIG_MAX_CLICKABLE_ID`.
 
 Generated actuator-link pools:
@@ -288,11 +288,20 @@ Generated actuator-link pools:
 - Short, long, super-long and indicator link totals are counted from the TOML.
 - Duplicate local targets inside one action are rejected by the generator.
 - Network-only clicks do not consume local link entries unless they also list local fallback targets.
-- Runtime storage stays static and heap-free; generated compile-time checks reject counts outside the supported AVR-friendly field widths.
+- Runtime storage stays static and heap-free. Actual click routing, network
+  fallback and indicator behavior are emitted as direct generated code.
 
 Generated runtime pools:
 
-- Per-click timing overrides are counted from `long.time` and `super_long.time`.
+- Per-click timing overrides from `long.time` and `super_long.time` are passed
+  as template constants by the generated clickable scanner; `Clickable` objects
+  keep only dynamic FSM state and the compiler erases disabled click checks.
+- Release actuator/clickable/indicator objects do not keep dense registration
+  indexes in SRAM; generated action paths pass those indexes as compile-time
+  constants. Debug and runtime-check builds keep the indexes for invariant
+  validation.
+- Multi-actuator generated actions share one cached timestamp when switch-time
+  bookkeeping is active; single-actuator actions keep the lazy runtime path.
 - Auto-off pool size is counted from actuators with non-zero `auto_off`.
 - Active network-click capacity is counted from configured network actions; one held button with both long and super-long network clicks needs two active transactions.
 - Compact actuator switch-time storage is selected automatically when a profile has auto-off actuators and `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0`. Otherwise each actuator keeps the timestamp needed to preserve debounce and auto-off semantics exactly.
@@ -305,7 +314,7 @@ Network-click derivation:
 
 Generated validation rule:
 
-- The generator registers actuators, clickables and indicators in a deterministic order.
+- The generator assigns actuator, clickable and indicator indexes in a deterministic order.
 - It rejects missing references, duplicated targets, empty indicators, disabled actions with active options and unsupported path/identifier expressions before compilation.
 - `Configurator::finalizeSetup()` still validates compact manager invariants before runtime starts.
 
@@ -318,7 +327,12 @@ Controllino setup helpers:
 
 Compile-time constants layout:
 
-- User profile macros are imported by `src/internal/user_config_bridge.hpp` and exposed as `CONFIG_*` values used by low-level allocation code.
+- The generated public router selects board/profile constants; the generated
+  static router is included twice by lsh-core, once for resource macros and once
+  for implementation code.
+- Device names and serial objects are imported as C++ `constexpr` values; static
+  resource macros are exposed as internal `CONFIG_*` constants for allocation
+  code.
 - The same resource-limit values are also mirrored under `constants::config` for documentation-oriented code and future references.
 - Timing constants live in `src/util/constants/timing.hpp`.
 - Serial/bridge constants live in `src/communication/constants/config.hpp`.
@@ -343,13 +357,14 @@ IDs, link totals, network-click pool size, auto-off timers and timing overrides.
 
 Create `lsh_devices.toml` in your consumer project. Users configure names,
 public IDs, pins and click behavior; the generator emits the C++ objects,
-resource counts and lookup accessors.
+resource counts, lookup accessors and topology-specialized runtime paths.
 
 ```toml
 [generator]
 output_dir = "include"
 config_dir = "lsh_configs"
 user_config_header = "lsh_user_config.hpp"
+static_config_router_header = "lsh_static_config_router.hpp"
 
 [common]
 hardware_include = "Controllino.h"
@@ -371,10 +386,15 @@ pin = "CONTROLLINO_A0"
 short = ["mainLight"]
 ```
 
+Keep those generated header names unless you have a build-system reason to
+rename them. The PlatformIO hook passes the extra internal include-selector
+defines when the names are customized; manual builds must use
+`--print-platformio-defines` and pass the same values.
+
 **Step 3: Add the Generator to the Build System**
 
 Create the build environments in `platformio.ini`. The pre-build hook validates
-the TOML, writes `include/lsh_user_config.hpp`, generates the selected static
+the TOML, writes the generated router headers, generates the selected static
 profile and adds the correct `LSH_BUILD_*` macro.
 
 ```ini

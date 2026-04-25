@@ -22,6 +22,12 @@ payload bytes and registration code tailored to that profile.
 This split is intentional. It keeps configuration readable while still allowing
 the compiled firmware to be small and predictable on 8-bit AVR targets.
 
+The generator specializes the runtime for the selected profile: click detection
+uses compile-time flags and thresholds, multi-actuator actions share one cached
+timestamp only when that is cheaper, ID lookups choose compact ranges or sparse
+switches, and auto-off checks consume the loop timestamp instead of reading time
+again.
+
 ## Quick Start
 
 Create `lsh_devices.toml` in the consumer project:
@@ -31,6 +37,7 @@ Create `lsh_devices.toml` in the consumer project:
 output_dir = "include"
 config_dir = "lsh_configs"
 user_config_header = "lsh_user_config.hpp"
+static_config_router_header = "lsh_static_config_router.hpp"
 
 [common]
 hardware_include = "Controllino.h"
@@ -167,14 +174,21 @@ reader can inspect the produced firmware profile without running tools first.
 
 `[generator]` controls where generated files are written.
 
-| Field                | Type   | Default                 | Meaning                                                                                  |
-| -------------------- | ------ | ----------------------- | ---------------------------------------------------------------------------------------- |
-| `output_dir`         | string | `"include"`             | Relative output directory under the TOML file directory. It must not escape the project. |
-| `config_dir`         | string | `"lsh_configs"`         | Generated subdirectory inside `output_dir`. Must be one path component.                  |
-| `user_config_header` | string | `"lsh_user_config.hpp"` | Generated router header included by `lsh-core`. Must be one file name.                   |
+| Field                         | Type   | Default                          | Meaning                                                                                         |
+| ----------------------------- | ------ | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `output_dir`                  | string | `"include"`                      | Relative output directory under the TOML file directory. It must not escape the project.        |
+| `config_dir`                  | string | `"lsh_configs"`                  | Generated subdirectory inside `output_dir`. Must be one path component.                         |
+| `user_config_header`          | string | `"lsh_user_config.hpp"`          | Generated public profile router included by `lsh-core`. Must be one file name.                  |
+| `static_config_router_header` | string | `"lsh_static_config_router.hpp"` | Generated internal two-pass static-profile router. Must be one file name and normally stays default. |
 
 Do not point `output_dir`, `config_dir`, `config_include` or
 `static_config_include` outside the generated include directory.
+
+Keep the default generated header names unless a build system has a clear
+reason to rename them. The PlatformIO hook injects the internal include-selector
+defines required by custom `user_config_header` and
+`static_config_router_header` values; manual builds must consume
+`--print-platformio-defines` and pass those defines as well.
 
 ## Common Section
 
@@ -479,12 +493,18 @@ Keep compiler, linker, upload and board-specific PlatformIO settings in
 The generated profile avoids SRAM tables for static facts:
 
 - resource capacities are preprocessor constants;
+- device name and serial objects are generated as C++ `constexpr` values; only
+  include selection and resource-count pass macros remain preprocessor based;
 - IDs and reverse-ID lookups are compact branch/range accessors;
 - auto-off timers are branch-grouped by equal duration;
-- long/super-long click types and per-click thresholds are generated accessors;
-- click and indicator links are generated as dense-index accessors, with common
-  single-link and range cases compressed into arithmetic branches;
-- indicator modes are generated accessors;
+- clickable objects store only dynamic FSM state; short/long/super-long flags
+  and timing thresholds are passed as constants by the generated scan path;
+- generated release setup avoids storing dense indexes in actuator, clickable
+  and indicator objects; debug/runtime-check builds keep those bytes for
+  validation;
+- click actions, network-click fallback routing, clickable scanning, indicator
+  refreshes and auto-off sweeps are emitted as topology-specialized code,
+  without runtime link dispatchers or mode accessors;
 - DEVICE_DETAILS JSON and serial-framed MsgPack payloads are pre-serialized at
   generation time and stored in flash on AVR targets;
 - network-click pools are sized exactly for the profile and are compiled out
@@ -499,10 +519,10 @@ Keyword policy:
   `src/internal/user_config_bridge.hpp`;
 - AVR payload byte arrays use `const ... PROGMEM`, because flash placement is the
   relevant storage decision on this target;
-- generated lookup accessors are emitted in one implementation pass instead of
-  being header-only `constexpr` functions. That keeps one copy of the branch
-  logic in the firmware and avoids turning implementation detail into public
-  inline code;
+- generated lookup helpers and action bodies are emitted in one implementation
+  pass instead of being header-only `constexpr` functions. That keeps one copy
+  of the branch logic in the firmware and avoids turning implementation detail
+  into public inline code;
 - generated accessors are declared `[[nodiscard]]` and `noexcept` because they
   are deterministic embedded helpers and their return values carry the whole
   result;
