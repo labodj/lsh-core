@@ -22,9 +22,8 @@
 #include "core/network_clicks.hpp"
 
 #include "communication/serializer.hpp"
-#include "device/clickable_manager.hpp"
+#include "config/static_config.hpp"
 #include "internal/etl_array.hpp"
-#include "peripherals/input/clickable.hpp"
 #include "util/constants/config.hpp"
 #include "util/constants/timing.hpp"
 #include "util/debug/debug.hpp"
@@ -38,13 +37,12 @@ namespace NetworkClicks
 #if CONFIG_USE_NETWORK_CLICKS
 namespace
 {
-constexpr uint8_t NETWORK_CLICK_FLAG_SUPER_LONG = 0x01U;
+constexpr uint8_t NETWORK_CLICK_FLAG_ACTIVE = 0x01U;
 constexpr uint8_t NETWORK_CLICK_FLAG_ACKED = 0x02U;
 
 struct ActiveNetworkClick
 {
     uint16_t age_ms = 0U;
-    uint8_t clickableIndex = 0U;
     uint8_t correlationId = 0U;
     uint8_t flags = 0U;
 };
@@ -61,14 +59,28 @@ auto isSupportedNetworkClickType(constants::ClickType clickType) -> bool
     return clickType == ClickType::LONG || clickType == ClickType::SUPER_LONG;
 }
 
-auto flagsForClickType(constants::ClickType clickType) -> uint8_t
+auto isNetworkClickActive(const ActiveNetworkClick &entry) -> bool
 {
-    return clickType == constants::ClickType::SUPER_LONG ? NETWORK_CLICK_FLAG_SUPER_LONG : 0U;
+    return (entry.flags & NETWORK_CLICK_FLAG_ACTIVE) != 0U;
 }
 
-auto clickTypeForEntry(const ActiveNetworkClick &entry) -> constants::ClickType
+auto isNetworkClickAcked(const ActiveNetworkClick &entry) -> bool
 {
-    return (entry.flags & NETWORK_CLICK_FLAG_SUPER_LONG) != 0U ? constants::ClickType::SUPER_LONG : constants::ClickType::LONG;
+    return (entry.flags & NETWORK_CLICK_FLAG_ACKED) != 0U;
+}
+
+void markNetworkClickAcked(ActiveNetworkClick &entry)
+{
+    entry.flags |= NETWORK_CLICK_FLAG_ACKED;
+}
+
+auto getNetworkClickSlotIndex(uint8_t clickableIndex, constants::ClickType clickType) -> uint8_t
+{
+    if (!isSupportedNetworkClickType(clickType))
+    {
+        return UINT8_MAX;
+    }
+    return lsh::core::static_config::getNetworkClickSlotIndex(clickableIndex, clickType);
 }
 
 /**
@@ -88,77 +100,83 @@ auto generateCorrelationId() -> uint8_t
     return nextCorrelationId;
 }
 
-auto findActiveNetworkClickIndex(uint8_t clickableIndex, constants::ClickType clickType) -> uint8_t
+auto findActiveNetworkClickSlotIndex(uint8_t clickableIndex, constants::ClickType clickType) -> uint8_t
 {
-    if (!isSupportedNetworkClickType(clickType))
+    const uint8_t slotIndex = getNetworkClickSlotIndex(clickableIndex, clickType);
+    if (slotIndex >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
     {
         return UINT8_MAX;
     }
-    const uint8_t typeFlags = flagsForClickType(clickType);
-    for (uint8_t entryIndex = 0U; entryIndex < activeNetworkClickCount; ++entryIndex)
-    {
-        const auto &entry = activeNetworkClicks[entryIndex];
-        if (entry.clickableIndex == clickableIndex && ((entry.flags & NETWORK_CLICK_FLAG_SUPER_LONG) == typeFlags))
-        {
-            return entryIndex;
-        }
-    }
-    return UINT8_MAX;
+    return isNetworkClickActive(activeNetworkClicks[slotIndex]) ? slotIndex : UINT8_MAX;
 }
 
 auto findActiveNetworkClick(uint8_t clickableIndex, constants::ClickType clickType) -> ActiveNetworkClick *
 {
-    const uint8_t entryIndex = findActiveNetworkClickIndex(clickableIndex, clickType);
-    return entryIndex == UINT8_MAX ? nullptr : &activeNetworkClicks[entryIndex];
+    const uint8_t slotIndex = findActiveNetworkClickSlotIndex(clickableIndex, clickType);
+    return slotIndex == UINT8_MAX ? nullptr : &activeNetworkClicks[slotIndex];
 }
 
-auto isNetworkClickAcked(const ActiveNetworkClick &entry) -> bool
+void clearActiveNetworkClickSlot(uint8_t slotIndex)
 {
-    return (entry.flags & NETWORK_CLICK_FLAG_ACKED) != 0U;
+    auto &entry = activeNetworkClicks[slotIndex];
+    if (isNetworkClickActive(entry) && activeNetworkClickCount != 0U)
+    {
+        --activeNetworkClickCount;
+    }
+    entry.age_ms = 0U;
+    entry.correlationId = 0U;
+    entry.flags = 0U;
 }
 
-void markNetworkClickAcked(ActiveNetworkClick &entry)
+void eraseActiveNetworkClickAt(uint8_t slotIndex)
 {
-    entry.flags |= NETWORK_CLICK_FLAG_ACKED;
-}
-
-void clearActiveNetworkClickSlot(uint8_t entryIndex)
-{
-    activeNetworkClicks[entryIndex].age_ms = 0U;
-    activeNetworkClicks[entryIndex].clickableIndex = 0U;
-    activeNetworkClicks[entryIndex].correlationId = 0U;
-    activeNetworkClicks[entryIndex].flags = 0U;
-}
-
-void eraseActiveNetworkClickAt(uint8_t entryIndex)
-{
-    if (entryIndex >= activeNetworkClickCount)
+    if (slotIndex >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
     {
         return;
     }
-
-    --activeNetworkClickCount;
-    if (entryIndex != activeNetworkClickCount)
-    {
-        activeNetworkClicks[entryIndex] = activeNetworkClicks[activeNetworkClickCount];
-    }
-    clearActiveNetworkClickSlot(activeNetworkClickCount);
+    clearActiveNetworkClickSlot(slotIndex);
 }
 
 auto appendActiveNetworkClick(uint8_t clickableIndex, constants::ClickType clickType) -> ActiveNetworkClick *
 {
-    if (!isSupportedNetworkClickType(clickType) || activeNetworkClickCount >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
+    if (activeNetworkClickCount >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
     {
         return nullptr;
     }
 
-    auto &entry = activeNetworkClicks[activeNetworkClickCount];
+    const uint8_t slotIndex = getNetworkClickSlotIndex(clickableIndex, clickType);
+    if (slotIndex >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
+    {
+        return nullptr;
+    }
+
+    auto &entry = activeNetworkClicks[slotIndex];
+    if (isNetworkClickActive(entry))
+    {
+        return nullptr;
+    }
+
     entry.age_ms = 0U;
-    entry.clickableIndex = clickableIndex;
     entry.correlationId = generateCorrelationId();
-    entry.flags = flagsForClickType(clickType);
+    entry.flags = NETWORK_CLICK_FLAG_ACTIVE;
     ++activeNetworkClickCount;
     return &entry;
+}
+
+template <uint8_t SlotIndex> void advanceActiveTimerSlots(uint16_t elapsed_ms)
+{
+    // The number of network-click slots is fully generated. Recursing over the
+    // compile-time slot count lets AVR-GCC erase the loop counter and branch
+    // bookkeeping for small profiles while preserving identical behavior.
+    if constexpr (SlotIndex < constants::config::MAX_ACTIVE_NETWORK_CLICKS)
+    {
+        auto &entry = activeNetworkClicks[SlotIndex];
+        if (isNetworkClickActive(entry))
+        {
+            entry.age_ms = timeUtils::addElapsedTimeSaturated(entry.age_ms, elapsed_ms);
+        }
+        advanceActiveTimerSlots<static_cast<uint8_t>(SlotIndex + 1U)>(elapsed_ms);
+    }
 }
 
 /**
@@ -185,11 +203,51 @@ void advanceActiveTimersTo(uint32_t now)
 
     lastTimersUpdateTime_ms = now;
     const uint16_t elapsed_ms = (elapsedSinceLastUpdate_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastUpdate_ms);
+    advanceActiveTimerSlots<0U>(elapsed_ms);
+}
 
-    for (uint8_t entryIndex = 0U; entryIndex < activeNetworkClickCount; ++entryIndex)
+template <uint8_t SlotIndex> auto checkAllNetworkClickTimerSlots(bool failover) -> bool
+{
+    // Keep this sweep generated-slot based instead of walking a dynamic vector:
+    // each slot has a fixed clickable/type owner, so the compiler can fold the
+    // slot-index dispatch used by the generated static_config accessors.
+    if constexpr (SlotIndex >= constants::config::MAX_ACTIVE_NETWORK_CLICKS)
     {
-        activeNetworkClicks[entryIndex].age_ms = timeUtils::addElapsedTimeSaturated(activeNetworkClicks[entryIndex].age_ms, elapsed_ms);
+        static_cast<void>(failover);
+        return false;
     }
+
+    using constants::timings::LCNB_TIMEOUT_MS;
+    bool localFallbackPerformed = false;
+    auto &entry = activeNetworkClicks[SlotIndex];
+    if (isNetworkClickActive(entry))
+    {
+        const constants::ClickType clickType = lsh::core::static_config::getNetworkClickType(SlotIndex);
+        const uint8_t clickableIndex = lsh::core::static_config::getNetworkClickClickableIndex(SlotIndex);
+
+        if (isNetworkClickAcked(entry))
+        {
+            if (entry.age_ms > LCNB_TIMEOUT_MS)
+            {
+                DPL("Dropping acknowledged network click after confirm retry timeout.");
+                eraseActiveNetworkClickAt(SlotIndex);
+            }
+            else if (entry.correlationId != 0U && Serializer::serializeNetworkClick(clickableIndex, clickType, true, entry.correlationId))
+            {
+                eraseActiveNetworkClickAt(SlotIndex);
+            }
+        }
+        else if (failover || entry.age_ms > LCNB_TIMEOUT_MS)
+        {
+            DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX),
+                FPSTR(dStr::COLON_SPACE), clickableIndex);
+            localFallbackPerformed = lsh::core::static_config::runNetworkClickFallback(clickableIndex, clickType);
+            eraseActiveNetworkClickAt(SlotIndex);
+        }
+    }
+
+    const bool laterFallbackPerformed = checkAllNetworkClickTimerSlots<static_cast<uint8_t>(SlotIndex + 1U)>(failover);
+    return localFallbackPerformed || laterFallbackPerformed;
 }
 }  // namespace
 
@@ -318,7 +376,7 @@ auto thereAreActiveNetworkClicks() -> bool
 void eraseNetworkClick(uint8_t clickableIndex, constants::ClickType clickType)
 {
     DP_CONTEXT();
-    eraseActiveNetworkClickAt(findActiveNetworkClickIndex(clickableIndex, clickType));
+    eraseActiveNetworkClickAt(findActiveNetworkClickSlotIndex(clickableIndex, clickType));
 }
 
 /**
@@ -365,7 +423,6 @@ auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickTyp
 auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickType, bool failover) -> bool
 {
     DP_CONTEXT();
-    using constants::NoNetworkClickType;
     using constants::timings::LCNB_TIMEOUT_MS;
 
     auto *const entry = findActiveNetworkClick(clickableIndex, clickType);
@@ -394,11 +451,7 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
 
     if (failover || entry->age_ms > LCNB_TIMEOUT_MS)  // expired
     {
-        auto *const clickable = Clickables::clickables[clickableIndex];
-        if (clickable->getNetworkFallback(clickType) == NoNetworkClickType::LOCAL_FALLBACK)
-        {
-            localFallbackPerformed |= Clickables::click(clickable, clickType);
-        }
+        localFallbackPerformed |= lsh::core::static_config::runNetworkClickFallback(clickableIndex, clickType);
         eraseNetworkClick(clickableIndex, clickType);
     }
     return localFallbackPerformed;
@@ -416,52 +469,13 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
 auto checkAllNetworkClicksTimers(bool failover) -> bool
 {
     // DP_CONTEXT(); pollutes serial
-    using constants::NoNetworkClickType;
-    using constants::timings::LCNB_TIMEOUT_MS;
-    bool localFallbackPerformed = false;  // True if any network click expired and any local click has been performed
     const auto now = timeKeeper::getTime();
     advanceActiveTimersTo(now);
-
-    uint8_t entryIndex = 0U;
-    while (entryIndex < activeNetworkClickCount)
+    if (activeNetworkClickCount == 0U)
     {
-        auto &entry = activeNetworkClicks[entryIndex];
-        const ClickType clickType = clickTypeForEntry(entry);
-        const uint8_t clickableIndex = entry.clickableIndex;
-
-        if (isNetworkClickAcked(entry))
-        {
-            if (entry.age_ms > LCNB_TIMEOUT_MS)
-            {
-                DPL("Dropping acknowledged network click after confirm retry timeout.");
-                eraseActiveNetworkClickAt(entryIndex);
-                continue;
-            }
-
-            if (entry.correlationId != 0U && Serializer::serializeNetworkClick(clickableIndex, clickType, true, entry.correlationId))
-            {
-                eraseActiveNetworkClickAt(entryIndex);
-                continue;
-            }
-            ++entryIndex;
-            continue;
-        }
-
-        if (failover || entry.age_ms > LCNB_TIMEOUT_MS)
-        {
-            DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX),
-                FPSTR(dStr::COLON_SPACE), clickableIndex);
-            auto *const clickable = Clickables::clickables[clickableIndex];
-            if (clickable->getNetworkFallback(clickType) == NoNetworkClickType::LOCAL_FALLBACK)
-            {
-                localFallbackPerformed |= Clickables::click(clickable, clickType);
-            }
-            eraseActiveNetworkClickAt(entryIndex);
-            continue;
-        }
-        ++entryIndex;
+        return false;
     }
-    return localFallbackPerformed;
+    return checkAllNetworkClickTimerSlots<0U>(failover);
 }
 
 #else

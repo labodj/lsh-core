@@ -41,7 +41,9 @@ namespace Actuators
  */
 using PackedActuatorStateBytes = etl::array<uint8_t, CONFIG_PACKED_ACTUATOR_STATE_STORAGE_CAPACITY>;
 
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
+#endif
 /**
  * @brief Canonical packed actuator-state shadow kept aligned with runtime changes.
  * @details The bridge serializer consumes this compact representation directly,
@@ -50,23 +52,20 @@ extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
  */
 extern PackedActuatorStateBytes packedActuatorStates;
 
-void addActuator(Actuator *actuator, uint8_t actuatorId, uint8_t actuatorIndex);  // Add one actuator to actuators vector and activate it
 [[nodiscard]] auto getId(uint8_t actuatorIndex) -> uint8_t;        // Returns the static actuator ID for one dense runtime index
 [[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator, or nullptr if the ID is unknown
 [[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;        // Returns a single actuator index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex)
-    -> bool;                                                            // Returns true and writes the actuator index when the ID exists
-[[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;          // Returns true if actuator exists
-void setAutoOffTimer(uint8_t actuatorIndex, uint32_t time_ms);          // Validate an actuator auto-off timer against the static profile
-[[nodiscard]] auto hasAutoOffTimer(uint8_t actuatorIndex) -> bool;      // Returns true if an actuator has an auto-off timer
-[[nodiscard]] auto getAutoOffTimer(uint8_t actuatorIndex) -> uint32_t;  // Returns the auto-off timer for an actuator
-[[nodiscard]] auto checkAutoOffTimer(uint8_t actuatorIndex, uint32_t autoOffTimer_ms)
-    -> bool;                                                    // Checks one actuator against the manager-owned switch timestamp.
+    -> bool;                                                    // Returns true and writes the actuator index when the ID exists
+[[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;  // Returns true if actuator exists
 void recordSwitchTime(uint8_t actuatorIndex, uint32_t now_ms);  // Records a state-change time for compact actuator timer storage.
-[[nodiscard]] auto actuatorsAutoOffTimersCheck() -> bool;       // Performs an auto-off timer check for actuators
-[[nodiscard]] auto turnOffAllActuators() -> bool;               // Turns off all actuators
-[[nodiscard]] auto turnOffUnprotectedActuators() -> bool;       // Turns off unprotected actuators
-[[nodiscard]] auto setAllActuatorsState(const etl::array<bool, CONFIG_MAX_ACTUATORS> &states) -> bool;  // Set the state for all actuators
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
+[[nodiscard]] auto checkCompactAutoOffTimer(uint8_t autoOffIndex,
+                                            uint8_t actuatorIndex,
+                                            Actuator &actuator,
+                                            uint32_t now_ms,
+                                            uint32_t timer_ms) -> bool;  // Checks one generated compact auto-off entry.
+#endif
 
 /**
  * @brief Keep the compact actuator-state shadow aligned with one runtime state change.

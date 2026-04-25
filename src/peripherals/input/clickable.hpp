@@ -29,59 +29,10 @@
 #ifdef CONFIG_USE_FAST_CLICKABLES
 #include "internal/avr_fast_io.hpp"
 #endif
+#include "util/constants/click_detection.hpp"
 #include "util/constants/click_results.hpp"
-#include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
-
-namespace Clickables
-{
-void finalizeActuatorLinkStorage();
-}
-
-/**
- * @brief Lightweight read-only view over one clickable actuator-link list.
- *
- * Generated static-profile accessors own the actual link topology. This view
- * keeps callers on the old iterable API while storing only the owner index,
- * click kind and link count in the temporary view object.
- */
-class ClickableActuatorLinksView
-{
-public:
-    /**
-     * @brief Iterator that walks the compact actuator-link entries.
-     */
-    class Iterator
-    {
-    public:
-        explicit Iterator(uint8_t ownerIndex = UINT8_MAX,
-                          constants::ClickType linkType = constants::ClickType::SHORT,
-                          uint8_t relativeIndex = 0U) noexcept;
-
-        [[nodiscard]] auto operator*() const -> uint8_t;
-        auto operator++() -> Iterator &;
-        [[nodiscard]] auto operator==(const Iterator &other) const -> bool;
-        [[nodiscard]] auto operator!=(const Iterator &other) const -> bool;
-
-    private:
-        uint8_t clickableIndex = UINT8_MAX;                            //!< Owner clickable dense index.
-        constants::ClickType clickType = constants::ClickType::SHORT;  //!< Link slice kind visited by this iterator.
-        uint8_t linkIndex = 0U;                                        //!< Current relative link index inside the generated static slice.
-    };
-
-    ClickableActuatorLinksView() = default;
-    ClickableActuatorLinksView(uint8_t ownerIndex, constants::ClickType linkType, uint8_t linkCount) noexcept;
-
-    [[nodiscard]] auto begin() const -> Iterator;
-    [[nodiscard]] auto end() const -> Iterator;
-    [[nodiscard]] auto empty() const -> bool;
-    [[nodiscard]] auto size() const -> uint8_t;
-
-private:
-    uint8_t clickableIndex = UINT8_MAX;                            //!< Owner clickable dense index.
-    constants::ClickType clickType = constants::ClickType::SHORT;  //!< Generated static link slice kind.
-    uint8_t count = 0U;                                            //!< Number of valid generated link entries in the slice.
-};
+#include "util/saturating_time.hpp"
 
 /**
  * @brief A class that represents a clickable object, like a button, and its associated logic.
@@ -113,31 +64,6 @@ private:
         SUPER_LONG
     };
 
-    // Bitfield for configuration flags to save RAM. These are "cold" data, mostly read after setup.
-    // Data structures definitions
-    struct ClickableConfigFlags
-    {
-        uint8_t isShortClickable : 1;              //!< True if the clickable is short clickable
-        uint8_t isLongClickable : 1;               //!< True if the clickable is long clickable
-        uint8_t isSuperLongClickable : 1;          //!< True if the clickable is super long clickable
-        uint8_t isNetworkLongClickable : 1;        //!< True if this clickable has long click network actuators
-        uint8_t isNetworkSuperLongClickable : 1;   //!< True if this clickable has super long click network actuators
-        uint8_t isQuickClickable : 1;              //!< Derived flag. True for a short click on press when no long/super-long is configured.
-        uint8_t longNetworkFallbackDoNothing : 1;  //!< True when long network-click fallback must skip local action.
-        uint8_t superLongNetworkFallbackDoNothing : 1;  //!< True when super-long network-click fallback must skip local action.
-
-        LSH_CONSTEXPR ClickableConfigFlags() noexcept :
-            isShortClickable(true), isLongClickable(false), isSuperLongClickable(false), isNetworkLongClickable(false),
-            isNetworkSuperLongClickable(false), isQuickClickable(true), longNetworkFallbackDoNothing(false),
-            superLongNetworkFallbackDoNothing(false)
-        {}
-    };
-
-    // Bitfield for configuration flags to save RAM. "Hot" data, read every detection.
-    // Keeping the whole bitfield near the start of the object helps the click
-    // scanner on AVR reach the most queried configuration with short offsets.
-    ClickableConfigFlags configFlags;
-
 #ifndef CONFIG_USE_FAST_CLICKABLES
     const uint8_t pinNumber;  //!< The pin to which the clickable is connected to, for conventional IO
 #else
@@ -155,22 +81,155 @@ private:
     explicit Clickable(lsh::core::avr::FastInputPinBinding binding) noexcept : pinMask(binding.mask), pinPort(binding.pinPort)
     {}
 #endif
-    uint8_t index = UINT8_MAX;  //!< Clickable index on Clickables namespace Array, or `UINT8_MAX` until registration succeeds.
-
-    // State variables for the FSM ("hot" data, move to top for <64 byte offset optimization).
+    uint16_t stateAge_ms = 0U;  //!< Elapsed time spent in the current non-idle state, saturated at 65535 ms.
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    uint8_t index = UINT8_MAX;  //!< Debug/runtime-check registration index; stripped from release objects.
+#endif
     State currentState = State::IDLE;                 //!< The current state of the FSM.
-    uint16_t stateAge_ms = 0U;                        //!< Elapsed time spent in the current non-idle state, saturated at 65535 ms.
     ActionFired lastActionFired = ActionFired::NONE;  //!< Tracks which timed action has already been triggered.
 
-#if !CONFIG_USE_CLICKABLE_TIMING_POOL
-    // Timings ("hot" configuration, move to top)
-    uint16_t longClick_ms = constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;             //!< Long click time in ms
-    uint16_t superLongClick_ms = constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS;  //!< Super long click time in ms
-#endif
+    /**
+     * @brief Shared click FSM implementation for runtime and generated-static paths.
+     * @details Generated code calls the `StaticConfigKnown=true` specialization.
+     *          That lets AVR-GCC erase disabled click families with
+     *          `if constexpr` instead of checking runtime bit flags in the
+     *          button polling path. The runtime overload below keeps the same
+     *          behavior for any non-generated caller.
+     */
+    template <bool StaticConfigKnown, uint8_t StaticDetectionFlags, uint16_t StaticLongClick_ms, uint16_t StaticSuperLongClick_ms>
+    [[nodiscard]] auto clickDetectionImpl(uint16_t elapsed_ms, uint8_t detectionFlags, uint16_t longClick_ms, uint16_t superLongClick_ms)
+        -> constants::ClickResult
+    {
+        using constants::ClickResult;
+        using namespace constants::clickDetection;
 
-    [[nodiscard]] auto getLongClickTime() const -> uint16_t;
-    [[nodiscard]] auto getSuperLongClickTime() const -> uint16_t;
-    void refreshQuickClickability();
+        const bool isPressed = this->getState();
+        if (this->currentState != State::IDLE)
+        {
+            this->stateAge_ms = timeUtils::addElapsedTimeSaturated(this->stateAge_ms, elapsed_ms);
+        }
+
+        switch (this->currentState)
+        {
+        case State::IDLE:
+            if (isPressed)
+            {
+                this->currentState = State::DEBOUNCING;
+                this->stateAge_ms = 0U;
+            }
+            break;
+
+        case State::DEBOUNCING:
+            if (this->stateAge_ms >= constants::timings::CLICKABLE_DEBOUNCE_TIME_MS)
+            {
+                if (isPressed)
+                {
+                    this->currentState = State::PRESSED;
+                    this->stateAge_ms = 0U;
+                    this->lastActionFired = ActionFired::NONE;
+                    if constexpr (StaticConfigKnown)
+                    {
+                        if constexpr ((StaticDetectionFlags & QUICK_SHORT) != 0U)
+                        {
+                            return ClickResult::SHORT_CLICK_QUICK;
+                        }
+                    }
+                    else if (hasFlag(detectionFlags, QUICK_SHORT))
+                    {
+                        return ClickResult::SHORT_CLICK_QUICK;
+                    }
+                }
+                else
+                {
+                    this->currentState = State::IDLE;
+                }
+            }
+            break;
+
+        case State::PRESSED:
+            if (isPressed)
+            {
+                // Preserve the old action ordering: a slow scan that crosses
+                // both thresholds emits LONG first and SUPER_LONG on the next
+                // scan, so bridge-assisted sequences keep their correlation.
+                if constexpr (StaticConfigKnown)
+                {
+                    if constexpr ((StaticDetectionFlags & LONG_ENABLED) != 0U)
+                    {
+                        if (this->lastActionFired < ActionFired::LONG && this->stateAge_ms >= StaticLongClick_ms)
+                        {
+                            this->lastActionFired = ActionFired::LONG;
+                            return ClickResult::LONG_CLICK;
+                        }
+                    }
+
+                    if constexpr ((StaticDetectionFlags & SUPER_LONG_ENABLED) != 0U)
+                    {
+                        if (this->lastActionFired < ActionFired::SUPER_LONG && this->stateAge_ms >= StaticSuperLongClick_ms)
+                        {
+                            this->lastActionFired = ActionFired::SUPER_LONG;
+                            return ClickResult::SUPER_LONG_CLICK;
+                        }
+                    }
+                }
+                else
+                {
+                    if (hasFlag(detectionFlags, LONG_ENABLED) && this->lastActionFired < ActionFired::LONG &&
+                        this->stateAge_ms >= longClick_ms)
+                    {
+                        this->lastActionFired = ActionFired::LONG;
+                        return ClickResult::LONG_CLICK;
+                    }
+
+                    if (hasFlag(detectionFlags, SUPER_LONG_ENABLED) && this->lastActionFired < ActionFired::SUPER_LONG &&
+                        this->stateAge_ms >= superLongClick_ms)
+                    {
+                        this->lastActionFired = ActionFired::SUPER_LONG;
+                        return ClickResult::SUPER_LONG_CLICK;
+                    }
+                }
+
+                return ClickResult::NO_CLICK_KEEPING_CLICKED;
+            }
+
+            this->currentState = State::RELEASED;
+            [[fallthrough]];
+
+        case State::RELEASED:
+            this->currentState = State::IDLE;
+            this->stateAge_ms = 0U;
+
+            if constexpr (StaticConfigKnown)
+            {
+                if constexpr ((StaticDetectionFlags & QUICK_SHORT) != 0U)
+                {
+                    return ClickResult::NO_CLICK;
+                }
+                if constexpr ((StaticDetectionFlags & SHORT_ENABLED) != 0U)
+                {
+                    if (this->lastActionFired == ActionFired::NONE)
+                    {
+                        return ClickResult::SHORT_CLICK;
+                    }
+                }
+                return ClickResult::NO_CLICK;
+            }
+            else
+            {
+                if (hasFlag(detectionFlags, QUICK_SHORT))
+                {
+                    return ClickResult::NO_CLICK;
+                }
+
+                if (this->lastActionFired == ActionFired::NONE)
+                {
+                    return hasFlag(detectionFlags, SHORT_ENABLED) ? ClickResult::SHORT_CLICK : ClickResult::NO_CLICK_NOT_SHORT_CLICKABLE;
+                }
+                return ClickResult::NO_CLICK;
+            }
+        }
+        return ClickResult::NO_CLICK;
+    }
 
 public:
 #ifndef CONFIG_USE_FAST_CLICKABLES
@@ -225,7 +284,7 @@ public:
      * @return true if clicked.
      * @return false if not clicked.
      */
-    inline auto getState() const -> bool
+    auto getState() const -> bool
     {
 #ifdef CONFIG_USE_FAST_CLICKABLES
         // The hot scan path reads the cached register directly. This is the
@@ -239,58 +298,37 @@ public:
 
     void setIndex(uint8_t indexToSet);  // Set the Clickable index on Clickables namespace Array
 
-    // Clickability setters
-    auto setClickableShort(bool shortClickable) -> Clickable &;  // Set the short clickability of the clickable
-    auto setClickableLong(bool longClickable,
-                          bool networkClickable = false,
-                          constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
-        -> Clickable &;  // Set long click network clickability
-    auto setClickableLong(bool longClickable,
-                          constants::LongClickType clickType,
-                          bool networkClickable = false,
-                          constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
-        -> Clickable &;  // Source-compatible overload; TOML stores the click type statically.
-    auto setClickableSuperLong(bool superLongClickable,
-                               bool networkClickable = false,
-                               constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
-        -> Clickable &;  // Set super long click network clickability
-    auto setClickableSuperLong(bool superLongClickable,
-                               constants::SuperLongClickType clickType,
-                               bool networkClickable = false,
-                               constants::NoNetworkClickType fallback = constants::NoNetworkClickType::LOCAL_FALLBACK)
-        -> Clickable &;  // Source-compatible overload; TOML stores the click type statically.
-
-    // Actuators setter
-    auto addActuator(uint8_t actuatorIndex, constants::ClickType actuatorType)
-        -> Clickable &;                                               // Kept for source compatibility; TOML links are static.
-    auto addActuatorShort(uint8_t actuatorIndex) -> Clickable &;      // Add a short click actuator
-    auto addActuatorLong(uint8_t actuatorIndex) -> Clickable &;       // Add a long click actuator
-    auto addActuatorSuperLong(uint8_t actuatorIndex) -> Clickable &;  // Add a super long click actuator
-
-    // Timing setters
-    auto setLongClickTime(uint16_t timeToSet_ms) -> Clickable &;       // Set long click time in ms (0-65535)
-    auto setSuperLongClickTime(uint16_t timeToSet_ms) -> Clickable &;  // Set super long click time in ms (0-65535)
-
     // Getters
     [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the Clickable index on Clickables namespace Array
-    [[nodiscard]] auto getActuators(constants::ClickType actuatorType) const
-        -> ClickableActuatorLinksView;  // Returns the read-only view over one attached actuator-link list
-    [[nodiscard]] auto getTotalActuators(constants::ClickType actuatorType) const
-        -> uint8_t;                                                           // Returns the total number of a kind of actuators
-    [[nodiscard]] auto getLongClickType() const -> constants::LongClickType;  // Returns the type of long click
-    [[nodiscard]] auto isNetworkClickable(constants::ClickType clickType) const
-        -> bool;  // Returns if the clickable is network clickable for long or super long click actions
-    [[nodiscard]] auto getNetworkFallback(constants::ClickType clickType) const
-        -> constants::NoNetworkClickType;  // Returns the fallback type for a give network click type
-    [[nodiscard]] auto getSuperLongClickType() const -> constants::SuperLongClickType;  // Returns the type of super long click
 
     // Utilities
-    auto check() -> bool;  // Check for clickable coherence, it has to be clickable, it has to be connected to something
-    [[nodiscard]] auto shortClick() const -> bool;               // Perform a short click action
-    [[nodiscard]] auto longClick() const -> bool;                // Perform a long click action
-    [[nodiscard]] auto superLongClickSelective() const -> bool;  // Perform a selective super long click;
-    [[nodiscard]] auto clickDetection(uint16_t elapsed_ms)
-        -> constants::ClickResult;  // Advances the click FSM using the elapsed scan time and returns the detected click type.
+    /**
+     * @brief Advance the click FSM with fully generated static configuration.
+     * @details The selected TOML profile already knows which click kinds are
+     *          enabled and which thresholds they use. Passing those values as
+     *          constants keeps the object free from static configuration bytes
+     *          and lets the generated scan path constant-fold disabled checks.
+     *
+     * @param elapsed_ms Milliseconds elapsed since the previous clickable scan.
+     * @param detectionFlags Bit mask from `constants::clickDetection`.
+     * @param longClick_ms Long-click threshold for this clickable.
+     * @param superLongClick_ms Super-long-click threshold for this clickable.
+     * @return constants::ClickResult The detected click event, or `NO_CLICK`.
+     */
+    [[nodiscard]] auto clickDetection(uint16_t elapsed_ms, uint8_t detectionFlags, uint16_t longClick_ms, uint16_t superLongClick_ms)
+        -> constants::ClickResult
+    {
+        return this->clickDetectionImpl<false, 0U, 0U, 0U>(elapsed_ms, detectionFlags, longClick_ms, superLongClick_ms);
+    }
+
+    /**
+     * @brief Advance the click FSM with fully generated compile-time constants.
+     */
+    template <uint8_t DetectionFlags, uint16_t LongClick_ms, uint16_t SuperLongClick_ms>
+    [[nodiscard]] auto clickDetection(uint16_t elapsed_ms) -> constants::ClickResult
+    {
+        return this->clickDetectionImpl<true, DetectionFlags, LongClick_ms, SuperLongClick_ms>(elapsed_ms, 0U, 0U, 0U);
+    }
 };
 
 #endif  // LSH_CORE_PERIPHERALS_INPUT_CLICKABLE_HPP

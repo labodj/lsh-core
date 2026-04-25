@@ -9,9 +9,21 @@
 #define LSH_GENERATED_LSH_CONFIGS_J1_CONFIG_HPP
 
 #define LSH_HARDWARE_INCLUDE <Controllino.h>
-#define LSH_DEVICE_NAME "j1"
-#define LSH_STATIC_CONFIG_INCLUDE "lsh_configs/j1_static_config.hpp"
-#define LSH_COM_SERIAL &Serial2
-#define LSH_DEBUG_SERIAL &Serial
+#include LSH_HARDWARE_INCLUDE
+
+static constexpr auto LSH_DEVICE_NAME() -> const char *
+{
+    return "j1";
+}
+
+static constexpr auto LSH_COM_SERIAL() -> HardwareSerial *
+{
+    return &Serial2;
+}
+
+static constexpr auto LSH_DEBUG_SERIAL() -> HardwareSerial *
+{
+    return &Serial;
+}
 
 #endif  // LSH_GENERATED_LSH_CONFIGS_J1_CONFIG_HPP

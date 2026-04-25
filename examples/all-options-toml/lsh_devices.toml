@@ -11,6 +11,7 @@
 output_dir = "generated"
 config_dir = "all_options_configs"
 user_config_header = "lsh_all_options_config.hpp"
+static_config_router_header = "lsh_all_options_static_router.hpp"
 
 [common]
 hardware_include = "Controllino.h"

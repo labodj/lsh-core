@@ -20,9 +20,9 @@
 
 #include "device/indicator_manager.hpp"
 
+#include "config/static_config.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/output/indicator.hpp"
-#include "util/constants/wrong_config_strings.hpp"
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
 
@@ -30,7 +30,9 @@ using namespace Debug;
 
 namespace Indicators
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators{};  //!< Device indicators
+#endif
 
 namespace
 {
@@ -40,6 +42,7 @@ namespace
  *          `ALL` mode they would otherwise evaluate to ON forever, and in any mode
  *          they express no real hardware dependency.
  */
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 void failIndicatorWithoutActuators()
 {
     NDSB();
@@ -47,10 +50,12 @@ void failIndicatorWithoutActuators()
     delay(10000UL);
     deviceReset();
 }
+#endif
 
 /**
  * @brief Abort setup when the dense indicator prefix was corrupted.
  */
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 void failNonCompactIndicatorStorage()
 {
     NDSB();
@@ -58,59 +63,20 @@ void failNonCompactIndicatorStorage()
     delay(10000UL);
     deviceReset();
 }
+#endif
 }  // namespace
 
 /**
- * @brief Adds an indicator to the system.
- *
- * The indicator is stored in the main array. If the maximum number of indicators
- * is exceeded, the device will reset to prevent undefined behavior.
- *
- * @param indicator A pointer to the Indicator object to add.
- * @param indicatorIndex Dense runtime index of the indicator.
- */
-void addIndicator(Indicator *const indicator, uint8_t indicatorIndex)
-{
-    if (indicatorIndex >= CONFIG_MAX_INDICATORS || indicators[indicatorIndex] != nullptr)
-    {
-        using namespace constants::wrongConfigStrings;
-        NDSB();  // Begin serial if not in debug mode
-        CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(INDICATORS));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
-        delay(10000UL);
-        deviceReset();
-    }
-    indicator->setIndex(indicatorIndex);  // Store current index inside the object, it can be useful
-    indicators[indicatorIndex] = indicator;
-}
-
-/**
- * @brief Performs a indicator check for indicator set.
- *
- */
-void indicatorsCheck()
-{
-    for (uint8_t i = 0U; i < CONFIG_MAX_INDICATORS; ++i)
-    {
-        indicators[i]->check();
-    }
-}
-
-/**
- * @brief Finalize shared storage for all indicators.
- * @details Indicators use one compact shared pool for actuator links. This
- *          setup hook closes that pool before the runtime starts reading it and
- *          then validates that every registered indicator actually controls at
- *          least one actuator.
+ * @brief Validate the configured indicator table before runtime checks start.
+ * @details Indicator actions and controlled-actuator lists are generated as
+ *          static code, so setup only has to validate the dense object table and
+ *          reject indicators with no controlled actuator.
  *
  */
 void finalizeSetup()
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     DP_CONTEXT();
-    finalizeActuatorLinkStorage();
 
     for (uint8_t indicatorIndex = 0U; indicatorIndex < CONFIG_MAX_INDICATORS; ++indicatorIndex)
     {
@@ -119,11 +85,12 @@ void finalizeSetup()
         {
             failNonCompactIndicatorStorage();
         }
-        if (!indicator->hasAttachedActuators())
+        if (lsh::core::static_config::getIndicatorActuatorLinkCount(indicatorIndex) == 0U)
         {
             failIndicatorWithoutActuators();
         }
     }
+#endif
 }
 
 }  // namespace Indicators

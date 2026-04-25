@@ -21,11 +21,9 @@
 #include "device/clickable_manager.hpp"
 
 #include "config/static_config.hpp"
-#include "device/actuator_manager.hpp"
 #include "internal/user_config_bridge.hpp"
 #include "peripherals/input/clickable.hpp"
 #include "util/constants/config.hpp"
-#include "util/constants/wrong_config_strings.hpp"
 #include "util/debug/debug.hpp"
 #include "util/reset.hpp"
 
@@ -33,34 +31,19 @@ using namespace Debug;
 
 namespace Clickables
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables{};  //!< Device clickables
+#endif
 
 namespace
 {
-/**
- * @brief Abort setup when one clickable uses an invalid numeric ID.
- * @details Clickable ID zero is reserved as "missing" in the wire protocol
- *          and in the bounded lookup tables, so configuration must reject it.
- */
-void failWrongClickableId()
-{
-    using namespace constants::wrongConfigStrings;
-    NDSB();
-    CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-    CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-    CONFIG_DEBUG_SERIAL->println(FPSTR(ID));
-    delay(10000);
-    deviceReset();
-}
-
 /**
  * @brief Abort setup when a clickable was registered but has no actionable configuration.
  * @details After the compact pools are finalized, every clickable must map to at
  *          least one real action. Otherwise the installation contains dead inputs
  *          that can only confuse future maintenance.
  */
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 void failInvalidClickableConfiguration()
 {
     NDSB();
@@ -68,10 +51,12 @@ void failInvalidClickableConfiguration()
     delay(10000);
     deviceReset();
 }
+#endif
 
 /**
  * @brief Abort setup when the dense clickable prefix was corrupted.
  */
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 void failNonCompactClickableStorage()
 {
     NDSB();
@@ -79,11 +64,13 @@ void failNonCompactClickableStorage()
     delay(10000);
     deviceReset();
 }
+#endif
 
 #if CONFIG_USE_NETWORK_CLICKS
 /**
  * @brief Abort setup when one held button can exceed the active network-click pool.
  */
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 void failNetworkClickPoolTooSmall()
 {
     NDSB();
@@ -92,50 +79,8 @@ void failNetworkClickPoolTooSmall()
     deviceReset();
 }
 #endif
+#endif
 }  // namespace
-
-/**
- * @brief Adds a clickable to the system.
- *
- * The clickable is stored in the main array slot selected by the generated static profile.
- * If the maximum number of clickables is exceeded, the device will reset to prevent undefined behavior.
- *
- * @param clickable A pointer to the Clickable object to add.
- * @param clickableId Static wire ID of the clickable.
- * @param clickableIndex Dense runtime index of the clickable.
- */
-void addClickable(Clickable *const clickable, uint8_t clickableId, uint8_t clickableIndex)
-{
-    if (clickableIndex >= CONFIG_MAX_CLICKABLES || clickables[clickableIndex] != nullptr)
-    {
-        using namespace constants::wrongConfigStrings;
-        NDSB();  // Begin serial if not in debug mode
-        CONFIG_DEBUG_SERIAL->print(FPSTR(WRONG));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(CLICKABLES));
-        CONFIG_DEBUG_SERIAL->print(FPSTR(SPACE));
-        CONFIG_DEBUG_SERIAL->println(FPSTR(NUMBER));
-        delay(10000);
-        deviceReset();
-    }
-
-    if (clickableId == 0U)
-    {
-        failWrongClickableId();
-    }
-
-    const uint8_t configuredIndex = lsh::core::static_config::getClickableIndexById(clickableId);
-    if (configuredIndex != clickableIndex)
-    {
-        failWrongClickableId();
-    }
-
-    clickable->setIndex(clickableIndex);     // Store current index inside the object, it can be useful
-    clickables[clickableIndex] = clickable;  // Insert in array of clickables
-
-    DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::UUID), FPSTR(dStr::COLON_SPACE), clickableId, FPSTR(dStr::SPACE),
-        FPSTR(dStr::DIVIDER), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX), FPSTR(dStr::COLON_SPACE), clickableIndex);
-}
 
 /**
  * @brief Return the static wire ID for one registered clickable index.
@@ -157,12 +102,17 @@ auto getId(uint8_t clickableIndex) -> uint8_t
  */
 auto getClickable(uint8_t clickableId) -> Clickable *
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     uint8_t clickableIndex = UINT8_MAX;
     if (!tryGetIndex(clickableId, clickableIndex))
     {
         return nullptr;
     }
     return clickables[clickableIndex];
+#else
+    static_cast<void>(clickableId);
+    return nullptr;
+#endif
 }
 
 /**
@@ -193,7 +143,7 @@ auto getIndex(uint8_t clickableId) -> uint8_t
 auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex) -> bool
 {
     const uint8_t configuredIndex = lsh::core::static_config::getClickableIndexById(clickableId);
-    if (configuredIndex >= CONFIG_MAX_CLICKABLES || clickables[configuredIndex] == nullptr)
+    if (configuredIndex >= CONFIG_MAX_CLICKABLES)
     {
         return false;
     }
@@ -215,61 +165,16 @@ auto clickableExists(uint8_t clickableId) -> bool
 }
 
 /**
- * @brief Perform a click.
- *
- * Method for all types of clicks, since not all click can be done within clickable class.
- *
- * @param clickable  the clickable to click.
- * @param clickType  the click type to perform.
- * @return true if any actuator state has been changed.
- * @return false otherwise.
- */
-auto click(const Clickable *const clickable, constants::ClickType clickType) -> bool
-{
-    DP_CONTEXT();
-    using namespace constants;
-    switch (clickType)
-    {
-    case ClickType::SHORT:
-        return clickable->shortClick();
-    case ClickType::LONG:
-        return clickable->longClick();
-    case ClickType::SUPER_LONG:
-        return lsh::core::static_config::runSuperLongClick(clickable->getIndex());
-    default:
-        return false;
-    }
-}
-
-/** @brief Perform a click action.
-     *
-     * This helper function centralizes all click-related logic...
-     *
-     * @param clickableIndex The index of the clickable to click.
-     * @param clickType  The click type to perform.
-     * @return true if any actuator state was changed.
-     * @return false otherwise.
-     */
-auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool
-{
-    if (clickableIndex >= CONFIG_MAX_CLICKABLES || clickables[clickableIndex] == nullptr)
-    {
-        return false;
-    }
-    return click(clickables[clickableIndex], clickType);
-}
-
-/**
- * @brief Finalize shared storage and validate the configured clickables.
- * @details The shared pools must be compacted before `Clickable::check()` runs,
- *          because validation and runtime both rely on the final `offset + count`
- *          view of each link list.
+ * @brief Validate the configured clickable table before runtime checks start.
+ * @details Click actions are generated as static dispatch code, so setup only
+ *          has to validate the dense object table and ensure every clickable has
+ *          at least one executable action.
  *
  */
 void finalizeSetup()
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     DP_CONTEXT();
-    finalizeActuatorLinkStorage();
     for (uint8_t clickableIndex = 0U; clickableIndex < CONFIG_MAX_CLICKABLES; ++clickableIndex)
     {
         auto *const currentClickable = clickables[clickableIndex];
@@ -281,26 +186,19 @@ void finalizeSetup()
         }
 
 #if CONFIG_USE_NETWORK_CLICKS
-        uint8_t networkSlotsNeededForOneHold = 0U;
-        if (currentClickable->isNetworkClickable(constants::ClickType::LONG))
-        {
-            ++networkSlotsNeededForOneHold;
-        }
-        if (currentClickable->isNetworkClickable(constants::ClickType::SUPER_LONG))
-        {
-            ++networkSlotsNeededForOneHold;
-        }
+        const uint8_t networkSlotsNeededForOneHold = lsh::core::static_config::getNetworkClickSlotCount(clickableIndex);
         if (networkSlotsNeededForOneHold > constants::config::MAX_ACTIVE_NETWORK_CLICKS)
         {
             failNetworkClickPoolTooSmall();
         }
 #endif
 
-        if (!currentClickable->check())
+        if (!lsh::core::static_config::isClickableConfigurationValid(clickableIndex))
         {
             failInvalidClickableConfiguration();
         }
     }
+#endif
 }
 
 }  // namespace Clickables

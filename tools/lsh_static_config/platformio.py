@@ -11,12 +11,37 @@ from .models import DefineValue
 if TYPE_CHECKING:
     from .models import DeviceConfig, ProjectConfig
 
+DEFAULT_USER_CONFIG_HEADER = "lsh_user_config.hpp"
+DEFAULT_STATIC_CONFIG_ROUTER_HEADER = "lsh_static_config_router.hpp"
+
+
+def _quoted_header_value(header_name: str) -> str:
+    """Return a command-line define value suitable for a C++ #include operand."""
+    return f'"{header_name}"'
+
 
 def merged_defines(project: ProjectConfig, device: DeviceConfig) -> list[DefineValue]:
     """Merge common and device defines into PlatformIO-compatible values."""
     merged = dict(project.common_defines)
     merged.update(device.defines)
     defines = [DefineValue(device.build_macro)]
+    if project.settings.user_config_header != DEFAULT_USER_CONFIG_HEADER:
+        defines.append(
+            DefineValue(
+                "LSH_CUSTOM_USER_CONFIG_HEADER",
+                _quoted_header_value(project.settings.user_config_header),
+            )
+        )
+    if (
+        project.settings.static_config_router_header
+        != DEFAULT_STATIC_CONFIG_ROUTER_HEADER
+    ):
+        defines.append(
+            DefineValue(
+                "LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER",
+                _quoted_header_value(project.settings.static_config_router_header),
+            )
+        )
     for name in sorted(merged):
         value = merged[name]
         if value is False:

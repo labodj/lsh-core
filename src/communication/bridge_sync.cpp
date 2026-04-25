@@ -53,7 +53,7 @@ uint16_t awaitingStateAge_ms = 0U;
  */
 auto sendBoot() -> bool
 {
-    if (!Serializer::serializeStaticJson(constants::payloads::StaticType::BOOT))
+    if (!Serializer::serializeStaticPayload(constants::payloads::StaticType::BOOT))
     {
         return false;
     }
@@ -115,7 +115,7 @@ void tick(uint16_t elapsed_ms)
     switch (syncState)
     {
     case State::Synced:
-        if (!Serializer::serializeStaticJson(constants::payloads::StaticType::PING_))
+        if (!Serializer::serializeStaticPayload(constants::payloads::StaticType::PING_))
         {
             // Either the heartbeat is still throttled or the UART rejected the
             // frame. In both cases the next tick will re-evaluate normally.

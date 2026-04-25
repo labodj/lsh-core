@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
     from .models import DeviceConfig
 
+SWITCH_LOOKUP_MIN_VALUES = 4
+SWITCH_LOOKUP_MAX_DENSITY_PERCENT = 50
+
 
 def line_comment_notice(source_path: Path) -> str:
     """Return the generated-file warning used in every emitted header."""
@@ -160,6 +163,11 @@ def render_lookup_function(
     pairs = sorted(id_to_index.items())
     id_index_pairs = [(item_id, index) for item_id, index in pairs]
     runs = consecutive_runs(id_index_pairs)
+    if should_render_switch_lookup(id_index_pairs, runs):
+        lines.extend(render_switch_lookup_body(param_name, id_index_pairs))
+        lines.append("}")
+        return lines
+
     for run_index, (start_id, end_id, offset) in enumerate(runs):
         condition = render_range_condition(param_name, start_id, end_id)
         value = render_run_value_expression(param_name, start_id, end_id, offset)
@@ -174,6 +182,36 @@ def render_lookup_function(
             [f"    if ({condition})", "    {", f"        return {value};", "    }"]
         )
     lines.append("}")
+    return lines
+
+
+def should_render_switch_lookup(
+    id_index_pairs: Sequence[tuple[int, int]], runs: Sequence[tuple[int, int, int]]
+) -> bool:
+    """Return true when sparse IDs are clearer and faster as a switch."""
+    if len(id_index_pairs) < SWITCH_LOOKUP_MIN_VALUES:
+        return False
+
+    first_id = id_index_pairs[0][0]
+    last_id = id_index_pairs[-1][0]
+    span = last_id - first_id + 1
+    singleton_runs = sum(1 for start, end, _offset in runs if start == end)
+    density_percent = (len(id_index_pairs) * 100) // span
+    return (
+        len(runs) >= SWITCH_LOOKUP_MIN_VALUES
+        and singleton_runs >= (len(runs) // 2)
+        and density_percent <= SWITCH_LOOKUP_MAX_DENSITY_PERCENT
+    )
+
+
+def render_switch_lookup_body(
+    param_name: str, id_index_pairs: Sequence[tuple[int, int]]
+) -> list[str]:
+    """Render a switch lookup for deliberately sparse user IDs."""
+    lines = [f"    switch ({param_name})", "    {"]
+    for item_id, index in id_index_pairs:
+        lines.extend([f"    case {u8(item_id)}:", f"        return {u8(index)};"])
+    lines.extend(["    default:", "        return UINT8_MAX;", "    }"])
     return lines
 
 

@@ -148,27 +148,24 @@ def test_generates_sparse_static_profile_without_runtime_tables() -> None:
     )
     assert "#define LSH_STATIC_CONFIG_MAX_ACTUATOR_ID 9" in static_header
     assert "#define LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS 1" in static_header
-    assert "Actuators::addActuator(&relay_a, 1U, 0U);" in static_header
+    assert "relay_a.setIndex(0U);" in static_header
+    assert "Actuators::actuators[0U] = &relay_a;" in static_header
     assert "DETAILS_JSON_PAYLOAD" in static_header
     assert "DETAILS_MSGPACK_PAYLOAD" in static_header
-    assert (
-        "auto getLongClickTime(uint8_t clickableIndex) noexcept -> uint16_t"
-        in static_header
-    )
-    assert "return clickableIndex == 0U ? 900U" in static_header
-    short_link_signature = (
-        "auto getShortClickActuatorLink(uint8_t clickableIndex, "
-        "uint8_t linkIndex) noexcept -> uint8_t"
-    )
-    assert short_link_signature in static_header
+    assert "button_a.clickDetection<" in static_header
+    assert "900U, 1000U" in static_header
+    assert "getShortClickActuatorLinkCount" not in static_header
+    assert "auto getShortClickActuatorLink(uint8_t" not in static_header
     assert "case 0U:" in static_header
-    assert "return linkIndex < 2U ? linkIndex : UINT8_MAX;" in static_header
+    assert "relay_a.toggleStateStatic<0U>(actionNow)" in static_header
+    assert "relay_b.toggleStateStatic<1U>(actionNow)" in static_header
+    assert "NetworkClicks::request(1U, constants::ClickType::LONG)" in static_header
+    assert "setClickableLong" not in static_header
     assert (
-        "button_b.setClickableLong(true, true, NoNetworkClickType::DO_NOTHING);"
+        "auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool"
         in static_header
     )
-    assert "if (indicatorIndex == 0U)" in static_header
-    assert "return constants::IndicatorMode::ALL;" in static_header
+    assert "return relay_a.getState() && relay_b.getState();" in static_header
 
 
 def test_allows_empty_selective_super_long_as_explicit_noop() -> None:
@@ -195,7 +192,7 @@ def test_allows_empty_selective_super_long_as_explicit_noop() -> None:
         for path, content in files.items()
         if path.name == "panel_static_config.hpp"
     )
-    assert "button.setClickableSuperLong(true);" in static_header
+    assert "constants::clickDetection::makeFlags(true, false, true)" in static_header
     assert (
         "#define LSH_STATIC_CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINKS 0" in static_header
     )
@@ -243,6 +240,27 @@ def test_merges_defines_raw_flags_and_environment_names() -> None:
     assert "CONFIG_CUSTOM_LABEL=PANEL_A" in defines
     assert gen.raw_build_flags(project, device) == ["-flto", "-Wl,--gc-sections"]
     assert gen.infer_device_from_env(project, "panel_release") == "panel"
+
+
+def test_custom_generated_header_names_emit_include_selector_defines() -> None:
+    """Custom generated router names stay buildable through PlatformIO defines."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            minimal_profile().replace(
+                'user_config_header = "lsh_user_config.hpp"',
+                'user_config_header = "custom_user_config.hpp"\n'
+                'static_config_router_header = "custom_static_router.hpp"',
+            ),
+        )
+        project = gen.parse_project(config_path)
+
+    device = project.devices["panel"]
+    defines = [render_define(define) for define in gen.merged_defines(project, device)]
+    assert 'LSH_CUSTOM_USER_CONFIG_HEADER="custom_user_config.hpp"' in defines
+    assert (
+        'LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER="custom_static_router.hpp"' in defines
+    )
 
 
 def test_renders_extreme_static_profiles() -> None:
@@ -321,10 +339,15 @@ def test_renders_extreme_static_profiles() -> None:
     )
     assert "#define LSH_STATIC_CONFIG_MAX_ACTUATOR_ID 255" in static_header
     assert "#define LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS 2" in static_header
-    assert "button_network.setClickableShort(false);" in static_header
-    assert "button_network.setClickableLong" in static_header
-    assert "NoNetworkClickType::DO_NOTHING" in static_header
-    assert "return constants::IndicatorMode::MAJORITY;" in static_header
+    assert "button_network.clickDetection<" in static_header
+    assert "constants::clickDetection::makeFlags(false, true, true)" in static_header
+    assert "setClickable" not in static_header
+    assert "NoNetworkClickType::DO_NOTHING" not in static_header
+    assert "const uint8_t totalControlledActuatorsOn" in static_header
+    assert (
+        "return static_cast<uint8_t>(totalControlledActuatorsOn << 1U) > 3U;"
+        in static_header
+    )
     assert "case 0U:" in static_header
     assert "case 1U:" in static_header
 
@@ -371,6 +394,7 @@ def test_all_options_catalog_renders_every_profile() -> None:
     rendered = "\n".join(files.values())
     assert "LSH_BUILD_ALL_OPTIONS_MAXIMAL" in rendered
     assert "LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS" in rendered
+    assert "lsh_all_options_static_router.hpp" in {path.name for path in files}
     assert "custom/maximal_panel_static_config.hpp" in rendered
 
 

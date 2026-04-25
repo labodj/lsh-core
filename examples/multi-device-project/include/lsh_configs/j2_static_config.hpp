@@ -19,7 +19,6 @@
 #define LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS 12
 #define LSH_STATIC_CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINKS 0
 #define LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS 3
-#define LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES 0
 #define LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS 2
 #define LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS 2
 #define LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS 0
@@ -31,11 +30,19 @@
 #ifndef LSH_GENERATED_LSH_CONFIGS_J2_STATIC_CONFIG_HPP_IMPLEMENTATION
 #define LSH_GENERATED_LSH_CONFIGS_J2_STATIC_CONFIG_HPP_IMPLEMENTATION
 
+#include "communication/bridge_serial.hpp"
+#include "config/static_config.hpp"
+#include "core/network_clicks.hpp"
 #include "device/actuator_manager.hpp"
 #include "device/clickable_manager.hpp"
 #include "device/indicator_manager.hpp"
 #include "lsh_user_macros.hpp"
+#include "util/constants/click_detection.hpp"
+#include "util/constants/click_results.hpp"
+#include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
+#include "util/debug/debug.hpp"
+#include "util/time_keeper.hpp"
 
 #if defined(__AVR__)
 #include <avr/pgmspace.h>
@@ -67,7 +74,27 @@ const uint8_t DETAILS_MSGPACK_PAYLOAD[] LSH_STATIC_CONFIG_PROGMEM = {
 };
 // clang-format on
 
-template <uint16_t PayloadSize> auto writeGeneratedPayload(const uint8_t (&payload)[PayloadSize]) noexcept -> bool
+constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 128U;
+
+template <uint16_t ByteIndex, uint16_t PayloadSize> struct GeneratedPayloadByteWriter
+{
+    static auto write(const uint8_t (&payload)[PayloadSize]) noexcept -> bool
+    {
+        return CONFIG_COM_SERIAL->HardwareSerial::write(LSH_STATIC_CONFIG_READ_BYTE(&payload[ByteIndex])) == 1U &&
+               GeneratedPayloadByteWriter<static_cast<uint16_t>(ByteIndex + 1U), PayloadSize>::write(payload);
+    }
+};
+
+template <uint16_t PayloadSize> struct GeneratedPayloadByteWriter<PayloadSize, PayloadSize>
+{
+    static auto write(const uint8_t (&payload)[PayloadSize]) noexcept -> bool
+    {
+        static_cast<void>(payload);
+        return true;
+    }
+};
+
+template <uint16_t PayloadSize> auto writeGeneratedPayloadLoop(const uint8_t (&payload)[PayloadSize]) noexcept -> bool
 {
     for (uint16_t byteIndex = 0U; byteIndex < PayloadSize; ++byteIndex)
     {
@@ -76,7 +103,17 @@ template <uint16_t PayloadSize> auto writeGeneratedPayload(const uint8_t (&paylo
             return false;
         }
     }
-    return PayloadSize != 0U;
+    return true;
+}
+
+template <uint16_t PayloadSize> auto writeGeneratedPayload(const uint8_t (&payload)[PayloadSize]) noexcept -> bool
+{
+    static_assert(PayloadSize > 0U, "Generated static payloads must not be empty.");
+    if constexpr (PayloadSize <= LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT)
+    {
+        return GeneratedPayloadByteWriter<0U, PayloadSize>::write(payload);
+    }
+    return writeGeneratedPayloadLoop(payload);
 }
 
 LSH_ACTUATOR(rel0, CONTROLLINO_R0);
@@ -166,170 +203,6 @@ auto getAutoOffTimer(uint8_t actuatorIndex) noexcept -> uint32_t
     return actuatorIndex == 6U ? 1800000UL : 0UL;
 }
 
-auto getLongClickType(uint8_t clickableIndex) noexcept -> constants::LongClickType
-{
-    static_cast<void>(clickableIndex);
-    return constants::LongClickType::NORMAL;
-}
-
-auto getSuperLongClickType(uint8_t clickableIndex) noexcept -> constants::SuperLongClickType
-{
-    static_cast<void>(clickableIndex);
-    return constants::SuperLongClickType::NORMAL;
-}
-
-auto getLongClickTime(uint8_t clickableIndex) noexcept -> uint16_t
-{
-    static_cast<void>(clickableIndex);
-    return constants::timings::CLICKABLE_LONG_CLICK_TIME_MS;
-}
-
-auto getSuperLongClickTime(uint8_t clickableIndex) noexcept -> uint16_t
-{
-    static_cast<void>(clickableIndex);
-    return constants::timings::CLICKABLE_SUPER_LONG_CLICK_TIME_MS;
-}
-
-auto getShortClickActuatorLinkCount(uint8_t clickableIndex) noexcept -> uint8_t
-{
-    if (clickableIndex < 10U)
-    {
-        return 1U;
-    }
-
-    return 0U;
-}
-
-auto getLongClickActuatorLinkCount(uint8_t clickableIndex) noexcept -> uint8_t
-{
-    if ((clickableIndex == 0U) || (clickableIndex >= 2U && clickableIndex <= 3U) || (clickableIndex >= 7U && clickableIndex <= 9U))
-    {
-        return 2U;
-    }
-
-    return 0U;
-}
-
-auto getSuperLongClickActuatorLinkCount(uint8_t clickableIndex) noexcept -> uint8_t
-{
-    static_cast<void>(clickableIndex);
-    return 0U;
-}
-
-auto getClickActuatorLinkCount(constants::ClickType clickType, uint8_t clickableIndex) noexcept -> uint8_t
-{
-    switch (clickType)
-    {
-    case constants::ClickType::SHORT:
-        return getShortClickActuatorLinkCount(clickableIndex);
-    case constants::ClickType::LONG:
-        return getLongClickActuatorLinkCount(clickableIndex);
-    case constants::ClickType::SUPER_LONG:
-        return getSuperLongClickActuatorLinkCount(clickableIndex);
-    default:
-        return 0U;
-    }
-}
-
-auto getShortClickActuatorLink(uint8_t clickableIndex, uint8_t linkIndex) noexcept -> uint8_t
-{
-    if (linkIndex != 0U)
-    {
-        return UINT8_MAX;
-    }
-
-    if (clickableIndex < 8U)
-    {
-        return clickableIndex;
-    }
-
-    if (clickableIndex == 8U)
-    {
-        return 0U;
-    }
-
-    return clickableIndex == 9U ? 2U : UINT8_MAX;
-}
-
-auto getLongClickActuatorLink(uint8_t clickableIndex, uint8_t linkIndex) noexcept -> uint8_t
-{
-    switch (clickableIndex)
-    {
-    case 0U:
-        if (linkIndex == 0U)
-        {
-            return 0U;
-        }
-
-        return linkIndex == 1U ? 2U : UINT8_MAX;
-    case 2U:
-        if (linkIndex == 0U)
-        {
-            return 2U;
-        }
-
-        return linkIndex == 1U ? 1U : UINT8_MAX;
-    case 3U:
-        if (linkIndex == 0U)
-        {
-            return 3U;
-        }
-
-        return linkIndex == 1U ? 7U : UINT8_MAX;
-    case 7U:
-        if (linkIndex == 0U)
-        {
-            return 7U;
-        }
-
-        return linkIndex == 1U ? 3U : UINT8_MAX;
-    case 8U:
-        if (linkIndex == 0U)
-        {
-            return 0U;
-        }
-
-        return linkIndex == 1U ? 2U : UINT8_MAX;
-    case 9U:
-        if (linkIndex == 0U)
-        {
-            return 2U;
-        }
-
-        return linkIndex == 1U ? 1U : UINT8_MAX;
-    default:
-        return UINT8_MAX;
-    }
-}
-
-auto getSuperLongClickActuatorLink(uint8_t clickableIndex, uint8_t linkIndex) noexcept -> uint8_t
-{
-    static_cast<void>(clickableIndex);
-    static_cast<void>(linkIndex);
-    return UINT8_MAX;
-}
-
-auto getClickActuatorLink(constants::ClickType clickType, uint8_t clickableIndex, uint8_t linkIndex) noexcept -> uint8_t
-{
-    switch (clickType)
-    {
-    case constants::ClickType::SHORT:
-        return getShortClickActuatorLink(clickableIndex, linkIndex);
-    case constants::ClickType::LONG:
-        return getLongClickActuatorLink(clickableIndex, linkIndex);
-    case constants::ClickType::SUPER_LONG:
-        return getSuperLongClickActuatorLink(clickableIndex, linkIndex);
-    default:
-        return UINT8_MAX;
-    }
-}
-
-auto getIndicatorMode(uint8_t indicatorIndex) noexcept -> constants::IndicatorMode
-{
-    static_cast<void>(indicatorIndex);
-    return constants::IndicatorMode::ANY;
-}
-
 auto getIndicatorActuatorLinkCount(uint8_t indicatorIndex) noexcept -> uint8_t
 {
     if (indicatorIndex < 3U)
@@ -338,42 +211,6 @@ auto getIndicatorActuatorLinkCount(uint8_t indicatorIndex) noexcept -> uint8_t
     }
 
     return 0U;
-}
-
-auto getIndicatorActuatorLink(uint8_t indicatorIndex, uint8_t linkIndex) noexcept -> uint8_t
-{
-    if (linkIndex != 0U)
-    {
-        return UINT8_MAX;
-    }
-
-    return indicatorIndex < 3U ? static_cast<uint8_t>(indicatorIndex + 4U) : UINT8_MAX;
-}
-
-auto getDetailsPayloadSize() noexcept -> uint16_t
-{
-#ifdef CONFIG_MSG_PACK
-    return sizeof(DETAILS_MSGPACK_PAYLOAD);
-#else
-    return sizeof(DETAILS_JSON_PAYLOAD);
-#endif
-}
-
-auto getDetailsPayloadByte(uint16_t byteIndex) noexcept -> uint8_t
-{
-#ifdef CONFIG_MSG_PACK
-    if (byteIndex >= sizeof(DETAILS_MSGPACK_PAYLOAD))
-    {
-        return 0U;
-    }
-    return LSH_STATIC_CONFIG_READ_BYTE(&DETAILS_MSGPACK_PAYLOAD[byteIndex]);
-#else
-    if (byteIndex >= sizeof(DETAILS_JSON_PAYLOAD))
-    {
-        return 0U;
-    }
-    return LSH_STATIC_CONFIG_READ_BYTE(&DETAILS_JSON_PAYLOAD[byteIndex]);
-#endif
 }
 
 auto writeDetailsPayload() noexcept -> bool
@@ -391,43 +228,43 @@ auto runShortClick(uint8_t clickableIndex) noexcept -> bool
     {
     case 0U:
     {
-        return rel0.toggleState();
+        return rel0.toggleStateStatic<0U>();
     }
     case 1U:
     {
-        return rel1.toggleState();
+        return rel1.toggleStateStatic<1U>();
     }
     case 2U:
     {
-        return rel2.toggleState();
+        return rel2.toggleStateStatic<2U>();
     }
     case 3U:
     {
-        return rel3.toggleState();
+        return rel3.toggleStateStatic<3U>();
     }
     case 4U:
     {
-        return rel6.toggleState();
+        return rel6.toggleStateStatic<4U>();
     }
     case 5U:
     {
-        return rel7.toggleState();
+        return rel7.toggleStateStatic<5U>();
     }
     case 6U:
     {
-        return rel8.toggleState();
+        return rel8.toggleStateStatic<6U>();
     }
     case 7U:
     {
-        return rel9.toggleState();
+        return rel9.toggleStateStatic<7U>();
     }
     case 8U:
     {
-        return rel0.toggleState();
+        return rel0.toggleStateStatic<0U>();
     }
     case 9U:
     {
-        return rel2.toggleState();
+        return rel2.toggleStateStatic<2U>();
     }
     default:
         return false;
@@ -442,9 +279,14 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel0.getState()) + static_cast<uint8_t>(rel2.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel0.setState(stateToSet);
-        anyActuatorChangedState |= rel2.setState(stateToSet);
+        anyActuatorChangedState |= rel0.setStateStatic<0U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 1U:
@@ -455,45 +297,70 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel2.setState(stateToSet);
-        anyActuatorChangedState |= rel1.setState(stateToSet);
+        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel1.setStateStatic<1U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 3U:
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel3.getState()) + static_cast<uint8_t>(rel9.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel3.setState(stateToSet);
-        anyActuatorChangedState |= rel9.setState(stateToSet);
+        anyActuatorChangedState |= rel3.setStateStatic<3U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel9.setStateStatic<7U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 7U:
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel9.getState()) + static_cast<uint8_t>(rel3.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel9.setState(stateToSet);
-        anyActuatorChangedState |= rel3.setState(stateToSet);
+        anyActuatorChangedState |= rel9.setStateStatic<7U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel3.setStateStatic<3U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 8U:
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel0.getState()) + static_cast<uint8_t>(rel2.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel0.setState(stateToSet);
-        anyActuatorChangedState |= rel2.setState(stateToSet);
+        anyActuatorChangedState |= rel0.setStateStatic<0U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 9U:
     {
         const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel2.setState(stateToSet);
-        anyActuatorChangedState |= rel1.setState(stateToSet);
+        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
+        anyActuatorChangedState |= rel1.setStateStatic<1U>(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     default:
@@ -503,28 +370,38 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
 
 auto turnOffAllActuators() noexcept -> bool
 {
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+    const uint32_t actionNow = timeKeeper::getTime();
+#else
+    constexpr uint32_t actionNow = 0U;
+#endif
     bool anyActuatorChangedState = false;
-    anyActuatorChangedState |= rel0.setState(false);
-    anyActuatorChangedState |= rel1.setState(false);
-    anyActuatorChangedState |= rel2.setState(false);
-    anyActuatorChangedState |= rel3.setState(false);
-    anyActuatorChangedState |= rel6.setState(false);
-    anyActuatorChangedState |= rel7.setState(false);
-    anyActuatorChangedState |= rel8.setState(false);
-    anyActuatorChangedState |= rel9.setState(false);
+    anyActuatorChangedState |= rel0.setStateStatic<0U>(false, actionNow);
+    anyActuatorChangedState |= rel1.setStateStatic<1U>(false, actionNow);
+    anyActuatorChangedState |= rel2.setStateStatic<2U>(false, actionNow);
+    anyActuatorChangedState |= rel3.setStateStatic<3U>(false, actionNow);
+    anyActuatorChangedState |= rel6.setStateStatic<4U>(false, actionNow);
+    anyActuatorChangedState |= rel7.setStateStatic<5U>(false, actionNow);
+    anyActuatorChangedState |= rel8.setStateStatic<6U>(false, actionNow);
+    anyActuatorChangedState |= rel9.setStateStatic<7U>(false, actionNow);
     return anyActuatorChangedState;
 }
 
 auto turnOffUnprotectedActuators() noexcept -> bool
 {
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+    const uint32_t actionNow = timeKeeper::getTime();
+#else
+    constexpr uint32_t actionNow = 0U;
+#endif
     bool anyActuatorChangedState = false;
-    anyActuatorChangedState |= rel0.setState(false);
-    anyActuatorChangedState |= rel1.setState(false);
-    anyActuatorChangedState |= rel2.setState(false);
-    anyActuatorChangedState |= rel3.setState(false);
-    anyActuatorChangedState |= rel7.setState(false);
-    anyActuatorChangedState |= rel8.setState(false);
-    anyActuatorChangedState |= rel9.setState(false);
+    anyActuatorChangedState |= rel0.setStateStatic<0U>(false, actionNow);
+    anyActuatorChangedState |= rel1.setStateStatic<1U>(false, actionNow);
+    anyActuatorChangedState |= rel2.setStateStatic<2U>(false, actionNow);
+    anyActuatorChangedState |= rel3.setStateStatic<3U>(false, actionNow);
+    anyActuatorChangedState |= rel7.setStateStatic<5U>(false, actionNow);
+    anyActuatorChangedState |= rel8.setStateStatic<6U>(false, actionNow);
+    anyActuatorChangedState |= rel9.setStateStatic<7U>(false, actionNow);
     return anyActuatorChangedState;
 }
 
@@ -545,21 +422,600 @@ auto runSuperLongClick(uint8_t clickableIndex) noexcept -> bool
     }
 }
 
+auto runClick(uint8_t clickableIndex, constants::ClickType clickType) noexcept -> bool
+{
+    switch (clickType)
+    {
+    case constants::ClickType::SHORT:
+        return runShortClick(clickableIndex);
+    case constants::ClickType::LONG:
+        return runLongClick(clickableIndex);
+    case constants::ClickType::SUPER_LONG:
+        return runSuperLongClick(clickableIndex);
+    default:
+        return false;
+    }
+}
+
+auto runNetworkClickFallback(uint8_t clickableIndex, constants::ClickType clickType) noexcept -> bool
+{
+    static_cast<void>(clickableIndex);
+    static_cast<void>(clickType);
+    return false;
+}
+
+auto getNetworkClickSlotCount(uint8_t clickableIndex) noexcept -> uint8_t
+{
+    if ((clickableIndex == 1U) || (clickableIndex == 9U))
+    {
+        return 1U;
+    }
+
+    return 0U;
+}
+
+auto getNetworkClickSlotIndex(uint8_t clickableIndex, constants::ClickType clickType) noexcept -> uint8_t
+{
+    switch (clickType)
+    {
+    case constants::ClickType::LONG:
+    {
+        switch (clickableIndex)
+        {
+        case 1U:
+            return 0U;
+        default:
+            return UINT8_MAX;
+        }
+    }
+    case constants::ClickType::SUPER_LONG:
+    {
+        switch (clickableIndex)
+        {
+        case 9U:
+            return 1U;
+        default:
+            return UINT8_MAX;
+        }
+    }
+    default:
+        return UINT8_MAX;
+    }
+}
+
+auto getNetworkClickClickableIndex(uint8_t slotIndex) noexcept -> uint8_t
+{
+    if (slotIndex == 0U)
+    {
+        return 1U;
+    }
+
+    if (slotIndex == 1U)
+    {
+        return 9U;
+    }
+
+    return UINT8_MAX;
+}
+
+auto getNetworkClickType(uint8_t slotIndex) noexcept -> constants::ClickType
+{
+    if (slotIndex == 0U)
+    {
+        return constants::ClickType::LONG;
+    }
+
+    if (slotIndex == 1U)
+    {
+        return constants::ClickType::SUPER_LONG;
+    }
+
+    return constants::ClickType::NONE;
+}
+
+auto isClickableConfigurationValid(uint8_t clickableIndex) noexcept -> bool
+{
+    return clickableIndex < 10U;
+}
+
+auto setActuatorStateById(uint8_t actuatorId, bool state) noexcept -> bool
+{
+    switch (actuatorId)
+    {
+    case 1U:
+    {
+        return rel0.setStateStatic<0U>(state);
+    }
+    case 2U:
+    {
+        return rel1.setStateStatic<1U>(state);
+    }
+    case 3U:
+    {
+        return rel2.setStateStatic<2U>(state);
+    }
+    case 4U:
+    {
+        return rel3.setStateStatic<3U>(state);
+    }
+    case 7U:
+    {
+        return rel6.setStateStatic<4U>(state);
+    }
+    case 8U:
+    {
+        return rel7.setStateStatic<5U>(state);
+    }
+    case 9U:
+    {
+        return rel8.setStateStatic<6U>(state);
+    }
+    case 10U:
+    {
+        return rel9.setStateStatic<7U>(state);
+    }
+    default:
+        return false;
+    }
+}
+
+auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
+{
+    using constants::ClickResult;
+    using namespace Debug;
+    uint8_t scanResultFlags = 0U;
+
+    {
+        const auto btn0ClickResult = btn0.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (btn0ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 1U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel0.toggleStateStatic<0U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 1U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel0.getState()) + static_cast<uint8_t>(rel2.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel0.setStateStatic<0U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn1ClickResult = btn1.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (btn1ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 2U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel1.toggleStateStatic<1U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 2U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (BridgeSerial::isConnected())
+            {
+                const auto requestResult = NetworkClicks::request(1U, constants::ClickType::LONG);
+                if (requestResult == NetworkClicks::RequestResult::Accepted)
+                {
+                    scanResultFlags |= CLICK_SCAN_NETWORK_PENDING;
+                }
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn2ClickResult = btn2.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (btn2ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 3U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel2.toggleStateStatic<2U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 3U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel1.setStateStatic<1U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn3ClickResult = btn3.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (btn3ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 4U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel3.toggleStateStatic<3U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 4U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel3.getState()) + static_cast<uint8_t>(rel9.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel3.setStateStatic<3U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel9.setStateStatic<7U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn6ClickResult = btn6.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (btn6ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 7U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel6.toggleStateStatic<4U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn7ClickResult = btn7.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (btn7ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 8U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel7.toggleStateStatic<5U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn8ClickResult = btn8.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (btn8ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 9U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel8.toggleStateStatic<6U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn9ClickResult = btn9.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (btn9ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 10U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel9.toggleStateStatic<7U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 10U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel9.getState()) + static_cast<uint8_t>(rel3.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel9.setStateStatic<7U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel3.setStateStatic<3U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn10ClickResult = btn10.clickDetection<constants::clickDetection::makeFlags(true, true, true), 400U, 1000U>(elapsed_ms);
+        switch (btn10ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 11U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel0.toggleStateStatic<0U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 11U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel0.getState()) + static_cast<uint8_t>(rel2.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel0.setStateStatic<0U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::SUPER_LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 11U, FPSTR(dStr::SPACE), FPSTR(dStr::SUPER_LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel0.setStateStatic<0U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel1.setStateStatic<1U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel2.setStateStatic<2U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel3.setStateStatic<3U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel7.setStateStatic<5U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel8.setStateStatic<6U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel9.setStateStatic<7U>(false, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    {
+        const auto btn11ClickResult = btn11.clickDetection<constants::clickDetection::makeFlags(true, true, true), 400U, 1000U>(elapsed_ms);
+        switch (btn11ClickResult)
+        {
+        case ClickResult::SHORT_CLICK:
+        case ClickResult::SHORT_CLICK_QUICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 12U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (rel2.toggleStateStatic<2U>())
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 12U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
+            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+            const uint32_t actionNow = timeKeeper::getTime();
+#else
+            constexpr uint32_t actionNow = 0U;
+#endif
+            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+            if (rel1.setStateStatic<1U>(stateToSet, actionNow))
+            {
+                scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
+            }
+        }
+        break;
+
+        case ClickResult::SUPER_LONG_CLICK:
+        {
+            DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 12U, FPSTR(dStr::SPACE), FPSTR(dStr::SUPER_LONG), FPSTR(dStr::SPACE),
+                FPSTR(dStr::CLICKED));
+            if (BridgeSerial::isConnected())
+            {
+                const auto requestResult = NetworkClicks::request(9U, constants::ClickType::SUPER_LONG);
+                if (requestResult == NetworkClicks::RequestResult::Accepted)
+                {
+                    scanResultFlags |= CLICK_SCAN_NETWORK_PENDING;
+                }
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+
+    return scanResultFlags;
+}
+
+auto checkAutoOffTimers(uint32_t now_ms) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(0U, 5U, rel7, now_ms, 3600000UL);
+#else
+    anyActuatorChangedState |= rel7.checkAutoOffTimerForIndex(5U, now_ms, 3600000UL);
+#endif
+#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(1U, 6U, rel8, now_ms, 1800000UL);
+#else
+    anyActuatorChangedState |= rel8.checkAutoOffTimerForIndex(6U, now_ms, 1800000UL);
+#endif
+    return anyActuatorChangedState;
+}
+
 auto applyPackedActuatorStateByte(uint8_t byteIndex, uint8_t packedByte) noexcept -> bool
 {
     switch (byteIndex)
     {
     case 0U:
     {
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+        const uint32_t actionNow = timeKeeper::getTime();
+#else
+        constexpr uint32_t actionNow = 0U;
+#endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel0.setState((packedByte & 1U) != 0U);
-        anyActuatorChangedState |= rel1.setState((packedByte & 2U) != 0U);
-        anyActuatorChangedState |= rel2.setState((packedByte & 4U) != 0U);
-        anyActuatorChangedState |= rel3.setState((packedByte & 8U) != 0U);
-        anyActuatorChangedState |= rel6.setState((packedByte & 16U) != 0U);
-        anyActuatorChangedState |= rel7.setState((packedByte & 32U) != 0U);
-        anyActuatorChangedState |= rel8.setState((packedByte & 64U) != 0U);
-        anyActuatorChangedState |= rel9.setState((packedByte & 128U) != 0U);
+        anyActuatorChangedState |= rel0.setStateStatic<0U>((packedByte & 1U) != 0U, actionNow);
+        anyActuatorChangedState |= rel1.setStateStatic<1U>((packedByte & 2U) != 0U, actionNow);
+        anyActuatorChangedState |= rel2.setStateStatic<2U>((packedByte & 4U) != 0U, actionNow);
+        anyActuatorChangedState |= rel3.setStateStatic<3U>((packedByte & 8U) != 0U, actionNow);
+        anyActuatorChangedState |= rel6.setStateStatic<4U>((packedByte & 16U) != 0U, actionNow);
+        anyActuatorChangedState |= rel7.setStateStatic<5U>((packedByte & 32U) != 0U, actionNow);
+        anyActuatorChangedState |= rel8.setStateStatic<6U>((packedByte & 64U) != 0U, actionNow);
+        anyActuatorChangedState |= rel9.setStateStatic<7U>((packedByte & 128U) != 0U, actionNow);
         return anyActuatorChangedState;
     }
     default:
@@ -587,48 +1043,111 @@ auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool
         return false;
     }
 }
+
+void refreshIndicators() noexcept
+{
+    light6.applyComputedState(rel6.getState());
+    light7.applyComputedState(rel7.getState());
+    light8.applyComputedState(rel8.getState());
+}
 }  // namespace lsh::core::static_config
 
 void Configurator::configure()
 {
     using namespace Debug;
-    using constants::NoNetworkClickType;
 
     DP_CONTEXT();
 
-    Actuators::addActuator(&rel0, 1U, 0U);
-    Actuators::addActuator(&rel1, 2U, 1U);
-    Actuators::addActuator(&rel2, 3U, 2U);
-    Actuators::addActuator(&rel3, 4U, 3U);
-    Actuators::addActuator(&rel6, 7U, 4U);
-    Actuators::addActuator(&rel7, 8U, 5U);
-    Actuators::addActuator(&rel8, 9U, 6U);
-    Actuators::addActuator(&rel9, 10U, 7U);
+    Actuators::packedActuatorStates[0U] = 0U;
 
-    Clickables::addClickable(&btn0, 1U, 0U);
-    Clickables::addClickable(&btn1, 2U, 1U);
-    Clickables::addClickable(&btn2, 3U, 2U);
-    Clickables::addClickable(&btn3, 4U, 3U);
-    Clickables::addClickable(&btn6, 7U, 4U);
-    Clickables::addClickable(&btn7, 8U, 5U);
-    Clickables::addClickable(&btn8, 9U, 6U);
-    Clickables::addClickable(&btn9, 10U, 7U);
-    Clickables::addClickable(&btn10, 11U, 8U);
-    Clickables::addClickable(&btn11, 12U, 9U);
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel0.setIndex(0U);
+    Actuators::actuators[0U] = &rel0;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel1.setIndex(1U);
+    Actuators::actuators[1U] = &rel1;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel2.setIndex(2U);
+    Actuators::actuators[2U] = &rel2;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel3.setIndex(3U);
+    Actuators::actuators[3U] = &rel3;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel6.setIndex(4U);
+    Actuators::actuators[4U] = &rel6;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel7.setIndex(5U);
+    Actuators::actuators[5U] = &rel7;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel8.setIndex(6U);
+    Actuators::actuators[6U] = &rel8;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    rel9.setIndex(7U);
+    Actuators::actuators[7U] = &rel9;
+#endif
 
-    Indicators::addIndicator(&light6, 0U);
-    Indicators::addIndicator(&light7, 1U);
-    Indicators::addIndicator(&light8, 2U);
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn0.setIndex(0U);
+    Clickables::clickables[0U] = &btn0;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn1.setIndex(1U);
+    Clickables::clickables[1U] = &btn1;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn2.setIndex(2U);
+    Clickables::clickables[2U] = &btn2;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn3.setIndex(3U);
+    Clickables::clickables[3U] = &btn3;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn6.setIndex(4U);
+    Clickables::clickables[4U] = &btn6;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn7.setIndex(5U);
+    Clickables::clickables[5U] = &btn7;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn8.setIndex(6U);
+    Clickables::clickables[6U] = &btn8;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn9.setIndex(7U);
+    Clickables::clickables[7U] = &btn9;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn10.setIndex(8U);
+    Clickables::clickables[8U] = &btn10;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    btn11.setIndex(9U);
+    Clickables::clickables[9U] = &btn11;
+#endif
+
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    light6.setIndex(0U);
+    Indicators::indicators[0U] = &light6;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    light7.setIndex(1U);
+    Indicators::indicators[1U] = &light7;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    light8.setIndex(2U);
+    Indicators::indicators[2U] = &light8;
+#endif
 
     rel6.setProtected(true);
-
-    btn0.setClickableLong(true);
-    btn1.setClickableLong(true, true, NoNetworkClickType::DO_NOTHING);
-    btn2.setClickableLong(true);
-    btn3.setClickableLong(true);
-    btn9.setClickableLong(true);
-    btn10.setClickableLong(true).setClickableSuperLong(true);
-    btn11.setClickableLong(true).setClickableSuperLong(true, true, NoNetworkClickType::DO_NOTHING);
 }
 
 #undef LSH_STATIC_CONFIG_READ_BYTE

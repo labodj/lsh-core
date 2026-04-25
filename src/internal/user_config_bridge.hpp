@@ -23,16 +23,23 @@
 
 #include <stdint.h>
 
+#if defined(LSH_CUSTOM_USER_CONFIG_HEADER)
+#include LSH_CUSTOM_USER_CONFIG_HEADER
+#else
 #include "lsh_user_config.hpp"
+#endif
 
 #include "internal/lsh_config_types.hpp"
 
-#ifndef LSH_STATIC_CONFIG_INCLUDE
-#error "LSH_STATIC_CONFIG_INCLUDE must point to the generated static profile header."
-#endif
-
+// The generated router is deliberately included through a pass macro. Resource
+// pass only emits compile-time capacities and feature switches, keeping this
+// bridge light enough to be included by almost every translation unit.
 #define LSH_STATIC_CONFIG_RESOURCE_PASS 1
-#include LSH_STATIC_CONFIG_INCLUDE
+#if defined(LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER)
+#include LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER
+#else
+#include "lsh_static_config_router.hpp"
+#endif
 #undef LSH_STATIC_CONFIG_RESOURCE_PASS
 
 #define CONFIG_HAS_STATIC_CONFIG 1
@@ -64,9 +71,6 @@
 #ifndef LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS
 #error "LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS must be defined by the static profile."
 #endif
-#ifndef LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES
-#error "LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES must be defined by the static profile."
-#endif
 #ifndef LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS
 #error "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS must be defined by the static profile."
 #endif
@@ -90,7 +94,7 @@ static_assert(LSH_STATIC_CONFIG_MAX_ACTUATOR_ID <= UINT8_MAX, "LSH_STATIC_CONFIG
 static_assert(LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS == 0U || LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS == 1U,
               "LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS must be 0 or 1.");
 
-static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME;  //!< Stable device name exposed on the wire and in logs.
+static constexpr const char *CONFIG_DEVICE_NAME = LSH_DEVICE_NAME();  //!< Stable device name exposed on the wire and in logs.
 static constexpr uint8_t CONFIG_MAX_CLICKABLES =
     LSH_STATIC_CONFIG_CLICKABLES;  //!< Exact number of clickables declared by the generated static profile.
 static constexpr uint8_t CONFIG_MAX_ACTUATORS =
@@ -140,21 +144,6 @@ static constexpr uint8_t CONFIG_MAX_ACTIVE_NETWORK_CLICKS =
     LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS;  //!< Maximum number of concurrent bridge-assisted click transactions.
 static constexpr uint8_t CONFIG_ACTIVE_NETWORK_CLICK_STORAGE_CAPACITY =
     (CONFIG_MAX_ACTIVE_NETWORK_CLICKS == 0U) ? 1U : CONFIG_MAX_ACTIVE_NETWORK_CLICKS;
-
-// Static profiles resolve click timings through generated accessors. Keeping
-// this switch enabled removes the per-clickable 16-bit timing fields from RAM;
-// the legacy storage-capacity constants below remain for diagnostics/API shape.
-#define CONFIG_USE_CLICKABLE_TIMING_POOL 1
-static_assert(LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES >= 0, "LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES must be non-negative.");
-static_assert(LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES <= UINT8_MAX,
-              "LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES must fit in uint8_t.");
-static constexpr uint16_t CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES_WIDE = static_cast<uint16_t>(LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES);
-static_assert(CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES_WIDE <= static_cast<uint16_t>(CONFIG_MAX_CLICKABLES),
-              "LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES cannot exceed LSH_STATIC_CONFIG_CLICKABLES.");
-static constexpr uint8_t CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES =
-    static_cast<uint8_t>(CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES_WIDE);  //!< Number of clickables that override default timings.
-static constexpr uint8_t CONFIG_CLICKABLE_TIMING_STORAGE_CAPACITY =
-    (CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES == 0U) ? 1U : CONFIG_MAX_CLICKABLE_TIMING_OVERRIDES;
 
 static_assert(LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS >= 0, "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS must be non-negative.");
 static_assert(LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS <= UINT8_MAX, "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS must fit in uint8_t.");
@@ -230,7 +219,7 @@ static constexpr uint16_t CONFIG_INDICATOR_ACTUATOR_LINK_STORAGE_CAPACITY =
         ? 1U
         : CONFIG_MAX_INDICATOR_ACTUATOR_LINKS;  //!< Physical ETL storage capacity for indicator links, clamped to at least one slot.
 
-static constexpr HardwareSerial *const CONFIG_COM_SERIAL = LSH_COM_SERIAL;      //!< Serial port used for the controller-to-bridge link.
-static constexpr HardwareSerial *const CONFIG_DEBUG_SERIAL = LSH_DEBUG_SERIAL;  //!< Serial port used for local debug output.
+static constexpr HardwareSerial *const CONFIG_COM_SERIAL = LSH_COM_SERIAL();      //!< Serial port used for the controller-to-bridge link.
+static constexpr HardwareSerial *const CONFIG_DEBUG_SERIAL = LSH_DEBUG_SERIAL();  //!< Serial port used for local debug output.
 
 #endif  // LSH_CORE_INTERNAL_USER_CONFIG_BRIDGE_HPP

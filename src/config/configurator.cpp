@@ -38,7 +38,11 @@ void Configurator::finalizeSetup()
 }
 
 #define LSH_STATIC_CONFIG_IMPLEMENTATION_PASS 1
-#include LSH_STATIC_CONFIG_INCLUDE
+#if defined(LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER)
+#include LSH_CUSTOM_STATIC_CONFIG_ROUTER_HEADER
+#else
+#include "lsh_static_config_router.hpp"
+#endif
 #undef LSH_STATIC_CONFIG_IMPLEMENTATION_PASS
 
 #if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)

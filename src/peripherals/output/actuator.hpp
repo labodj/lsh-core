@@ -50,13 +50,12 @@
 class Actuator
 {
 private:
-    static constexpr uint8_t ACTUATOR_FLAG_DEFAULT_STATE = 0x01U;
-    static constexpr uint8_t ACTUATOR_FLAG_ACTUAL_STATE = 0x02U;
-    static constexpr uint8_t ACTUATOR_FLAG_PROTECTED = 0x04U;
+    static constexpr uint8_t ACTUATOR_FLAG_ACTUAL_STATE = 0x01U;
+    static constexpr uint8_t ACTUATOR_FLAG_PROTECTED = 0x02U;
 
     static constexpr auto initialFlags(bool normalState) noexcept -> uint8_t
     {
-        return normalState ? static_cast<uint8_t>(ACTUATOR_FLAG_DEFAULT_STATE | ACTUATOR_FLAG_ACTUAL_STATE) : 0U;
+        return normalState ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
     }
 
 #ifndef CONFIG_USE_FAST_ACTUATORS
@@ -94,11 +93,34 @@ private:
         }
     }
 #endif
-    uint8_t index = UINT8_MAX;  //!< Actuator index on Actuators namespace array, or `UINT8_MAX` until registration succeeds.
-    uint8_t flags = 0U;         //!< Packed default/current/protection flags.
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    uint8_t index = UINT8_MAX;  //!< Debug/runtime-check registration index; stripped from release objects.
+#endif
+    uint8_t flags = 0U;  //!< Packed default/current/protection flags.
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     uint32_t lastTimeSwitched = 0U;  //!< Last time the actuator performed a switch
 #endif
+    [[nodiscard]]
+    __attribute__((always_inline)) inline auto applyStateChange(bool state, uint32_t now_ms, uint8_t actuatorIndex) -> bool;
+
+    /**
+     * @brief Return the runtime-registration index only in builds that keep it.
+     *
+     * Release generated paths call `setStateStatic<index>()`, so storing the
+     * dense index in every actuator would waste one SRAM byte per relay. The
+     * public non-static setters remain usable for direct object tests, but they
+     * deliberately cannot update the generated packed-state shadow in a stripped
+     * release object because the index byte no longer exists.
+     */
+    [[nodiscard]] auto runtimeIndex() const -> uint8_t
+    {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+        return this->index;
+#else
+        return UINT8_MAX;
+#endif
+    }
+
 public:
 #ifndef CONFIG_USE_FAST_ACTUATORS
     /**
@@ -159,24 +181,51 @@ public:
 
     // Setters
     [[nodiscard]] auto setState(bool state) -> bool;  // Sets the new state of the actuator, respecting debounce time.
+    [[nodiscard]] auto setState(bool state, uint32_t now_ms)
+        -> bool;  // Sets the new state using a caller-cached timestamp for generated multi-actuator paths.
+    [[nodiscard]] auto setStateForIndex(uint8_t actuatorIndex, bool state)
+        -> bool;  // Sets state while providing the generated dense actuator index.
+    [[nodiscard]] auto setStateForIndex(uint8_t actuatorIndex, bool state, uint32_t now_ms)
+        -> bool;  // Sets state with generated dense index and caller-cached timestamp.
 
-    void setIndex(uint8_t indexToSet);                     // Set the actuator index on Actuators namespace Array
-    auto setAutoOffTimer(uint32_t time_ms) -> Actuator &;  // Validate static "turn off" timer in ms after registration.
+    template <uint8_t ActuatorIndex> [[nodiscard]] auto setStateStatic(bool state) -> bool
+    {
+        return this->setStateForIndex(ActuatorIndex, state);
+    }
+
+    template <uint8_t ActuatorIndex> [[nodiscard]] auto setStateStatic(bool state, uint32_t now_ms) -> bool
+    {
+        return this->setStateForIndex(ActuatorIndex, state, now_ms);
+    }
+
+    void setIndex(uint8_t indexToSet);  // Set the actuator index on Actuators namespace Array
     auto setProtected(bool hasProtection)
         -> Actuator &;  // Set protection against global "turn-off" actions (e.g., a general super long click).
 
     // Getters
-    [[nodiscard]] auto getIndex() const -> uint8_t;          // Get the actuator index on Actuators namespace Array
-    [[nodiscard]] auto getState() const -> bool;             // Returns the state of the actuator (false=OFF, true=ON)
-    [[nodiscard]] auto getDefaultState() const -> bool;      // Returns the default state of the actuator
-    [[nodiscard]] auto hasAutoOff() const -> bool;           // Returns if the actuators has a timer set
-    [[nodiscard]] auto getAutoOffTimer() const -> uint32_t;  // Returns the timer of the actuator
-    [[nodiscard]] auto hasProtection() const -> bool;        // Returns true if the actuator is protected from global "turn-off" actions.
+    [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the actuator index on Actuators namespace Array
+    [[nodiscard]] auto getState() const -> bool;     // Returns the state of the actuator (false=OFF, true=ON)
 
     // Utils
-    [[nodiscard]] auto toggleState() -> bool;                                // Switch the actuator
-    [[nodiscard]] auto checkAutoOffTimer() -> bool;                          // Checks if auto off timer is over.
-    [[nodiscard]] auto checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool;  // Checks the provided auto-off timer.
+    [[nodiscard]] auto toggleState() -> bool;                 // Switch the actuator
+    [[nodiscard]] auto toggleState(uint32_t now_ms) -> bool;  // Switch the actuator using a caller-cached timestamp
+    [[nodiscard]] auto toggleStateForIndex(uint8_t actuatorIndex) -> bool;
+    [[nodiscard]] auto toggleStateForIndex(uint8_t actuatorIndex, uint32_t now_ms) -> bool;
+
+    template <uint8_t ActuatorIndex> [[nodiscard]] auto toggleStateStatic() -> bool
+    {
+        return this->toggleStateForIndex(ActuatorIndex);
+    }
+
+    template <uint8_t ActuatorIndex> [[nodiscard]] auto toggleStateStatic(uint32_t now_ms) -> bool
+    {
+        return this->toggleStateForIndex(ActuatorIndex, now_ms);
+    }
+
+    [[nodiscard]] auto checkAutoOffTimer(uint32_t now_ms, uint32_t autoOffTimer_ms)
+        -> bool;  // Checks the provided auto-off timer using a caller-cached timestamp.
+    [[nodiscard]] auto checkAutoOffTimerForIndex(uint8_t actuatorIndex, uint32_t now_ms, uint32_t autoOffTimer_ms)
+        -> bool;  // Checks auto-off while providing the generated dense actuator index.
 };
 
 #endif  // LSH_CORE_PERIPHERALS_OUTPUT_ACTUATOR_HPP

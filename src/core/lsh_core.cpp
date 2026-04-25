@@ -27,15 +27,12 @@
 #include "communication/bridge_sync.hpp"
 #include "communication/serializer.hpp"
 #include "config/configurator.hpp"
+#include "config/static_config.hpp"
 #include "core/network_clicks.hpp"
-#include "device/actuator_manager.hpp"
-#include "device/clickable_manager.hpp"
-#include "device/indicator_manager.hpp"
 #include "internal/user_config_bridge.hpp"
-#include "util/constants/click_results.hpp"
-#include "util/constants/click_types.hpp"
 #include "util/constants/timing.hpp"
 #include "util/debug/debug.hpp"
+#include "util/saturating_time.hpp"
 #include "util/time_keeper.hpp"
 
 namespace lsh::core
@@ -90,8 +87,6 @@ void setup()
  */
 void loop()
 {
-    using constants::ClickResult;
-    using constants::ClickType;
 #if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
     using constants::timings::ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS;
 #endif
@@ -105,6 +100,14 @@ void loop()
 
     timeKeeper::update();
     const auto now = timeKeeper::getTime();
+    static uint32_t lastLoopTime_ms = 0U;  //!< Previous cached loop timestamp; one 32-bit delta feeds every periodic gate.
+    const uint32_t elapsedSinceLastLoop_ms = now - lastLoopTime_ms;
+    lastLoopTime_ms = now;
+    // AVR pays noticeably for repeated uint32_t subtractions. The loop does one
+    // wrap-safe 32-bit delta, then every periodic subsystem consumes the same
+    // saturated 16-bit age because none of these intervals needs multi-minute
+    // precision.
+    const uint16_t loopElapsed_ms = (elapsedSinceLastLoop_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastLoop_ms);
 
 #ifdef CONFIG_LSH_BENCH
     using constants::timings::BENCH_ITERATIONS;
@@ -138,9 +141,8 @@ void loop()
 #if CONFIG_USE_NETWORK_CLICKS
     static bool mustPollNetworkClickTimeouts = false;  //!< True while at least one network click transaction still needs timeout handling.
 #endif
-    static uint32_t lastBridgeHousekeepingTime_ms = 0U;  //!< Timestamp of the last bridge housekeeping pass.
 #if LSH_STATIC_CONFIG_CLICKABLES > 0
-    static uint32_t lastClickableScanTime_ms = 0U;  //!< Timestamp of the last input scan pass.
+    static uint16_t clickableScanAge_ms = 0U;  //!< Saturated age since the last input scan pass.
 #endif
     uint8_t receivedPayloadsThisLoop = 0U;  //!< Number of bridge payloads already dispatched in this loop iteration.
     uint16_t receivedBytesThisLoop = 0U;    //!< Raw UART bytes already consumed in this loop iteration.
@@ -180,20 +182,15 @@ void loop()
         }
     };
 
-    const uint32_t elapsedSinceLastBridgeHousekeeping_ms = now - lastBridgeHousekeepingTime_ms;
-    if (elapsedSinceLastBridgeHousekeeping_ms > 0U)
+    if (loopElapsed_ms > 0U)
     {
-        lastBridgeHousekeepingTime_ms = now;
-        const uint16_t bridgeHousekeepingElapsed_ms = (elapsedSinceLastBridgeHousekeeping_ms > UINT16_MAX)
-                                                          ? UINT16_MAX
-                                                          : static_cast<uint16_t>(elapsedSinceLastBridgeHousekeeping_ms);
         // Bridge heartbeat pacing and handshake retries intentionally use their
         // own elapsed-time gate. This keeps controller-link liveness
         // independent from the clickable scan policy while still avoiding extra
         // timestamp work on raw Arduino `loop()` iterations that happened
         // inside the same cached millisecond.
-        BridgeSerial::tickSendIdleTimer(bridgeHousekeepingElapsed_ms);
-        BridgeSync::tick(bridgeHousekeepingElapsed_ms);
+        BridgeSerial::tickSendIdleTimer(loopElapsed_ms);
+        BridgeSync::tick(loopElapsed_ms);
     }
 
     // Rescue one pending inbound payload before deciding whether the bridge is
@@ -213,121 +210,17 @@ void loop()
     // debounce and long-click timing stay correct even when the scan policy is
     // slower than the historical ~1 kHz default or when the MCU is briefly busy.
 #if LSH_STATIC_CONFIG_CLICKABLES > 0
-    const uint32_t elapsedSinceLastClickableScan_ms = now - lastClickableScanTime_ms;
-    if (elapsedSinceLastClickableScan_ms >= CLICKABLE_SCAN_INTERVAL_MS)
+    clickableScanAge_ms = timeUtils::addElapsedTimeSaturated(clickableScanAge_ms, loopElapsed_ms);
+    if (clickableScanAge_ms >= CLICKABLE_SCAN_INTERVAL_MS)
     {
-        lastClickableScanTime_ms = now;
-        const uint16_t clickableElapsed_ms =
-            (elapsedSinceLastClickableScan_ms > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(elapsedSinceLastClickableScan_ms);
+        const uint16_t clickableElapsed_ms = clickableScanAge_ms;
+        clickableScanAge_ms = 0U;
 
-        // `Clickables::clickables` is a contiguous ETL array. Iterating through raw
-        // pointers avoids repeated index arithmetic in one of the hottest paths.
-        auto **const clickableBegin = Clickables::clickables.begin();
-        auto **const clickableEnd = clickableBegin + CONFIG_MAX_CLICKABLES;
-
-        for (auto **clickableIt = clickableBegin; clickableIt != clickableEnd; ++clickableIt)
-        {
-            auto *const currentClickable = *clickableIt;
-
-            switch (currentClickable->clickDetection(clickableElapsed_ms))
-            {
-            case ClickResult::SHORT_CLICK:
-            case ClickResult::SHORT_CLICK_QUICK:
-            {
-                DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), Clickables::getId(currentClickable->getIndex()), FPSTR(dStr::SPACE),
-                    FPSTR(dStr::SHORT), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                noteActuatorStateChanged(currentClickable->shortClick());
-            }
-            break;
-
-            case ClickResult::LONG_CLICK:
-            {
-                constexpr auto clickType = ClickType::LONG;
-                DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), Clickables::getId(currentClickable->getIndex()), FPSTR(dStr::SPACE),
-                    FPSTR(dStr::LONG), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                const auto networkFallback = currentClickable->getNetworkFallback(clickType);
-                if (networkFallback != constants::NoNetworkClickType::NONE)
-                {
+        const uint8_t clickScanResultFlags = lsh::core::static_config::scanClickables(clickableElapsed_ms);
+        noteActuatorStateChanged((clickScanResultFlags & lsh::core::static_config::CLICK_SCAN_STATE_CHANGED) != 0U);
 #if CONFIG_USE_NETWORK_CLICKS
-                    if (BridgeSerial::isConnected())
-                    {
-                        const uint8_t currentClickableIndex = currentClickable->getIndex();
-                        const auto requestResult = NetworkClicks::request(currentClickableIndex, clickType);
-                        if (requestResult == NetworkClicks::RequestResult::Accepted)
-                        {
-                            mustPollNetworkClickTimeouts = true;
-                        }
-                        else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
-                                 networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                        {
-                            noteActuatorStateChanged(currentClickable->longClick());
-                        }
-                    }
-                    // If the bridge path is unavailable and the device was configured with
-                    // local fallback, execute the local action instead of dropping the press.
-                    else if (networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                    {
-                        noteActuatorStateChanged(currentClickable->longClick());
-                    }
-#else
-                    if (networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                    {
-                        noteActuatorStateChanged(currentClickable->longClick());
-                    }
+        mustPollNetworkClickTimeouts |= (clickScanResultFlags & lsh::core::static_config::CLICK_SCAN_NETWORK_PENDING) != 0U;
 #endif
-                }
-                else
-                {
-                    noteActuatorStateChanged(currentClickable->longClick());
-                }
-            }
-            break;
-
-            case ClickResult::SUPER_LONG_CLICK:
-            {
-                constexpr auto clickType = ClickType::SUPER_LONG;
-                DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), Clickables::getId(currentClickable->getIndex()), FPSTR(dStr::SPACE),
-                    FPSTR(dStr::SUPER_LONG), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKED));
-                const auto networkFallback = currentClickable->getNetworkFallback(clickType);
-                if (networkFallback != constants::NoNetworkClickType::NONE)
-                {
-#if CONFIG_USE_NETWORK_CLICKS
-                    if (BridgeSerial::isConnected())
-                    {
-                        const uint8_t currentClickableIndex = currentClickable->getIndex();
-                        const auto requestResult = NetworkClicks::request(currentClickableIndex, clickType);
-                        if (requestResult == NetworkClicks::RequestResult::Accepted)
-                        {
-                            mustPollNetworkClickTimeouts = true;
-                        }
-                        else if (requestResult == NetworkClicks::RequestResult::TransportRejected &&
-                                 networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                        {
-                            noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
-                        }
-                    }
-                    else if (networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                    {
-                        noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
-                    }
-#else
-                    if (networkFallback == constants::NoNetworkClickType::LOCAL_FALLBACK)
-                    {
-                        noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
-                    }
-#endif
-                }
-                else
-                {
-                    noteActuatorStateChanged(Clickables::click(currentClickable, clickType));
-                }
-            }
-            break;
-
-            default:
-                break;
-            }
-        }
     }
 #endif
 
@@ -340,30 +233,32 @@ void loop()
     // Timeout checks for long/super long network clicked clickables
     if (mustPollNetworkClickTimeouts)
     {
-        static uint32_t lastNetworkClickCheckTime_ms = 0U;  //!< Stores last time network click timer check has been executed
-        if (now - lastNetworkClickCheckTime_ms > NETWORK_CLICK_CHECK_INTERVAL_MS)  // Check network click timers every N ms
+        static uint16_t networkClickCheckAge_ms = 0U;  //!< Saturated age since the last network-click timeout sweep.
+        networkClickCheckAge_ms = timeUtils::addElapsedTimeSaturated(networkClickCheckAge_ms, loopElapsed_ms);
+        if (networkClickCheckAge_ms > NETWORK_CLICK_CHECK_INTERVAL_MS)  // Check network click timers every N ms
         {
-            lastNetworkClickCheckTime_ms = now;
+            networkClickCheckAge_ms = 0U;
             noteActuatorStateChanged(NetworkClicks::checkAllNetworkClicksTimers(false));
             mustPollNetworkClickTimeouts = NetworkClicks::thereAreActiveNetworkClicks();
         }
     }
 #endif
 
-    // Check actuators auto OFF timer
+// Check actuators auto OFF timer
 #if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
-    static uint32_t lastAutoOffCheckTime_ms = 0U;  //!< Stores last time actuators auto off timer check has been executed
-    if (now - lastAutoOffCheckTime_ms > ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS)  // Check every second
+    static uint16_t autoOffCheckAge_ms = 0U;  //!< Saturated age since the last generated auto-off timer sweep.
+    autoOffCheckAge_ms = timeUtils::addElapsedTimeSaturated(autoOffCheckAge_ms, loopElapsed_ms);
+    if (autoOffCheckAge_ms > ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS)  // Check every second
     {
-        lastAutoOffCheckTime_ms = now;
-        noteActuatorStateChanged(Actuators::actuatorsAutoOffTimersCheck());
+        autoOffCheckAge_ms = 0U;
+        noteActuatorStateChanged(lsh::core::static_config::checkAutoOffTimers(now));
     }
 #endif
 
 #if LSH_STATIC_CONFIG_INDICATORS > 0
     if (mustRefreshIndicators)
     {
-        Indicators::indicatorsCheck();
+        lsh::core::static_config::refreshIndicators();
         mustRefreshIndicators = false;
     }
 #endif
@@ -381,6 +276,6 @@ void loop()
         }
     }
 
-    // Serializer::serializeStaticJson(StaticType::PING); // Try to send ping to ESP
+    // Serializer::serializeStaticPayload(StaticType::PING); // Try to send ping to ESP
 }
 }  // namespace lsh::core

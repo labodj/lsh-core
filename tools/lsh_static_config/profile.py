@@ -4,24 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .constants import DEFAULT_LONG_CLICK_MS, DEFAULT_SUPER_LONG_CLICK_MS
 from .metrics import count_active_network_clicks
 from .models import StaticProfileData
 from .topology import target_indexes
 
 if TYPE_CHECKING:
-    from .models import ClickableConfig, DeviceConfig
-
-
-def click_action_time(clickable: ClickableConfig, action_name: str) -> int:
-    """Return the generated threshold for one timed click action."""
-    if action_name == "long":
-        default = DEFAULT_LONG_CLICK_MS
-        action = clickable.long
-    else:
-        default = DEFAULT_SUPER_LONG_CLICK_MS
-        action = clickable.super_long
-    return action.time_ms if action.enabled and action.time_ms is not None else default
+    from .models import DeviceConfig
 
 
 def collect_static_profile_data(device: DeviceConfig) -> StaticProfileData:
@@ -56,28 +44,17 @@ def collect_static_profile_data(device: DeviceConfig) -> StaticProfileData:
     long_link_counts = [len(links) for links in long_link_sets]
     super_long_link_counts = [len(links) for links in super_long_link_sets]
     indicator_link_counts = [len(links) for links in indicator_link_sets]
+    network_click_slots: list[tuple[int, str]] = []
+    for clickable_index, clickable in enumerate(device.clickables):
+        if clickable.long.enabled and clickable.long.network:
+            network_click_slots.append((clickable_index, "LONG"))
+        if clickable.super_long.enabled and clickable.super_long.network:
+            network_click_slots.append((clickable_index, "SUPER_LONG"))
     return StaticProfileData(
         actuator_ids=actuator_ids,
         clickable_ids=clickable_ids,
         actuator_indexes=actuator_indexes,
         auto_off_indexes=auto_off_indexes,
-        long_types=[
-            clickable.long.click_type if clickable.long.enabled else "NORMAL"
-            for clickable in device.clickables
-        ],
-        super_long_types=[
-            clickable.super_long.click_type
-            if clickable.super_long.enabled
-            else "NORMAL"
-            for clickable in device.clickables
-        ],
-        long_times=[
-            click_action_time(clickable, "long") for clickable in device.clickables
-        ],
-        super_long_times=[
-            click_action_time(clickable, "super_long")
-            for clickable in device.clickables
-        ],
         short_link_sets=short_link_sets,
         long_link_sets=long_link_sets,
         super_long_link_sets=super_long_link_sets,
@@ -86,7 +63,7 @@ def collect_static_profile_data(device: DeviceConfig) -> StaticProfileData:
         long_link_counts=long_link_counts,
         super_long_link_counts=super_long_link_counts,
         indicator_link_counts=indicator_link_counts,
-        indicator_modes=[indicator.mode for indicator in device.indicators],
+        network_click_slots=network_click_slots,
         short_links=sum(short_link_counts),
         long_links=sum(long_link_counts),
         super_long_links=sum(super_long_link_counts),

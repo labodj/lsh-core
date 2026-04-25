@@ -25,7 +25,6 @@
 
 #include "internal/etl_array.hpp"
 #include "internal/user_config_bridge.hpp"
-#include "util/constants/click_types.hpp"
 
 class Clickable;
 
@@ -35,21 +34,16 @@ class Clickable;
  */
 namespace Clickables
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 extern etl::array<Clickable *, CONFIG_MAX_CLICKABLES> clickables;
+#endif
 
-void addClickable(Clickable *clickable,
-                  uint8_t clickableId,
-                  uint8_t clickableIndex);                            // Add one clickable to clickables vector and activate it
 [[nodiscard]] auto getId(uint8_t clickableIndex) -> uint8_t;          // Returns the static clickable ID for one dense runtime index
 [[nodiscard]] auto getClickable(uint8_t clickableId) -> Clickable *;  // Returns a single clickable, or nullptr if the ID is unknown
 [[nodiscard]] auto getIndex(uint8_t clickableId) -> uint8_t;          // Returns a single clickable index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t clickableId, uint8_t &clickableIndex)
     -> bool;                                                      // Returns true and writes the clickable index when the ID exists
 [[nodiscard]] auto clickableExists(uint8_t clickableId) -> bool;  // Returns true if clickable exists
-[[nodiscard]] auto click(const Clickable *clickable, constants::ClickType clickType)
-    -> bool;  // Method for all types of clicks, since not all click can be done within clickable class
-[[nodiscard]] auto click(uint8_t clickableIndex, constants::ClickType clickType) -> bool;  // Alternative method for all types of click
-void finalizeActuatorLinkStorage();
 void finalizeSetup();
 }  // namespace Clickables
 

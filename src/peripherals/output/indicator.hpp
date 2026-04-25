@@ -29,12 +29,6 @@
 #ifdef CONFIG_USE_FAST_INDICATORS
 #include "internal/avr_fast_io.hpp"
 #endif
-#include "util/constants/indicator_modes.hpp"
-
-namespace Indicators
-{
-void finalizeActuatorLinkStorage();
-}
 
 /**
  * @brief Represents a state indicator for one or more attached actuators, indicators are normally connected to a digital out.
@@ -63,8 +57,10 @@ private:
         SREG = oldSREG;
     }
 #endif
-    uint8_t index = UINT8_MAX;  //!< Indicator index on Indicators namespace Array, or `UINT8_MAX` until registration succeeds.
-    bool actualState = false;   //!< Actual state of the indicator
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    uint8_t index = UINT8_MAX;  //!< Debug/runtime-check registration index; stripped from release objects.
+#endif
+    bool actualState = false;  //!< Actual state of the indicator
 
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
@@ -117,7 +113,7 @@ public:
      *
      * @param stateToSet the state to set true=ON, false=OFF.
      */
-    inline void setState(bool stateToSet)
+    void setState(bool stateToSet)
     {
 #ifdef CONFIG_USE_FAST_INDICATORS
         if (!stateToSet)
@@ -132,13 +128,22 @@ public:
         digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToSet));
 #endif
     }
-    void setIndex(uint8_t indexToSet);                                    // Set the indicator index on Indicators namespace Array
-    auto addActuator(uint8_t actuatorIndex) -> Indicator &;               // Kept for source compatibility; TOML links are static.
-    auto setMode(constants::IndicatorMode indicatorMode) -> Indicator &;  // Kept for source compatibility; TOML mode is static.
-    void check();                                                         // Perform the actual check
+    void applyComputedState(bool newState)
+    {
+        // Generated static profiles compute the indicator expression directly.
+        // Keep the state-change guard here so refreshIndicators() can avoid the
+        // old index-based Indicator::check() path in release builds.
+        if (newState == this->actualState)
+        {
+            return;
+        }
+        this->actualState = newState;
+        this->setState(newState);
+    }
+    void setIndex(uint8_t indexToSet);  // Set the indicator index on Indicators namespace Array
+    void check();                       // Perform the actual check
 
-    [[nodiscard]] auto getIndex() const -> uint8_t;           // Get the indicator index on Indicators namespace Array
-    [[nodiscard]] auto hasAttachedActuators() const -> bool;  // Return true when at least one actuator is attached to this indicator
+    [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the indicator index on Indicators namespace Array
 };
 
 #endif  // LSH_CORE_PERIPHERALS_OUTPUT_INDICATOR_HPP

@@ -194,9 +194,41 @@ def render_static_payload_arrays(device: DeviceConfig) -> list[str]:
 def render_static_payload_writer_helper() -> list[str]:
     """Render a direct PROGMEM/RAM byte writer for generated static payloads."""
     return [
+        "constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 128U;",
+        "",
+        (
+            "template <uint16_t ByteIndex, uint16_t PayloadSize> "
+            "struct GeneratedPayloadByteWriter"
+        ),
+        "{",
+        "    static auto write(const uint8_t (&payload)[PayloadSize]) noexcept -> bool",
+        "    {",
+        (
+            "        return CONFIG_COM_SERIAL->HardwareSerial::write("
+            "LSH_STATIC_CONFIG_READ_BYTE(&payload[ByteIndex])) == 1U &&"
+        ),
+        (
+            "               GeneratedPayloadByteWriter<static_cast<uint16_t>("
+            "ByteIndex + 1U), PayloadSize>::write(payload);"
+        ),
+        "    }",
+        "};",
+        "",
         (
             "template <uint16_t PayloadSize> "
-            "auto writeGeneratedPayload(const uint8_t (&payload)[PayloadSize]) "
+            "struct GeneratedPayloadByteWriter<PayloadSize, PayloadSize>"
+        ),
+        "{",
+        "    static auto write(const uint8_t (&payload)[PayloadSize]) noexcept -> bool",
+        "    {",
+        "        static_cast<void>(payload);",
+        "        return true;",
+        "    }",
+        "};",
+        "",
+        (
+            "template <uint16_t PayloadSize> "
+            "auto writeGeneratedPayloadLoop(const uint8_t (&payload)[PayloadSize]) "
             "noexcept -> bool"
         ),
         "{",
@@ -210,6 +242,23 @@ def render_static_payload_writer_helper() -> list[str]:
         "            return false;",
         "        }",
         "    }",
-        "    return PayloadSize != 0U;",
+        "    return true;",
+        "}",
+        "",
+        (
+            "template <uint16_t PayloadSize> "
+            "auto writeGeneratedPayload(const uint8_t (&payload)[PayloadSize]) "
+            "noexcept -> bool"
+        ),
+        "{",
+        (
+            '    static_assert(PayloadSize > 0U, "Generated static payloads '
+            'must not be empty.");'
+        ),
+        "    if constexpr (PayloadSize <= LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT)",
+        "    {",
+        "        return GeneratedPayloadByteWriter<0U, PayloadSize>::write(payload);",
+        "    }",
+        "    return writeGeneratedPayloadLoop(payload);",
         "}",
     ]

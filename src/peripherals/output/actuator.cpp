@@ -38,23 +38,100 @@ static_assert(constants::timings::ACTUATOR_DEBOUNCE_TIME_MS == 0U,
  */
 auto Actuator::setState(bool state) -> bool
 {
-#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    using constants::timings::ACTUATOR_DEBOUNCE_TIME_MS;
-#endif
     const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
-    // Apply new state only if it's different from the stored one
+    // Keep the public single-actuator path lazy: if the state is already right,
+    // do not pay the 32-bit cached-time read just to reject a no-op.
     if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
     {
         return false;
     }
-
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
-    const uint32_t now = timeKeeper::getTime();
+    return this->applyStateChange(state, timeKeeper::getTime(), this->runtimeIndex());
+#else
+    return this->applyStateChange(state, 0U, this->runtimeIndex());
+#endif
+}
+
+/**
+ * @brief Set the new actuator state if the new state can be set.
+ *
+ * @param state new state to set.
+ * @param now_ms caller-cached timestamp used when debounce or auto-off storage needs it.
+ * @return true if the state has been applied.
+ * @return false otherwise.
+ */
+auto Actuator::setState(bool state, uint32_t now_ms) -> bool
+{
+    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
+    // The generated multi-actuator path may already have paid for `now_ms`.
+    // Still reject no-op writes before debounce and pin work.
+    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    {
+        return false;
+    }
+    return this->applyStateChange(state, now_ms, this->runtimeIndex());
+}
+
+/**
+ * @brief Set the new actuator state with a generated dense runtime index.
+ *
+ * @param actuatorIndex Dense static-profile actuator index.
+ * @param state new state to set.
+ * @return true if the state has been applied.
+ * @return false otherwise.
+ */
+auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state) -> bool
+{
+    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
+    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    {
+        return false;
+    }
+#if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
+    return this->applyStateChange(state, timeKeeper::getTime(), actuatorIndex);
+#else
+    return this->applyStateChange(state, 0U, actuatorIndex);
+#endif
+}
+
+/**
+ * @brief Set the new actuator state with generated index and cached timestamp.
+ *
+ * @param actuatorIndex Dense static-profile actuator index.
+ * @param state new state to set.
+ * @param now_ms caller-cached timestamp used when debounce or auto-off storage needs it.
+ * @return true if the state has been applied.
+ * @return false otherwise.
+ */
+auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state, uint32_t now_ms) -> bool
+{
+    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
+    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    {
+        return false;
+    }
+    return this->applyStateChange(state, now_ms, actuatorIndex);
+}
+
+/**
+ * @brief Apply a known state transition after the caller rejected no-op writes.
+ *
+ * @param state new state to set.
+ * @param now_ms caller-cached timestamp used when debounce or auto-off storage needs it.
+ * @return true if the state has been applied.
+ * @return false otherwise.
+ */
+__attribute__((always_inline)) inline auto Actuator::applyStateChange(bool state, uint32_t now_ms, uint8_t actuatorIndex) -> bool
+{
+#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
+    using constants::timings::ACTUATOR_DEBOUNCE_TIME_MS;
+#else
+    static_cast<void>(now_ms);
 #endif
 
     // Apply state if debounce is not active (elided at compile time) OR if it's active check if debounce time is elapsed
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
+    if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now_ms - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
     {
         return false;
     }
@@ -80,14 +157,14 @@ auto Actuator::setState(bool state) -> bool
         this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_ACTUAL_STATE);
     }
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    this->lastTimeSwitched = now;
+    this->lastTimeSwitched = now_ms;
 #endif
     // Keep the global packed shadow in sync so state serialization never has
     // to walk the actuator array just to rebuild protocol bytes. Static
     // profiles register every actuator before the runtime can switch it.
-    Actuators::updatePackedState(this->index, state);
+    Actuators::updatePackedState(actuatorIndex, state);
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
-    Actuators::recordSwitchTime(this->index, now);
+    Actuators::recordSwitchTime(actuatorIndex, now_ms);
 #endif
     return true;
 }
@@ -99,19 +176,11 @@ auto Actuator::setState(bool state) -> bool
  */
 void Actuator::setIndex(uint8_t indexToSet)
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     this->index = indexToSet;
-}
-
-/**
- * @brief Validate the generated turn-off timer after actuator registration.
- *
- * @param time_ms timer time in ms; zero is valid only when the static profile has no timer.
- * @return Actuator& the object instance.
- */
-auto Actuator::setAutoOffTimer(uint32_t time_ms) -> Actuator &
-{
-    Actuators::setAutoOffTimer(this->index, time_ms);
-    return *this;
+#else
+    static_cast<void>(indexToSet);
+#endif
 }
 
 /**
@@ -140,7 +209,11 @@ auto Actuator::setProtected(bool hasProtection) -> Actuator &
  */
 auto Actuator::getIndex() const -> uint8_t
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     return this->index;
+#else
+    return UINT8_MAX;
+#endif
 }
 
 /**
@@ -155,49 +228,6 @@ auto Actuator::getState() const -> bool
 }
 
 /**
- * @brief Get the default state of the actuator.
- *
- * @return true if ON by default.
- * @return false if OFF by default.
- */
-auto Actuator::getDefaultState() const -> bool
-{
-    return (this->flags & ACTUATOR_FLAG_DEFAULT_STATE) != 0U;
-}
-
-/**
- * @brief Get if the actuator has a timer set.
- *
- * @return true if has a timer.
- * @return false if it hasn't a timer.
- */
-auto Actuator::hasAutoOff() const -> bool
-{
-    return Actuators::hasAutoOffTimer(this->index);
-}
-
-/**
- * @brief Get the timer of the actuator in ms.
- *
- * @return uint32_t the timer of the actuator in ms.
- */
-auto Actuator::getAutoOffTimer() const -> uint32_t
-{
-    return Actuators::getAutoOffTimer(this->index);
-}
-
-/**
- * @brief Get if the actuators is protected against some turn ON/OFF behaviour.
- *
- * @return true if it's protected.
- * @return false if it's not protected.
- */
-auto Actuator::hasProtection() const -> bool
-{
-    return (this->flags & ACTUATOR_FLAG_PROTECTED) != 0U;
-}
-
-/**
  * @brief Switch the state of the actuator (if it was OFF is going to be ON and vice versa).
  *
  * @return true if the state has been changed.
@@ -209,50 +239,78 @@ auto Actuator::toggleState() -> bool
 }
 
 /**
- * @brief Checks if auto off timer is over, switch OFF the actuator if it's over.
+ * @brief Switch the state of the actuator using a caller-cached timestamp.
  *
+ * @param now_ms cached timestamp shared by a generated action body.
  * @return true if the state has been changed.
  * @return false otherwise.
  */
-auto Actuator::checkAutoOffTimer() -> bool
+auto Actuator::toggleState(uint32_t now_ms) -> bool
 {
-#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-#if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
-    return Actuators::checkAutoOffTimer(this->index, this->getAutoOffTimer());
-#else
-    return false;
-#endif
-#else
-    return this->checkAutoOffTimer(this->getAutoOffTimer());
-#endif
+    return this->setState((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U, now_ms);
+}
+
+/**
+ * @brief Toggle the actuator with a generated dense runtime index.
+ *
+ * @param actuatorIndex Dense static-profile actuator index.
+ * @return true if the state has been changed.
+ * @return false otherwise.
+ */
+auto Actuator::toggleStateForIndex(uint8_t actuatorIndex) -> bool
+{
+    return this->setStateForIndex(actuatorIndex, (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U);
+}
+
+/**
+ * @brief Toggle the actuator with generated index and caller-cached timestamp.
+ *
+ * @param actuatorIndex Dense static-profile actuator index.
+ * @param now_ms cached timestamp shared by a generated action body.
+ * @return true if the state has been changed.
+ * @return false otherwise.
+ */
+auto Actuator::toggleStateForIndex(uint8_t actuatorIndex, uint32_t now_ms) -> bool
+{
+    return this->setStateForIndex(actuatorIndex, (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U, now_ms);
 }
 
 /**
  * @brief Checks the provided auto-off timer, switch OFF the actuator if it's over.
  *
+ * @param now_ms caller-cached current time in milliseconds.
  * @param autoOffTimer_ms auto-off timer to test.
  * @return true if the state has been changed.
  * @return false otherwise.
  */
-auto Actuator::checkAutoOffTimer(uint32_t autoOffTimer_ms) -> bool
+auto Actuator::checkAutoOffTimer(uint32_t now_ms, uint32_t autoOffTimer_ms) -> bool
 {
-#if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-#if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
-    return Actuators::checkAutoOffTimer(this->index, autoOffTimer_ms);
-#else
-    static_cast<void>(autoOffTimer_ms);
-    return false;
-#endif
-#elif LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
+    return this->checkAutoOffTimerForIndex(this->runtimeIndex(), now_ms, autoOffTimer_ms);
+}
+
+/**
+ * @brief Checks an auto-off timer with the generated dense actuator index.
+ *
+ * @param actuatorIndex Dense static-profile actuator index.
+ * @param now_ms caller-cached current time in milliseconds.
+ * @param autoOffTimer_ms auto-off timer to test.
+ * @return true if the state has been changed.
+ * @return false otherwise.
+ */
+auto Actuator::checkAutoOffTimerForIndex(uint8_t actuatorIndex, uint32_t now_ms, uint32_t autoOffTimer_ms) -> bool
+{
+#if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U && autoOffTimer_ms != 0U)
     {
-        if (timeKeeper::getTime() - this->lastTimeSwitched >= autoOffTimer_ms)
+        if (now_ms - this->lastTimeSwitched >= autoOffTimer_ms)
         {
-            return this->setState(false);
+            return this->setStateForIndex(actuatorIndex, false, now_ms);
         }
     }
     return false;
 #else
+    static_cast<void>(actuatorIndex);
+    static_cast<void>(now_ms);
     static_cast<void>(autoOffTimer_ms);
     return false;
 #endif

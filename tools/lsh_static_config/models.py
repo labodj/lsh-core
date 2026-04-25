@@ -97,6 +97,7 @@ class GeneratorSettings:
     output_dir: Path
     config_dir: str = "lsh_configs"
     user_config_header: str = "lsh_user_config.hpp"
+    static_config_router_header: str = "lsh_static_config_router.hpp"
 
 
 @dataclass
@@ -118,10 +119,6 @@ class StaticProfileData:
     clickable_ids: list[int]
     actuator_indexes: dict[str, int]
     auto_off_indexes: list[int]
-    long_types: list[str]
-    super_long_types: list[str]
-    long_times: list[int]
-    super_long_times: list[int]
     short_link_sets: list[list[int]]
     long_link_sets: list[list[int]]
     super_long_link_sets: list[list[int]]
@@ -130,7 +127,7 @@ class StaticProfileData:
     long_link_counts: list[int]
     super_long_link_counts: list[int]
     indicator_link_counts: list[int]
-    indicator_modes: list[str]
+    network_click_slots: list[tuple[int, str]]
     short_links: int
     long_links: int
     super_long_links: int

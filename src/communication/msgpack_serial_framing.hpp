@@ -21,8 +21,6 @@
 #ifndef LSH_CORE_COMMUNICATION_MSGPACK_SERIAL_FRAMING_HPP
 #define LSH_CORE_COMMUNICATION_MSGPACK_SERIAL_FRAMING_HPP
 
-#include <Arduino.h>
-#include <stddef.h>
 #include <stdint.h>
 
 namespace lsh::core::transport
@@ -66,26 +64,6 @@ public:
     [[nodiscard]] auto consumeByte(uint8_t byte, uint32_t nowMs) -> MsgPackFrameConsumeResult;
     [[nodiscard]] auto frameData() const -> const uint8_t *;
     [[nodiscard]] auto frameLength() const -> uint16_t;
-};
-
-/**
- * @brief Streaming writer that applies the MsgPack framing while bytes are emitted on the serial link.
- */
-class MsgPackFrameWriter final
-{
-private:
-    HardwareSerial &output;  //!< Concrete UART sink that receives the framed payload.
-
-    [[nodiscard]] auto writeEscapedByte(uint8_t byte) -> bool;
-    [[nodiscard]] auto writeByte(uint8_t byte) -> bool;
-
-public:
-    explicit MsgPackFrameWriter(HardwareSerial &destination) noexcept;
-
-    auto beginFrame() -> bool;
-    auto endFrame() -> bool;
-    auto write(uint8_t byte) -> size_t;
-    auto write(const uint8_t *buffer, size_t size) -> size_t;
 };
 
 }  // namespace lsh::core::transport

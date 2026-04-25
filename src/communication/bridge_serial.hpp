@@ -21,13 +21,9 @@
 #ifndef LSH_CORE_COMMUNICATION_BRIDGE_SERIAL_HPP
 #define LSH_CORE_COMMUNICATION_BRIDGE_SERIAL_HPP
 
-#include <ArduinoJson.h>
-#include <stddef.h>
 #include <stdint.h>
 
-#include "communication/constants/config.hpp"
 #include "communication/deserializer.hpp"
-#include "internal/user_config_bridge.hpp"
 
 /**
  * @brief Controller-side serial link used to exchange payloads with `lsh-bridge`.
@@ -41,18 +37,15 @@ struct ReceiveResult
     bool payloadDispatched = false;           //!< True only when one full payload was parsed and dispatched.
 };
 
-extern uint16_t sendIdleAge_ms;
 extern uint16_t receiveIdleAge_ms;
 
-void init();                                                              // Initialize the hardware serial link used by the bridge.
-[[nodiscard]] auto sendJson(const JsonDocument &documentToSend) -> bool;  // Send one payload to the bridge using the active codec.
+void init();  // Initialize the hardware serial link used by the bridge.
 auto receiveAndDispatch(uint16_t maxBytesToConsume)
-    -> ReceiveResult;                                  // Consume up to N bytes and dispatch at most one complete bridge payload.
-void tickSendIdleTimer(uint16_t elapsed_ms);           // Advance the ping idle timer using the elapsed bridge-housekeeping time.
-[[nodiscard]] auto canPing() -> bool;                  // Return true when another heartbeat may be emitted.
-void updateLastSentTime();                             // Reset the ping idle timer after a payload transmission.
-[[nodiscard]] auto isConnected() -> bool;              // Return true when the bridge is still considered online.
-[[nodiscard]] auto isConnected(uint32_t now) -> bool;  // Return bridge liveness using a caller-provided timestamp.
+    -> ReceiveResult;                         // Consume up to N bytes and dispatch at most one complete bridge payload.
+void tickSendIdleTimer(uint16_t elapsed_ms);  // Advance the ping idle timer using the elapsed bridge-housekeeping time.
+[[nodiscard]] auto canPing() -> bool;         // Return true when another heartbeat may be emitted.
+void updateLastSentTime();                    // Reset the ping idle timer after a payload transmission.
+[[nodiscard]] auto isConnected() -> bool;     // Return true when the bridge is still considered online.
 }  // namespace BridgeSerial
 
 #endif  // LSH_CORE_COMMUNICATION_BRIDGE_SERIAL_HPP

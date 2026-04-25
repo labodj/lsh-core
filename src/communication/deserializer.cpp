@@ -69,6 +69,63 @@ namespace
 }
 
 /**
+ * @brief Validate ignored tail bits in the final packed state byte.
+ *
+ * Static profiles know the exact actuator count, so the last byte can reject
+ * bits that do not map to a real actuator. For topologies with a multiple of
+ * eight actuators the compiler elides the check entirely.
+ *
+ * @param byteIndex Current packed state byte index.
+ * @param packedByte Byte received from the bridge.
+ * @return true if the byte cannot address non-existing actuators.
+ * @return false if unused tail bits are set.
+ */
+[[nodiscard]] constexpr auto packedStateByteHasValidTail(uint8_t byteIndex, uint8_t packedByte) -> bool
+{
+    constexpr uint8_t tailBits = static_cast<uint8_t>(CONFIG_MAX_ACTUATORS & 0x07U);
+    if constexpr (tailBits == 0U)
+    {
+        static_cast<void>(byteIndex);
+        static_cast<void>(packedByte);
+        return true;
+    }
+    else
+    {
+        constexpr uint8_t lastByteIndex = static_cast<uint8_t>(CONFIG_PACKED_ACTUATOR_STATE_BYTES - 1U);
+        constexpr uint8_t validTailMask = static_cast<uint8_t>((1U << tailBits) - 1U);
+        return byteIndex != lastByteIndex || (packedByte & static_cast<uint8_t>(~validTailMask)) == 0U;
+    }
+}
+
+template <uint8_t ByteIndex, uint8_t ByteCount> struct PackedStateApplier
+{
+    [[nodiscard]] static auto apply(const JsonArrayConst &statesArray, bool &anyStateChanged) -> bool
+    {
+        uint8_t packedByte = 0U;
+        if (!tryGetPackedStateByte(statesArray[ByteIndex], packedByte))
+        {
+            return false;
+        }
+        if (!packedStateByteHasValidTail(ByteIndex, packedByte))
+        {
+            return false;
+        }
+        anyStateChanged |= lsh::core::static_config::applyPackedActuatorStateByte(ByteIndex, packedByte);
+        return PackedStateApplier<static_cast<uint8_t>(ByteIndex + 1U), ByteCount>::apply(statesArray, anyStateChanged);
+    }
+};
+
+template <uint8_t ByteCount> struct PackedStateApplier<ByteCount, ByteCount>
+{
+    [[nodiscard]] static auto apply(const JsonArrayConst &statesArray, bool &anyStateChanged) -> bool
+    {
+        static_cast<void>(statesArray);
+        static_cast<void>(anyStateChanged);
+        return true;
+    }
+};
+
+/**
  * @brief Validate one JSON scalar as a binary actuator state.
  *
  * @param value JSON value to validate.
@@ -125,8 +182,8 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
         return;  // Invalid click type (was 0 or other value)
     }
 
-    uint8_t clickableIndex = 0U;
-    if (!Clickables::tryGetIndex(clickableId, clickableIndex))
+    const uint8_t clickableIndex = lsh::core::static_config::getClickableIndexById(clickableId);
+    if (clickableIndex >= CONFIG_MAX_CLICKABLES)
     {
         return;
     }
@@ -221,13 +278,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
             {
                 break;
             }
-            uint8_t actuatorIndex = 0U;
-            if (!Actuators::tryGetIndex(id, actuatorIndex))
-            {
-                break;
-            }
-
-            result.stateChanged = Actuators::actuators[actuatorIndex]->setState(state);
+            result.stateChanged = lsh::core::static_config::setActuatorStateById(id, state);
             break;
         }
     case Command::SET_STATE:
@@ -250,14 +301,9 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         }
 
         bool anyStateChanged = false;
-        for (uint8_t byteIndex = 0U; byteIndex < expectedBytes; ++byteIndex)
+        if (!PackedStateApplier<0U, expectedBytes>::apply(statesArray, anyStateChanged))
         {
-            uint8_t packedByte = 0U;
-            if (!tryGetPackedStateByte(statesArray[byteIndex], packedByte))
-            {
-                return result;
-            }
-            anyStateChanged |= lsh::core::static_config::applyPackedActuatorStateByte(byteIndex, packedByte);
+            return result;
         }
         result.stateChanged = anyStateChanged;
         break;

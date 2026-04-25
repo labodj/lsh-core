@@ -31,9 +31,9 @@
  */
 namespace Serializer
 {
-[[nodiscard]] auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool;  // Send a static control payload
-[[nodiscard]] auto serializeDetails() -> bool;                                                // Send generated device details
-[[nodiscard]] auto serializeActuatorsState() -> bool;                                         // Send packed actuator state
+[[nodiscard]] auto serializeStaticPayload(constants::payloads::StaticType payloadType) -> bool;  // Send a static control payload
+[[nodiscard]] auto serializeDetails() -> bool;                                                   // Send generated device details
+[[nodiscard]] auto serializeActuatorsState() -> bool;                                            // Send packed actuator state
 [[nodiscard]] auto serializeNetworkClick(uint8_t clickableIndex,
                                          constants::ClickType clickType,
                                          bool confirm,

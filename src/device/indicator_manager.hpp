@@ -34,11 +34,10 @@ class Indicator;
  */
 namespace Indicators
 {
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
 extern etl::array<Indicator *, CONFIG_MAX_INDICATORS> indicators;
+#endif
 
-void addIndicator(Indicator *indicator, uint8_t indicatorIndex);  // Add one indicator to indicators vector and activate it
-void indicatorsCheck();                                           // Performs an  indicator check for every indicator set
-void finalizeActuatorLinkStorage();
 void finalizeSetup();
 }  // namespace Indicators
 

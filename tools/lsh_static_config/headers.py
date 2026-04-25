@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from .configure import render_configure
 from .cpp import header_guard, render_banner, str_literal
-from .metrics import count_timing_overrides
 from .payloads import render_static_payload_arrays, render_static_payload_writer_helper
 from .profile import collect_static_profile_data
 from .static_accessors import render_static_config_accessors
@@ -40,6 +39,35 @@ def render_user_config(project: ProjectConfig) -> str:
     return "\n".join(lines)
 
 
+def render_static_config_router(project: ProjectConfig) -> str:
+    """Render the pass router that selects one generated static implementation."""
+    lines = render_banner(
+        project.settings.static_config_router_header, project.source_path
+    )
+    lines.extend(
+        [
+            "// Intentionally no include guard: lsh-core includes this router twice",
+            "// with different pass macros. A conventional guard would make the",
+            "// implementation pass disappear after the resource pass.",
+            "",
+        ]
+    )
+    for index, device in enumerate(project.devices.values()):
+        directive = "#if" if index == 0 else "#elif"
+        lines.append(f"{directive} defined({device.build_macro})")
+        lines.append(f"#include {str_literal(device.static_config_include)}")
+    lines.append("#else")
+    choices = ", ".join(device.build_macro for device in project.devices.values())
+    lines.append(f"// Available profiles: {choices}.")
+    lines.append(
+        '#error "No lsh-core static profile selected. Define exactly one generated '
+        'LSH_BUILD_* macro."'
+    )
+    lines.append("#endif")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_device_config(device: DeviceConfig, project: ProjectConfig) -> str:
     """Render one device constants header."""
     lines = render_banner(device.config_include, project.source_path)
@@ -50,11 +78,22 @@ def render_device_config(device: DeviceConfig, project: ProjectConfig) -> str:
             f"#define {guard}",
             "",
             f"#define LSH_HARDWARE_INCLUDE {device.hardware_include}",
-            f"#define LSH_DEVICE_NAME {str_literal(device.device_name)}",
-            "#define LSH_STATIC_CONFIG_INCLUDE "
-            f"{str_literal(device.static_config_include)}",
-            f"#define LSH_COM_SERIAL {device.com_serial}",
-            f"#define LSH_DEBUG_SERIAL {device.debug_serial}",
+            "#include LSH_HARDWARE_INCLUDE",
+            "",
+            "static constexpr auto LSH_DEVICE_NAME() -> const char *",
+            "{",
+            f"    return {str_literal(device.device_name)};",
+            "}",
+            "",
+            "static constexpr auto LSH_COM_SERIAL() -> HardwareSerial *",
+            "{",
+            f"    return {device.com_serial};",
+            "}",
+            "",
+            "static constexpr auto LSH_DEBUG_SERIAL() -> HardwareSerial *",
+            "{",
+            f"    return {device.debug_serial};",
+            "}",
             "",
             f"#endif  // {guard}",
             "",
@@ -130,7 +169,6 @@ def render_static_config(device: DeviceConfig, project: ProjectConfig) -> str:
         "LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS": profile.long_links,
         "LSH_STATIC_CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINKS": profile.super_long_links,
         "LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS": profile.indicator_links,
-        "LSH_STATIC_CONFIG_CLICKABLE_TIMING_OVERRIDES": count_timing_overrides(device),
         "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS": len(profile.auto_off_indexes),
         "LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS": profile.active_network_clicks,
         "LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS": 1
@@ -153,11 +191,19 @@ def render_static_config(device: DeviceConfig, project: ProjectConfig) -> str:
     )
     lines.extend(
         [
+            '#include "communication/bridge_serial.hpp"',
+            '#include "config/static_config.hpp"',
+            '#include "core/network_clicks.hpp"',
             '#include "device/actuator_manager.hpp"',
             '#include "device/clickable_manager.hpp"',
             '#include "device/indicator_manager.hpp"',
             '#include "lsh_user_macros.hpp"',
+            '#include "util/constants/click_detection.hpp"',
+            '#include "util/constants/click_results.hpp"',
+            '#include "util/constants/click_types.hpp"',
             '#include "util/constants/timing.hpp"',
+            '#include "util/debug/debug.hpp"',
+            '#include "util/time_keeper.hpp"',
             "",
             "#if defined(__AVR__)",
             "#include <avr/pgmspace.h>",
@@ -202,6 +248,10 @@ def generated_files(
     output_dir = project.settings.output_dir
     files: dict[Path, str] = {
         output_dir / project.settings.user_config_header: render_user_config(project),
+        output_dir
+        / project.settings.static_config_router_header: render_static_config_router(
+            project
+        ),
     }
     for key in selected_devices:
         device = project.devices[key]

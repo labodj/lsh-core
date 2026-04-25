@@ -84,7 +84,7 @@ template <typename T> __attribute__((always_inline)) constexpr inline void DPJ(c
  * @brief Debug: Print Free Memory
  *
  */
-inline void DFM()
+[[maybe_unused]] static void DFM()
 {
     DPL(FPSTR(dStr::FREE_MEMORY), FPSTR(dStr::COLON_SPACE), freeMemory());
 }

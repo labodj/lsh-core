@@ -20,9 +20,6 @@
 
 #include "communication/bridge_serial.hpp"
 
-#include <Print.h>
-
-#include "communication/checked_writer.hpp"
 #include "communication/deserializer.hpp"
 #include "communication/msgpack_serial_framing.hpp"
 #include "communication/constants/config.hpp"
@@ -36,7 +33,6 @@ namespace BridgeSerial
 using namespace Debug;
 #ifdef CONFIG_MSG_PACK
 using lsh::core::transport::MsgPackFrameConsumeResult;
-using lsh::core::transport::MsgPackFrameWriter;
 #endif
 
 uint16_t sendIdleAge_ms = UINT16_MAX;     //!< Elapsed idle time since the last payload was sent, saturated at 65535 ms.
@@ -71,59 +67,6 @@ bool discardUntilNewline = false;                                     //!< True 
 void init()
 {
     CONFIG_COM_SERIAL->HardwareSerial::begin(constants::bridgeSerial::COM_SERIAL_BAUD, SERIAL_8N1);
-}
-
-/**
- * @brief Send one protocol document to the bridge using the selected serial codec.
- *
- * This helper centralizes the actual wire write so every payload goes through
- * the same codec selection, optional framing, optional flush policy and
- * timestamp bookkeeping.
- *
- * @param documentToSend ArduinoJson document to serialize as JSON or MsgPack.
- * @return true if the full payload and any required transport delimiters were
- *         accepted by the UART.
- * @return false if serialization produced no payload bytes or if the UART
- *         accepted only part of the frame.
- */
-auto sendJson(const JsonDocument &documentToSend) -> bool
-{
-    DP_CONTEXT();
-#ifdef CONFIG_MSG_PACK
-    MsgPackFrameWriter framedWriter(*CONFIG_COM_SERIAL);
-    if (!framedWriter.beginFrame())
-    {
-        return false;
-    }
-
-    lsh::core::communication::CheckedWriter<MsgPackFrameWriter> checkedWriter(framedWriter);
-    const size_t writtenPayloadBytes = serializeMsgPack(documentToSend, checkedWriter);
-    const bool frameEnded = framedWriter.endFrame();
-    if (writtenPayloadBytes == 0U || checkedWriter.failed() || !frameEnded)
-    {
-        return false;
-    }
-#else
-    lsh::core::communication::CheckedWriter<Print> checkedWriter(*CONFIG_COM_SERIAL);
-    const size_t writtenPayloadBytes = serializeJson(documentToSend, checkedWriter);
-    const size_t writtenDelimiterBytes =
-        checkedWriter.write(static_cast<uint8_t>('\n'));  // Add a newline character after sending the JSON payload.
-    if (writtenPayloadBytes == 0U || writtenDelimiterBytes != 1U || checkedWriter.failed())
-    {
-        return false;
-    }
-#endif  // CONFIG_MSG_PACK
-    if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
-    {
-        // Conservative default: this path is the currently validated, known-good setup.
-        // The compile-time switch exists only to evaluate whether the link stays
-        // resilient even without a blocking flush after each send.
-        CONFIG_COM_SERIAL->HardwareSerial::flush();
-    }
-    DP(FPSTR(dStr::JSON_SENT), FPSTR(dStr::COLON_SPACE));
-    DPJ(documentToSend);
-    updateLastSentTime();
-    return true;
 }
 
 /**
@@ -318,21 +261,6 @@ auto isConnected() -> bool
     DP_CONTEXT();
     using constants::bridgeSerial::CONNECTION_TIMEOUT_MS;
     return receiveIdleAge_ms < CONNECTION_TIMEOUT_MS;
-}
-
-/**
- * @brief Source-compatible bridge liveness overload.
- * @details Liveness is now tracked by `receiveIdleAge_ms`, so the caller's
- *          timestamp is ignored.
- *
- * @param now Ignored legacy timestamp.
- * @return true if the bridge answered recently enough.
- * @return false if the bridge never answered or timed out.
- */
-auto isConnected(uint32_t now) -> bool
-{
-    static_cast<void>(now);
-    return isConnected();
 }
 
 }  // namespace BridgeSerial

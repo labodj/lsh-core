@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import cast
 
 from .constants import (
     DURATION_RE,
@@ -33,9 +33,7 @@ from .models import (
     TomlTable,
     TomlValue,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Callable, Hashable, Iterable, Sequence
+from .validation import validate_device
 
 try:
     import tomllib
@@ -45,8 +43,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised only on Python < 3.1
     except ModuleNotFoundError:
         message = "TOML support requires Python 3.11+ or `pip install tomli`."
         raise SystemExit(message) from None
-
-TConfig = TypeVar("TConfig")
 
 
 def expect_table(value: TomlValue | None, path: str) -> TomlTable:
@@ -279,6 +275,24 @@ def _parse_click_type(raw_type: str, path: str, action_name: str) -> str:
     return SUPER_LONG_CLICK_TYPES[raw_type]
 
 
+def _apply_click_targets(action: ClickAction, table: TomlTable, path: str) -> None:
+    """Apply the supported local target aliases to a click action."""
+    if "targets" in table:
+        action.targets = parse_targets(table["targets"], f"{path}.targets")
+    elif "actuators" in table:
+        action.targets = parse_targets(table["actuators"], f"{path}.actuators")
+
+
+def _apply_click_timing(action: ClickAction, table: TomlTable, path: str) -> None:
+    """Apply long/super-long threshold aliases to a click action."""
+    if "time" in table:
+        action.time_ms = parse_duration_ms(table["time"], f"{path}.time", UINT16_MAX)
+    if "time_ms" in table:
+        action.time_ms = parse_duration_ms(
+            table["time_ms"], f"{path}.time_ms", UINT16_MAX
+        )
+
+
 def _apply_click_action_table(
     action: ClickAction,
     table: TomlTable,
@@ -286,10 +300,7 @@ def _apply_click_action_table(
     action_name: str,
 ) -> None:
     """Apply table-only click options to an already-created action."""
-    if "targets" in table:
-        action.targets = parse_targets(table["targets"], f"{path}.targets")
-    elif "actuators" in table:
-        action.targets = parse_targets(table["actuators"], f"{path}.actuators")
+    _apply_click_targets(action, table, path)
 
     if "type" in table:
         raw_type = expect_string(table["type"], f"{path}.type").lower()
@@ -305,12 +316,7 @@ def _apply_click_action_table(
             fail(f"{path}.fallback must be one of: {choices}.")
         action.fallback = NETWORK_FALLBACKS[raw_fallback]
 
-    if "time" in table:
-        action.time_ms = parse_duration_ms(table["time"], f"{path}.time", UINT16_MAX)
-    if "time_ms" in table:
-        action.time_ms = parse_duration_ms(
-            table["time_ms"], f"{path}.time_ms", UINT16_MAX
-        )
+    _apply_click_timing(action, table, path)
 
 
 def _validate_click_action(action: ClickAction, path: str, action_name: str) -> None:
@@ -480,178 +486,6 @@ def parse_indicators(raw: TomlValue | None, path: str) -> list[IndicatorConfig]:
     return indicators
 
 
-def validate_unique(
-    values: Iterable[TConfig],
-    field_name: str,
-    path: str,
-    value_of: Callable[[TConfig], Hashable],
-) -> None:
-    """Reject duplicate values while preserving source indexes in the error."""
-    seen: dict[Hashable, int] = {}
-    for index, item in enumerate(values):
-        value = value_of(item)
-        if value in seen:
-            fail(
-                f"{path}[{index}].{field_name} duplicates "
-                f"{path}[{seen[value]}].{field_name}: {value!r}."
-            )
-        seen[value] = index
-
-
-def _validate_resource_count(count: int, path: str) -> None:
-    """Keep every generated index representable as a uint8_t."""
-    if count > UINT8_MAX:
-        fail(f"{path} cannot contain more than {UINT8_MAX} entries.")
-
-
-def _validate_resource_counts(device: DeviceConfig) -> None:
-    """Validate generated array/index limits for one device."""
-    _validate_resource_count(
-        len(device.actuators),
-        f"devices.{device.key}.actuators",
-    )
-    _validate_resource_count(
-        len(device.clickables),
-        f"devices.{device.key}.clickables",
-    )
-    _validate_resource_count(
-        len(device.indicators),
-        f"devices.{device.key}.indicators",
-    )
-
-
-def _validate_unique_fields(device: DeviceConfig) -> None:
-    """Validate all user IDs and C++ object names for one device."""
-    validate_unique(
-        device.actuators,
-        "name",
-        f"devices.{device.key}.actuators",
-        lambda actuator: actuator.name,
-    )
-    validate_unique(
-        device.actuators,
-        "actuator_id",
-        f"devices.{device.key}.actuators",
-        lambda actuator: actuator.actuator_id,
-    )
-    validate_unique(
-        device.clickables,
-        "name",
-        f"devices.{device.key}.clickables",
-        lambda clickable: clickable.name,
-    )
-    validate_unique(
-        device.clickables,
-        "clickable_id",
-        f"devices.{device.key}.clickables",
-        lambda clickable: clickable.clickable_id,
-    )
-    validate_unique(
-        device.indicators,
-        "name",
-        f"devices.{device.key}.indicators",
-        lambda indicator: indicator.name,
-    )
-
-    object_names: set[str] = set()
-    for actuator in device.actuators:
-        _validate_cpp_object_name(device.key, "actuators", actuator.name, object_names)
-    for clickable in device.clickables:
-        _validate_cpp_object_name(
-            device.key,
-            "clickables",
-            clickable.name,
-            object_names,
-        )
-    for indicator in device.indicators:
-        _validate_cpp_object_name(
-            device.key,
-            "indicators",
-            indicator.name,
-            object_names,
-        )
-
-
-def _validate_cpp_object_name(
-    device_key: str,
-    group_name: str,
-    object_name: str,
-    used_names: set[str],
-) -> None:
-    """Reject cross-resource name reuse before generating C++ variables."""
-    if object_name in used_names:
-        fail(
-            f"devices.{device_key}.{group_name}.{object_name} reuses a C++ "
-            "object name already used by another resource."
-        )
-    used_names.add(object_name)
-
-
-def _validate_clickable_targets(device: DeviceConfig) -> None:
-    """Validate clickable local links and ensure every clickable can fire."""
-    actuator_names = {actuator.name for actuator in device.actuators}
-    for clickable in device.clickables:
-        validate_target_set(
-            clickable.short_targets,
-            actuator_names,
-            f"devices.{device.key}.clickables.{clickable.name}.short",
-        )
-        validate_target_set(
-            clickable.long.targets,
-            actuator_names,
-            f"devices.{device.key}.clickables.{clickable.name}.long",
-        )
-        validate_target_set(
-            clickable.super_long.targets,
-            actuator_names,
-            f"devices.{device.key}.clickables.{clickable.name}.super_long",
-        )
-        if (
-            not clickable.short_enabled
-            and not clickable.long.enabled
-            and not clickable.super_long.enabled
-        ):
-            fail(
-                f"devices.{device.key}.clickables.{clickable.name} has no "
-                "enabled click action."
-            )
-
-
-def _validate_indicator_targets(device: DeviceConfig) -> None:
-    """Validate indicator links and reject inert indicators."""
-    actuator_names = {actuator.name for actuator in device.actuators}
-    for indicator in device.indicators:
-        validate_target_set(
-            indicator.targets,
-            actuator_names,
-            f"devices.{device.key}.indicators.{indicator.name}.actuators",
-        )
-        if not indicator.targets:
-            fail(
-                f"devices.{device.key}.indicators.{indicator.name} must "
-                "reference at least one actuator."
-            )
-
-
-def validate_device(device: DeviceConfig) -> None:
-    """Validate cross-resource references and static resource limits."""
-    _validate_resource_counts(device)
-    _validate_unique_fields(device)
-    _validate_clickable_targets(device)
-    _validate_indicator_targets(device)
-
-
-def validate_target_set(targets: Sequence[str], allowed: set[str], path: str) -> None:
-    """Validate target names and reject duplicate actuator links."""
-    seen: set[str] = set()
-    for target in targets:
-        if target not in allowed:
-            fail(f"{path} references unknown actuator {target!r}.")
-        if target in seen:
-            fail(f"{path} references actuator {target!r} more than once.")
-        seen.add(target)
-
-
 def parse_project(path: Path) -> ProjectConfig:
     """Load, validate and normalize one TOML project file."""
     try:
@@ -685,6 +519,15 @@ def parse_project(path: Path) -> ProjectConfig:
                 "lsh_user_config.hpp",
             ),
             "generator.user_config_header",
+        ),
+        static_config_router_header=safe_path_fragment(
+            get_string(
+                generator_table,
+                "static_config_router_header",
+                "generator",
+                "lsh_static_config_router.hpp",
+            ),
+            "generator.static_config_router_header",
         ),
     )
 

@@ -41,10 +41,33 @@ namespace
     return CONFIG_COM_SERIAL->HardwareSerial::write(byte) == 1U;
 }
 
+template <size_t Index, size_t PayloadLength> struct LiteralByteWriter
+{
+    template <size_t Size> [[nodiscard]] static auto write(const char (&literal)[Size]) -> bool
+    {
+        return writeSerialByte(static_cast<uint8_t>(literal[Index])) && LiteralByteWriter<Index + 1U, PayloadLength>::write(literal);
+    }
+};
+
+template <size_t PayloadLength> struct LiteralByteWriter<PayloadLength, PayloadLength>
+{
+    template <size_t Size> [[nodiscard]] static auto write(const char (&literal)[Size]) -> bool
+    {
+        static_cast<void>(literal);
+        return true;
+    }
+};
+
 template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Size]) -> bool
 {
     static_assert(Size > 0U, "String literal must include a null terminator.");
-    for (size_t index = 0U; index < (Size - 1U); ++index)
+    constexpr size_t payloadLength = Size - 1U;
+    if constexpr (payloadLength <= 64U)
+    {
+        return LiteralByteWriter<0U, payloadLength>::write(literal);
+    }
+
+    for (size_t index = 0U; index < payloadLength; ++index)
     {
         if (!writeSerialByte(static_cast<uint8_t>(literal[index])))
         {
@@ -142,6 +165,23 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     return writeSerialByte(lsh::core::transport::MSGPACK_FRAME_END);
 }
 
+template <uint8_t ByteIndex, uint8_t ByteCount> struct MsgPackPackedStateWriter
+{
+    [[nodiscard]] static auto write() -> bool
+    {
+        return writeMsgPackUint(Actuators::packedActuatorStates[ByteIndex]) &&
+               MsgPackPackedStateWriter<static_cast<uint8_t>(ByteIndex + 1U), ByteCount>::write();
+    }
+};
+
+template <uint8_t ByteCount> struct MsgPackPackedStateWriter<ByteCount, ByteCount>
+{
+    [[nodiscard]] static auto write() -> bool
+    {
+        return true;
+    }
+};
+
 [[nodiscard]] auto writeMsgPackActuatorsStatePayload() -> bool
 {
     using lsh::core::protocol::Command;
@@ -152,15 +192,7 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
         return false;
     }
 
-    for (uint8_t byteIndex = 0U; byteIndex < byteCount; ++byteIndex)
-    {
-        if (!writeMsgPackUint(Actuators::packedActuatorStates[byteIndex]))
-        {
-            return false;
-        }
-    }
-
-    return endMsgPackFrame();
+    return MsgPackPackedStateWriter<0U, byteCount>::write() && endMsgPackFrame();
 }
 
 #if CONFIG_USE_NETWORK_CLICKS
@@ -193,6 +225,27 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     return writeSerialByte(static_cast<uint8_t>('0' + value));
 }
 
+template <uint8_t ByteIndex, uint8_t ByteCount> struct JsonPackedStateWriter
+{
+    [[nodiscard]] static auto write() -> bool
+    {
+        if (ByteIndex != 0U && !writeSerialByte(static_cast<uint8_t>(',')))
+        {
+            return false;
+        }
+        return writeUint8Decimal(Actuators::packedActuatorStates[ByteIndex]) &&
+               JsonPackedStateWriter<static_cast<uint8_t>(ByteIndex + 1U), ByteCount>::write();
+    }
+};
+
+template <uint8_t ByteCount> struct JsonPackedStateWriter<ByteCount, ByteCount>
+{
+    [[nodiscard]] static auto write() -> bool
+    {
+        return true;
+    }
+};
+
 [[nodiscard]] auto writeJsonActuatorsStatePayload() -> bool
 {
     if (!writeLiteral("{\"p\":2,\"s\":["))
@@ -201,19 +254,7 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     }
 
     constexpr uint8_t byteCount = CONFIG_PACKED_ACTUATOR_STATE_BYTES;
-    for (uint8_t byteIndex = 0U; byteIndex < byteCount; ++byteIndex)
-    {
-        if (byteIndex != 0U && !writeSerialByte(static_cast<uint8_t>(',')))
-        {
-            return false;
-        }
-        if (!writeUint8Decimal(Actuators::packedActuatorStates[byteIndex]))
-        {
-            return false;
-        }
-    }
-
-    return writeLiteral("]}\n");
+    return JsonPackedStateWriter<0U, byteCount>::write() && writeLiteral("]}\n");
 }
 
 #if CONFIG_USE_NETWORK_CLICKS
@@ -238,7 +279,7 @@ using lsh::core::protocol::Command;
  *
  * @param payloadType type of the payload.
  */
-auto serializeStaticJson(constants::payloads::StaticType payloadType) -> bool
+auto serializeStaticPayload(constants::payloads::StaticType payloadType) -> bool
 {
     using constants::payloads::StaticType;
     if (payloadType == StaticType::PING_ && !BridgeSerial::canPing())
