@@ -1,6 +1,6 @@
 {
   "name": "lsh-core",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Deterministic C++ framework for Arduino/Controllino controllers in the LSH ecosystem.",
   "keywords": [
     "arduino",
