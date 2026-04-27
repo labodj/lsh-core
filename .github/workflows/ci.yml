@@ -280,6 +280,42 @@ jobs:
           name: lsh-core ${{ github.ref_name }}
           generate_release_notes: true
 
+  publish-platformio-registry:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install PlatformIO
+        run: python3 -m pip install --upgrade pip "platformio==6.1.19"
+
+      - name: Publish library to PlatformIO Registry
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${PLATFORMIO_AUTH_TOKEN:-}" ]; then
+            echo "PLATFORMIO_AUTH_TOKEN GitHub secret is not configured."
+            exit 1
+          fi
+
+          package_path=$(mktemp --suffix=.tar.gz)
+          trap 'rm -f "$package_path"' EXIT
+
+          platformio pkg pack --output "$package_path"
+          platformio pkg publish "$package_path" --owner labodj --type library --no-interactive
+
   publish-release-docs:
     needs: release
     if: startsWith(github.ref, 'refs/tags/v')
