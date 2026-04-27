@@ -1,8 +1,10 @@
 # lsh-core: Controller Firmware for Labo Smart Home
 
-[![Build Status](https://github.com/labodj/lsh-core/actions/workflows/ci.yml/badge.svg)](https://github.com/labodj/lsh-core/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/labodj/lsh-core?display_name=tag&sort=semver)](https://github.com/labodj/lsh-core/releases/latest)
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/labodj/library/lsh-core.svg)](https://registry.platformio.org/libraries/labodj/lsh-core)
+[![CI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Flabodj%2Flsh-core%2Factions%2Fworkflows%2Fci.yml%2Fruns%3Fper_page%3D1&query=%24.workflow_runs%5B0%5D.conclusion&label=CI)](https://github.com/labodj/lsh-core/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/release/labodj/lsh-core.svg)](https://github.com/labodj/lsh-core/releases/latest)
 [![API Documentation](https://img.shields.io/badge/API%20Reference-Doxygen-blue.svg)](https://labodj.github.io/lsh-core/)
+[![License](https://img.shields.io/github/license/labodj/lsh-core.svg)](https://github.com/labodj/lsh-core/blob/main/LICENSE)
 
 `lsh-core` is the controller-side firmware library for the **Labo Smart Home
 (LSH)** ecosystem. It runs on Arduino-compatible controllers, reads wired
@@ -53,7 +55,7 @@ Use this README in different ways depending on what you need:
 - If you are not using Controllino hardware, jump to [AVR Board Compatibility](#avr-board-compatibility).
 - If you want to wire a controller correctly, jump to [Hardware & Electrical Setup](#hardware--electrical-setup).
 - If you want to build your first controller project, jump to [Getting Started: Creating Your Project](#getting-started-creating-your-project).
-- If you want declarative TOML examples, read the [static config guide](./docs/static-toml-config.md) and the [configuration cookbook](./docs/cookbook.md).
+- If you want declarative TOML examples, read the [static config guide](https://github.com/labodj/lsh-core/blob/main/docs/static-toml-config.md) and the [configuration cookbook](https://github.com/labodj/lsh-core/blob/main/docs/cookbook.md).
 - If you want click semantics, fallbacks and network behavior, jump to [Configuring Device Behavior](#configuring-device-behavior).
 - If you want compile-time tuning knobs, jump to [Feature Flags](#feature-flags).
 - If you want class- and method-level details for the latest released API, use the [Doxygen API reference](https://labodj.github.io/lsh-core/).
@@ -62,7 +64,7 @@ Use this README in different ways depending on what you need:
 
 The fastest concrete starting point in this repository is:
 
-- [examples/multi-device-project](./examples/multi-device-project)
+- [examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project)
 
 It already shows a reusable multi-device PlatformIO layout with separate device
 profiles, a TOML source file and generated headers.
@@ -74,8 +76,8 @@ Useful example profiles:
 
 For copyable configuration recipes, see:
 
-- [docs/cookbook.md](./docs/cookbook.md)
-- [examples/cookbook](./examples/cookbook)
+- [docs/cookbook.md](https://github.com/labodj/lsh-core/blob/main/docs/cookbook.md)
+- [examples/cookbook](https://github.com/labodj/lsh-core/tree/main/examples/cookbook)
 
 Build it directly from this repository:
 
@@ -86,7 +88,7 @@ platformio run -d examples/multi-device-project -e J2_release
 
 The generic AVR compatibility example is:
 
-- [examples/avr-board-matrix](./examples/avr-board-matrix)
+- [examples/avr-board-matrix](https://github.com/labodj/lsh-core/tree/main/examples/avr-board-matrix)
 
 It verifies a minimal non-Controllino profile on Arduino Mega 2560, Uno and
 Nano targets.
@@ -242,7 +244,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    platform = atmelavr
    framework = arduino
    board = controllino_maxi
-   lib_deps = labodj/lsh-core @ ^3.0.6
+   lib_deps = labodj/lsh-core @ ^3.0.7
    build_unflags = -std=gnu++11 -std=c++11
    build_flags =
        -I include
@@ -253,7 +255,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    a local checkout:
 
    ```ini
-   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.6
+   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.7
    ; or, inside this repository's bundled examples:
    ; lib_deps = lsh-core=symlink://../..
    ```
@@ -293,7 +295,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    `custom_lsh_device`.
 
 For a complete working layout, copy the shape of
-[examples/multi-device-project](./examples/multi-device-project) instead of
+[examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project) instead of
 starting from a blank file.
 
 ### Core Configuration Concepts
@@ -463,13 +465,13 @@ build_flags =
 ## Configuring Device Behavior
 
 The current public configuration surface is TOML. New profiles should follow
-[docs/static-toml-config.md](docs/static-toml-config.md); the build generates
+[docs/static-toml-config.md](https://github.com/labodj/lsh-core/blob/main/docs/static-toml-config.md); the build generates
 the static C++ profile from that file and keeps dense indexes, resource counts
 and lookup accessors out of user-authored code.
 
-The bundled [examples/all-options-toml](examples/all-options-toml) catalog shows
+The bundled [examples/all-options-toml](https://github.com/labodj/lsh-core/tree/main/examples/all-options-toml) catalog shows
 every accepted TOML option and is validated by CI. Use it as a syntax reference;
-use [examples/multi-device-project](examples/multi-device-project) as the
+use [examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project) as the
 buildable starting point.
 
 The generator also provides adoption tooling:
@@ -478,7 +480,7 @@ The generator also provides adoption tooling:
   firmware surprises.
 - `--format-config` rewrites schema v2 TOML into a deterministic order.
 - `--print-json-schema` prints the editor schema committed at
-  [docs/lsh_devices.schema.json](docs/lsh_devices.schema.json).
+  [docs/lsh_devices.schema.json](https://github.com/labodj/lsh-core/blob/main/docs/lsh_devices.schema.json).
 - `python3 tools/migrate_lsh_config.py` performs a one-shot conversion from
   pre-v2 TOML.
 
@@ -631,9 +633,9 @@ The same bootstrapping contract is used outside of clicks:
 For the public reference profile behind this flow, see:
 
 - [LSH reference stack](https://github.com/labodj/labo-smart-home/blob/main/REFERENCE_STACK.md)
-- [vendor/lsh-protocol/docs/profiles-and-roles.md](vendor/lsh-protocol/docs/profiles-and-roles.md)
+- [vendor/lsh-protocol/docs/profiles-and-roles.md](https://github.com/labodj/lsh-core/blob/main/vendor/lsh-protocol/docs/profiles-and-roles.md)
 
-For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](vendor/lsh-protocol/shared/lsh_protocol.md).
+For the canonical command IDs, compact key map and golden JSON examples generated from the shared spec, see [vendor/lsh-protocol/shared/lsh_protocol.md](https://github.com/labodj/lsh-core/blob/main/vendor/lsh-protocol/shared/lsh_protocol.md).
 
 The protocol maintenance workflow itself is documented once in the vendored subtree README at `vendor/lsh-protocol/README.md`. This README only keeps the `lsh-core`-specific invariants and runtime behavior.
 
@@ -880,7 +882,7 @@ These flags are intended for development and performance testing of the LSH-Core
 
 ### ETL profile override
 
-`lsh-core` ships with a default [etl_profile.h](./include/etl_profile.h) so the
+`lsh-core` ships with a default [etl_profile.h](https://github.com/labodj/lsh-core/blob/main/include/etl_profile.h) so the
 common Arduino/PlatformIO case works out of the box.
 
 That default profile intentionally sets only the library policy knobs that are
@@ -909,9 +911,9 @@ project-level `etl_profile.h` earlier in the include path and bypass the one
 shipped by `lsh-core`.
 
 The bundled example project already demonstrates this hook through
-[examples/multi-device-project/include/lsh_etl_profile_override.h](./examples/multi-device-project/include/lsh_etl_profile_override.h)
+[examples/multi-device-project/include/lsh_etl_profile_override.h](https://github.com/labodj/lsh-core/blob/main/examples/multi-device-project/include/lsh_etl_profile_override.h)
 and the matching `LSH_ETL_PROFILE_OVERRIDE_HEADER` flag in
-[examples/multi-device-project/platformio.ini](./examples/multi-device-project/platformio.ini).
+[examples/multi-device-project/platformio.ini](https://github.com/labodj/lsh-core/blob/main/examples/multi-device-project/platformio.ini).
 
 ## Building and Uploading
 
@@ -943,5 +945,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers should prefer:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^3.0.6
+lib_deps = labodj/lsh-core @ ^3.0.7
 ```

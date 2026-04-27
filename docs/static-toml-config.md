@@ -37,7 +37,7 @@ Install the library from the PlatformIO Registry:
 platform = atmelavr
 framework = arduino
 board = controllino_maxi
-lib_deps = labodj/lsh-core @ ^3.0.6
+lib_deps = labodj/lsh-core @ ^3.0.7
 ```
 
 Then create `lsh_devices.toml` in the consumer project with the guided
