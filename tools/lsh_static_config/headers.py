@@ -9,7 +9,13 @@ from .configure import render_configure
 from .cpp import header_guard, render_banner, str_literal
 from .payloads import render_static_payload_arrays, render_static_payload_writer_helper
 from .profile import collect_static_profile_data
+from .resource_macros import render_static_resource_macros
 from .static_accessors import render_static_config_accessors
+from .topology import (
+    actuator_object_name,
+    clickable_object_name,
+    indicator_object_name,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -110,31 +116,34 @@ def render_object_declarations(device: DeviceConfig) -> list[str]:
     lines.extend(render_static_payload_writer_helper())
     if device.actuators or device.clickables or device.indicators:
         lines.append("")
-    lines.extend(render_actuator_declaration(actuator) for actuator in device.actuators)
+    lines.extend(
+        render_actuator_declaration(index, actuator)
+        for index, actuator in enumerate(device.actuators)
+    )
     if device.actuators and device.clickables:
         lines.append("")
     lines.extend(
-        f"LSH_BUTTON({clickable.name}, {clickable.pin});"
-        for clickable in device.clickables
+        f"LSH_BUTTON({clickable_object_name(index, clickable)}, {clickable.pin});"
+        for index, clickable in enumerate(device.clickables)
     )
     if device.clickables and device.indicators:
         lines.append("")
     lines.extend(
-        f"LSH_INDICATOR({indicator.name}, {indicator.pin});"
-        for indicator in device.indicators
+        f"LSH_INDICATOR({indicator_object_name(index, indicator)}, {indicator.pin});"
+        for index, indicator in enumerate(device.indicators)
     )
     lines.append("}  // namespace")
     return lines
 
 
-def render_actuator_declaration(actuator: ActuatorConfig) -> str:
+def render_actuator_declaration(index: int, actuator: ActuatorConfig) -> str:
     """Render one generated actuator object declaration."""
+    object_name = actuator_object_name(index, actuator)
     if actuator.default_state:
         return (
-            f"Actuator {actuator.name}"
-            f"(::lsh::core::PinTag<({actuator.pin})>{{}}, true);"
+            f"Actuator {object_name}(::lsh::core::PinTag<({actuator.pin})>{{}}, true);"
         )
-    return f"LSH_ACTUATOR({actuator.name}, {actuator.pin});"
+    return f"LSH_ACTUATOR({object_name}, {actuator.pin});"
 
 
 def render_static_config(device: DeviceConfig, project: ProjectConfig) -> str:
@@ -155,28 +164,7 @@ def render_static_config(device: DeviceConfig, project: ProjectConfig) -> str:
             "",
         ]
     )
-    resource_macros = {
-        "LSH_STATIC_CONFIG_CLICKABLES": len(device.clickables),
-        "LSH_STATIC_CONFIG_ACTUATORS": len(device.actuators),
-        "LSH_STATIC_CONFIG_INDICATORS": len(device.indicators),
-        "LSH_STATIC_CONFIG_MAX_CLICKABLE_ID": max(profile.clickable_ids)
-        if profile.clickable_ids
-        else 1,
-        "LSH_STATIC_CONFIG_MAX_ACTUATOR_ID": max(profile.actuator_ids)
-        if profile.actuator_ids
-        else 1,
-        "LSH_STATIC_CONFIG_SHORT_CLICK_ACTUATOR_LINKS": profile.short_links,
-        "LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS": profile.long_links,
-        "LSH_STATIC_CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINKS": profile.super_long_links,
-        "LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS": profile.indicator_links,
-        "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS": len(profile.auto_off_indexes),
-        "LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS": profile.active_network_clicks,
-        "LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS": 1
-        if profile.active_network_clicks == 0
-        else 0,
-    }
-    for macro, value in resource_macros.items():
-        lines.append(f"#define {macro} {value}")
+    lines.extend(render_static_resource_macros(device, profile))
     lines.extend(
         [
             "",

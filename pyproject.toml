@@ -40,6 +40,7 @@ ignore = [
 [tool.mypy]
 files = [
   "tools/generate_lsh_static_config.py",
+  "tools/migrate_lsh_config.py",
   "tools/lsh_static_config",
   "tools/platformio_lsh_static_config.py",
 ]
@@ -63,6 +64,7 @@ project-excludes = [
 search-path = ["."]
 python-platform = "linux"
 python-version = "3.14"
+python-interpreter-path = ".venv/bin/python"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

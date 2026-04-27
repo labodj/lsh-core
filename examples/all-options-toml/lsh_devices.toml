@@ -1,11 +1,7 @@
-# Exhaustive static-config catalog for lsh-core.
-#
-# This file is intentionally broader than a real installation profile. It shows
-# every user-facing TOML field, define value shape, duration shape, click action
-# shape and indicator mode currently accepted by the generator.
-#
-# CI validates this file by copying it to a temporary directory and generating
-# headers there. The generated output directory below is ignored on purpose.
+#:schema ../../docs/lsh_devices.schema.json
+
+schema_version = 2
+preset = "controllino-maxi/fast-msgpack"
 
 [generator]
 output_dir = "generated"
@@ -13,193 +9,231 @@ config_dir = "all_options_configs"
 user_config_header = "lsh_all_options_config.hpp"
 static_config_router_header = "lsh_all_options_static_router.hpp"
 
-[common]
+[controller]
 hardware_include = "Controllino.h"
 debug_serial = "Serial"
-com_serial = "Serial2"
-raw_build_flags = [
-  "-D SERIAL_RX_BUFFER_SIZE=256U",
-  "-D SERIAL_TX_BUFFER_SIZE=128U",
-  "-flto=auto",
-]
+bridge_serial = "Serial2"
+disable_rtc = false
+disable_eth = false
+controllino_pin_aliases = true
 
-[common.defines]
-CONFIG_MSG_PACK = true
-CONFIG_USE_FAST_CLICKABLES = true
-CONFIG_USE_FAST_ACTUATORS = true
-CONFIG_USE_FAST_INDICATORS = true
-CONFIG_ACTUATOR_DEBOUNCE_TIME_MS = 0
-CONFIG_CLICKABLE_DEBOUNCE_TIME_MS = 8
-CONFIG_CLICKABLE_SCAN_INTERVAL_MS = 2
-CONFIG_CLICKABLE_LONG_CLICK_TIME_MS = 450
-CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS = 1200
-CONFIG_LCNB_TIMEOUT_MS = 900
-CONFIG_PING_INTERVAL_MS = 7000
-CONFIG_CONNECTION_TIMEOUT_MS = 7300
-CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS = 200
-CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS = 1300
-CONFIG_DEBUG_SERIAL_BAUD = 500000
-CONFIG_COM_SERIAL_BAUD = 500000
-CONFIG_COM_SERIAL_TIMEOUT_MS = 4
-CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS = 4
-CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP = 5
-CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP = 64
-CONFIG_COM_SERIAL_FLUSH_AFTER_SEND = 0
-CONFIG_DELAY_AFTER_RECEIVE_MS = 25
-CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS = 20
-CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS = 250
-CONFIG_LSH_BENCH = true
-CONFIG_BENCH_ITERATIONS = 10000
-LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS = true
-LSH_DISABLE_AGGRESSIVE_CONSTEXPR_CTORS = false
-LSH_ETL_PROFILE_OVERRIDE_HEADER = "\"lsh_etl_profile_override.h\""
+[features]
+codec = "msgpack"
+fast_io = true
+fast_buttons = true
+fast_actuators = true
+fast_indicators = true
+bench = true
+bench_iterations = 10000
+aggressive_constexpr_ctors = true
+etl_profile_override_header = "lsh_etl_profile_override.h"
+
+[timing]
+actuator_debounce = "0ms"
+button_debounce = "8ms"
+scan_interval = "2ms"
+long_click = "450ms"
+super_long_click = "1200ms"
+network_click_timeout = "900ms"
+ping_interval = "7s"
+connection_timeout = "7300ms"
+bridge_boot_retry = "200ms"
+bridge_state_timeout = "1300ms"
+post_receive_delay = "25ms"
+network_click_check_interval = "20ms"
+auto_off_check_interval = "250ms"
+
+[serial]
+debug_baud = 500000
+bridge_baud = 500000
+timeout = "4ms"
+msgpack_frame_idle_timeout = "4ms"
+max_rx_payloads_per_loop = 5
+max_rx_bytes_per_loop = 64
+flush_after_send = false
+rx_buffer_size = 256
+tx_buffer_size = 128
+
+[advanced]
+build_flags = ["-flto=auto"]
+
+[advanced.defines]
+CONFIG_CUSTOM_EXPERIMENTAL_DEFINE = 1
 
 [devices.maximal_panel]
 name = "maximal-panel"
 build_macro = "LSH_BUILD_ALL_OPTIONS_MAXIMAL"
 hardware_include = "<Controllino.h>"
 debug_serial = "&Serial"
-com_serial = "Serial1"
+bridge_serial = "Serial1"
 config_include = "custom/maximal_panel_config.hpp"
 static_config_include = "custom/maximal_panel_static_config.hpp"
 disable_rtc = true
 disable_eth = true
-raw_build_flags = ["-Wl,--gc-sections"]
 
-[devices.maximal_panel.defines]
-CONFIG_COM_SERIAL_FLUSH_AFTER_SEND = 1
-CONFIG_CLICKABLE_DEBOUNCE_TIME_MS = "12U"
+[devices.maximal_panel.advanced]
+build_flags = ["-Wl,--gc-sections"]
 
-[[devices.maximal_panel.actuators]]
-name = "ceiling"
+[devices.maximal_panel.advanced.defines]
+CONFIG_MAXIMAL_PANEL_EXPERIMENTAL_DEFINE = 1
+
+[devices.maximal_panel.timing]
+button_debounce = "12ms"
+
+[devices.maximal_panel.serial]
+flush_after_send = true
+
+[devices.maximal_panel.actuators.ceiling]
 id = 1
-pin = "CONTROLLINO_R0"
-default_state = true
+pin = "R0"
+default = true
 protected = true
 auto_off = "10m"
 
-[[devices.maximal_panel.actuators]]
-name = "wall"
+[devices.maximal_panel.actuators.wall]
 id = 3
-pin = "CONTROLLINO_R1"
+pin = "R1"
 auto_off_ms = 45000
 
-[[devices.maximal_panel.actuators]]
-name = "fan"
+[devices.maximal_panel.actuators.fan]
 id = 9
-pin = "CONTROLLINO_R2"
+pin = "R2"
 
-[[devices.maximal_panel.actuators]]
-name = "garden"
+[devices.maximal_panel.actuators.garden]
 id = 250
-pin = "CONTROLLINO_R3"
+pin = "R3"
 protected = false
 
-[[devices.maximal_panel.clickables]]
-name = "entry_button"
-id = 1
-pin = "CONTROLLINO_A0"
-short = ["ceiling", "wall"]
-long = ["fan"]
-super_long = true
+[devices.maximal_panel.actuators.pump_a]
+id = 12
+pin = "R4"
+interlock = "pump_b"
 
-[[devices.maximal_panel.clickables]]
-name = "scene_button"
-id = 4
-pin = "CONTROLLINO_A1"
-short = { enabled = true, targets = ["ceiling"] }
-long = { targets = ["ceiling", "wall"], type = "on_only", network = true, fallback = "local", time = "750ms" }
-super_long = { type = "normal", network = true, fallback = "local_fallback" }
+[devices.maximal_panel.actuators.pump_b]
+id = 13
+pin = "R5"
+interlock = "pump_a"
 
-[[devices.maximal_panel.clickables]]
-name = "off_button"
-id = 7
-pin = "CONTROLLINO_A2"
-short = false
-long = { targets = ["ceiling", "wall", "fan"], type = "off-only", time_ms = 1250 }
-super_long = { type = "selective", targets = ["garden"] }
+[devices.maximal_panel.actuators.door_strike]
+id = 14
+pin = "R6"
+pulse = "300ms"
 
-[[devices.maximal_panel.clickables]]
-name = "network_only_button"
-id = 11
-pin = "CONTROLLINO_A3"
-short = { enabled = false }
-long = { network = true, fallback = "do-nothing" }
-super_long = { type = "selective" }
-
-[[devices.maximal_panel.clickables]]
-name = "alias_button"
-id = 19
-pin = "CONTROLLINO_A4"
-short = ["garden"]
-long = { actuators = ["fan"], type = "normal" }
-super_long = { enabled = false }
-
-[[devices.maximal_panel.indicators]]
-name = "any_led"
-pin = "CONTROLLINO_D0"
-actuators = ["ceiling", "wall"]
-mode = "any"
-
-[[devices.maximal_panel.indicators]]
-name = "all_led"
-pin = "CONTROLLINO_D1"
+[devices.maximal_panel.groups.living]
 targets = ["ceiling", "wall"]
-mode = "all"
 
-[[devices.maximal_panel.indicators]]
-name = "majority_led"
-pin = "CONTROLLINO_D2"
-actuators = ["ceiling", "wall", "fan"]
-mode = "majority"
+[devices.maximal_panel.groups.pumps]
+targets = ["pump_a", "pump_b"]
+
+[devices.maximal_panel.scenes.movie]
+off = "living"
+on = "fan"
+toggle = "garden"
+
+[devices.maximal_panel.buttons.entry_button]
+id = 1
+pin = "A0"
+short = ["ceiling", "wall"]
+long = "fan"
+super_long = { action = "all_off" }
+
+[devices.maximal_panel.buttons.scene_button]
+id = 4
+pin = "A1"
+short = { enabled = true, group = "living" }
+long = { after = "750ms", scene = "movie", network = true, fallback = "local" }
+super_long = { action = "all_off", network = true, fallback = "local" }
+
+[devices.maximal_panel.buttons.off_button]
+id = 7
+pin = "A2"
+short = false
+long = { time_ms = 1250, action = "off", targets = ["ceiling", "wall", "fan"] }
+super_long = { after = "1800ms", action = "off", targets = ["garden"] }
+
+[devices.maximal_panel.buttons.network_only_button]
+id = 11
+pin = "A3"
+short = false
+long = { network = true, fallback = "do_nothing" }
+super_long = false
+
+[devices.maximal_panel.buttons.alias_button]
+id = 19
+pin = "A4"
+short = "door_strike"
+long = "fan"
+super_long = false
+
+[devices.maximal_panel.buttons.pump_button]
+id = 20
+pin = "A5"
+short = "pump_a"
+long = { action = "on", target = "pump_b" }
+super_long = { action = "off", group = "pumps" }
+
+[devices.maximal_panel.indicators.any_led]
+pin = "D0"
+
+[devices.maximal_panel.indicators.any_led.when]
+any = ["ceiling", "wall"]
+
+[devices.maximal_panel.indicators.all_led]
+pin = "D1"
+
+[devices.maximal_panel.indicators.all_led.when]
+all = ["ceiling", "wall"]
+
+[devices.maximal_panel.indicators.majority_led]
+pin = "D2"
+
+[devices.maximal_panel.indicators.majority_led.when]
+majority = ["ceiling", "wall", "fan"]
 
 [devices.no_network_dense]
 name = "no-network-dense"
 hardware_include = "Arduino.h"
 debug_serial = "Serial"
-com_serial = "Serial"
-raw_build_flags = ["-Os"]
+bridge_serial = "Serial"
+controllino_pin_aliases = false
 
-[devices.no_network_dense.defines]
-CONFIG_MSG_PACK = false
-CONFIG_USE_FAST_CLICKABLES = false
-CONFIG_USE_FAST_ACTUATORS = false
-CONFIG_USE_FAST_INDICATORS = false
-CONFIG_LSH_BENCH = false
-LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS = false
-LSH_DISABLE_AGGRESSIVE_CONSTEXPR_CTORS = true
-LSH_ETL_PROFILE_OVERRIDE_HEADER = false
+[devices.no_network_dense.features]
+codec = "json"
+fast_io = false
+bench = false
+aggressive_constexpr_ctors = false
+etl_profile_override_header = false
 
-[[devices.no_network_dense.actuators]]
-name = "relay_a"
+[devices.no_network_dense.advanced]
+build_flags = ["-Os"]
+
+[devices.no_network_dense.actuators.relay_a]
 id = 1
 pin = "6"
 
-[[devices.no_network_dense.actuators]]
-name = "relay_b"
+[devices.no_network_dense.actuators.relay_b]
 id = 2
 pin = "7"
 
-[[devices.no_network_dense.clickables]]
-name = "button_a"
+[devices.no_network_dense.buttons.button_a]
 id = 1
 pin = "8"
-short = { targets = ["relay_a"] }
-long = { targets = ["relay_b"], type = "off_only" }
-super_long = { type = "selective", targets = ["relay_a", "relay_b"] }
+short = "relay_a"
+long = { action = "off", targets = ["relay_b"] }
+super_long = { action = "off", targets = ["relay_a", "relay_b"] }
 
-[[devices.no_network_dense.indicators]]
-name = "status"
+[devices.no_network_dense.indicators.status]
 pin = "9"
-targets = ["relay_a"]
+when = "relay_a"
 
 [devices.empty_profile]
 name = "empty-profile"
 build_macro = "LSH_BUILD_EMPTY_PROFILE"
 hardware_include = "<Arduino.h>"
 debug_serial = "Serial"
-com_serial = "Serial"
+bridge_serial = "Serial"
+controllino_pin_aliases = false
 
-[devices.empty_profile.defines]
-CONFIG_MSG_PACK = false
-LSH_ETL_PROFILE_OVERRIDE_HEADER = false
+[devices.empty_profile.features]
+codec = "json"
+etl_profile_override_header = false

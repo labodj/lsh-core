@@ -1,281 +1,235 @@
-# lsh-core static configuration source of truth.
-#
-# Users edit this file; the C++ headers under include/lsh_configs are generated.
-# References use names, not dense indexes, so IDs can be sparse and wiring can be
-# rearranged without hand-maintaining lookup tables.
+#:schema ../../docs/lsh_devices.schema.json
+
+schema_version = 2
+preset = "controllino-maxi/fast-msgpack"
 
 [generator]
 output_dir = "include"
 config_dir = "lsh_configs"
 user_config_header = "lsh_user_config.hpp"
 
-[common]
-hardware_include = "Controllino.h"
+[controller]
 debug_serial = "Serial"
-com_serial = "Serial2"
+bridge_serial = "Serial2"
 
-[common.defines]
-CONFIG_MSG_PACK = true
-CONFIG_USE_FAST_CLICKABLES = true
-CONFIG_USE_FAST_ACTUATORS = true
-CONFIG_USE_FAST_INDICATORS = true
+[features]
+etl_profile_override_header = "lsh_etl_profile_override.h"
 
 [devices.j1]
 name = "j1"
 
-[[devices.j1.actuators]]
-name = "rel0"
+[devices.j1.actuators.rel0]
 id = 1
-pin = "CONTROLLINO_R0"
+pin = "R0"
 auto_off = "10m"
 
-[[devices.j1.actuators]]
-name = "rel1"
+[devices.j1.actuators.rel1]
 id = 2
-pin = "CONTROLLINO_R1"
+pin = "R1"
 auto_off = "1h"
 
-[[devices.j1.actuators]]
-name = "rel2"
+[devices.j1.actuators.rel2]
 id = 3
-pin = "CONTROLLINO_R2"
+pin = "R2"
 auto_off = "1h"
 
-[[devices.j1.actuators]]
-name = "rel3"
+[devices.j1.actuators.rel3]
 id = 4
-pin = "CONTROLLINO_R3"
+pin = "R3"
 auto_off = "15m"
 
-[[devices.j1.actuators]]
-name = "rel4"
+[devices.j1.actuators.rel4]
 id = 5
-pin = "CONTROLLINO_R4"
+pin = "R4"
 
-[[devices.j1.actuators]]
-name = "rel5"
+[devices.j1.actuators.rel5]
 id = 6
-pin = "CONTROLLINO_R5"
+pin = "R5"
 
-[[devices.j1.actuators]]
-name = "rel6"
+[devices.j1.actuators.rel6]
 id = 7
-pin = "CONTROLLINO_R6"
+pin = "R6"
 
-[[devices.j1.actuators]]
-name = "rel7"
+[devices.j1.actuators.rel7]
 id = 8
-pin = "CONTROLLINO_R7"
+pin = "R7"
 auto_off = "1h"
 
-[[devices.j1.actuators]]
-name = "rel9"
+[devices.j1.actuators.rel9]
 id = 10
-pin = "CONTROLLINO_R9"
+pin = "R9"
 auto_off = "30m"
 
-[[devices.j1.clickables]]
-name = "btn0"
+[devices.j1.buttons.btn0]
 id = 1
-pin = "CONTROLLINO_A0"
-short = ["rel0"]
+pin = "A0"
+short = "rel0"
 
-[[devices.j1.clickables]]
-name = "btn1"
+[devices.j1.buttons.btn1]
 id = 2
-pin = "CONTROLLINO_A1"
-short = ["rel1"]
-long = { targets = ["rel1", "rel2"] }
+pin = "A1"
+short = "rel1"
+long = ["rel1", "rel2"]
 
-[[devices.j1.clickables]]
-name = "btn2"
+[devices.j1.buttons.btn2]
 id = 3
-pin = "CONTROLLINO_A2"
-short = ["rel2"]
-long = { targets = ["rel2", "rel1"] }
+pin = "A2"
+short = "rel2"
+long = ["rel2", "rel1"]
 
-[[devices.j1.clickables]]
-name = "btn3"
+[devices.j1.buttons.btn3]
 id = 4
-pin = "CONTROLLINO_A3"
-short = ["rel3"]
+pin = "A3"
+short = "rel3"
 
-[[devices.j1.clickables]]
-name = "btn4"
+[devices.j1.buttons.btn4]
 id = 5
-pin = "CONTROLLINO_A4"
-short = ["rel4"]
-long = { targets = ["rel4", "rel5"] }
+pin = "A4"
+short = "rel4"
+long = ["rel4", "rel5"]
 
-[[devices.j1.clickables]]
-name = "btn5"
+[devices.j1.buttons.btn5]
 id = 6
-pin = "CONTROLLINO_A5"
-short = ["rel5"]
-long = { targets = ["rel5", "rel4"] }
+pin = "A5"
+short = "rel5"
+long = ["rel5", "rel4"]
 
-[[devices.j1.clickables]]
-name = "btn6"
+[devices.j1.buttons.btn6]
 id = 7
-pin = "CONTROLLINO_A6"
-short = ["rel6"]
-long = { targets = ["rel6", "rel4", "rel5"], type = "off_only" }
+pin = "A6"
+short = "rel6"
+long = { action = "off", targets = ["rel6", "rel4", "rel5"] }
 
-[[devices.j1.clickables]]
-name = "btn7"
+[devices.j1.buttons.btn7]
 id = 8
-pin = "CONTROLLINO_A7"
-short = ["rel7"]
-long = { targets = ["rel7"], time = "900ms" }
-super_long = { type = "selective", targets = ["rel1", "rel2"] }
+pin = "A7"
+short = "rel7"
+long = { after = "900ms", targets = ["rel7"] }
+super_long = { action = "off", targets = ["rel1", "rel2"] }
 
-[[devices.j1.clickables]]
-name = "btn9"
+[devices.j1.buttons.btn9]
 id = 10
-pin = "CONTROLLINO_A9"
-short = ["rel9"]
+pin = "A9"
+short = "rel9"
 
-[[devices.j1.clickables]]
-name = "btn10"
+[devices.j1.buttons.btn10]
 id = 11
-pin = "CONTROLLINO_IN0"
-short = ["rel0"]
-super_long = true
+pin = "IN0"
+short = "rel0"
+super_long = { action = "all_off" }
 
-[[devices.j1.indicators]]
-name = "light9"
-pin = "CONTROLLINO_D9"
-actuators = ["rel9"]
+[devices.j1.indicators.light9]
+pin = "D9"
+when = "rel9"
 
 [devices.j2]
 name = "j2"
 
-[devices.j2.defines]
-CONFIG_CLICKABLE_DEBOUNCE_TIME_MS = 30
+[devices.j2.timing]
+button_debounce = "30ms"
 
-[[devices.j2.actuators]]
-name = "rel0"
+[devices.j2.actuators.rel0]
 id = 1
-pin = "CONTROLLINO_R0"
+pin = "R0"
 
-[[devices.j2.actuators]]
-name = "rel1"
+[devices.j2.actuators.rel1]
 id = 2
-pin = "CONTROLLINO_R1"
+pin = "R1"
 
-[[devices.j2.actuators]]
-name = "rel2"
+[devices.j2.actuators.rel2]
 id = 3
-pin = "CONTROLLINO_R2"
+pin = "R2"
 
-[[devices.j2.actuators]]
-name = "rel3"
+[devices.j2.actuators.rel3]
 id = 4
-pin = "CONTROLLINO_R3"
+pin = "R3"
 
-[[devices.j2.actuators]]
-name = "rel6"
+[devices.j2.actuators.rel6]
 id = 7
-pin = "CONTROLLINO_R6"
+pin = "R6"
 protected = true
 
-[[devices.j2.actuators]]
-name = "rel7"
+[devices.j2.actuators.rel7]
 id = 8
-pin = "CONTROLLINO_R7"
+pin = "R7"
 auto_off = "1h"
 
-[[devices.j2.actuators]]
-name = "rel8"
+[devices.j2.actuators.rel8]
 id = 9
-pin = "CONTROLLINO_R8"
+pin = "R8"
 auto_off = "30m"
 
-[[devices.j2.actuators]]
-name = "rel9"
+[devices.j2.actuators.rel9]
 id = 10
-pin = "CONTROLLINO_R9"
+pin = "R9"
 
-[[devices.j2.clickables]]
-name = "btn0"
+[devices.j2.buttons.btn0]
 id = 1
-pin = "CONTROLLINO_A0"
-short = ["rel0"]
-long = { targets = ["rel0", "rel2"] }
+pin = "A0"
+short = "rel0"
+long = ["rel0", "rel2"]
 
-[[devices.j2.clickables]]
-name = "btn1"
+[devices.j2.buttons.btn1]
 id = 2
-pin = "CONTROLLINO_A1"
-short = ["rel1"]
+pin = "A1"
+short = "rel1"
 long = { network = true, fallback = "do_nothing" }
 
-[[devices.j2.clickables]]
-name = "btn2"
+[devices.j2.buttons.btn2]
 id = 3
-pin = "CONTROLLINO_A2"
-short = ["rel2"]
-long = { targets = ["rel2", "rel1"] }
+pin = "A2"
+short = "rel2"
+long = ["rel2", "rel1"]
 
-[[devices.j2.clickables]]
-name = "btn3"
+[devices.j2.buttons.btn3]
 id = 4
-pin = "CONTROLLINO_A3"
-short = ["rel3"]
-long = { targets = ["rel3", "rel9"] }
+pin = "A3"
+short = "rel3"
+long = ["rel3", "rel9"]
 
-[[devices.j2.clickables]]
-name = "btn6"
+[devices.j2.buttons.btn6]
 id = 7
-pin = "CONTROLLINO_A6"
-short = ["rel6"]
+pin = "A6"
+short = "rel6"
 
-[[devices.j2.clickables]]
-name = "btn7"
+[devices.j2.buttons.btn7]
 id = 8
-pin = "CONTROLLINO_A7"
-short = ["rel7"]
+pin = "A7"
+short = "rel7"
 
-[[devices.j2.clickables]]
-name = "btn8"
+[devices.j2.buttons.btn8]
 id = 9
-pin = "CONTROLLINO_A8"
-short = ["rel8"]
+pin = "A8"
+short = "rel8"
 
-[[devices.j2.clickables]]
-name = "btn9"
+[devices.j2.buttons.btn9]
 id = 10
-pin = "CONTROLLINO_A9"
-short = ["rel9"]
-long = { targets = ["rel9", "rel3"] }
+pin = "A9"
+short = "rel9"
+long = ["rel9", "rel3"]
 
-[[devices.j2.clickables]]
-name = "btn10"
+[devices.j2.buttons.btn10]
 id = 11
-pin = "CONTROLLINO_IN0"
-short = ["rel0"]
-long = { targets = ["rel0", "rel2"] }
-super_long = true
+pin = "IN0"
+short = "rel0"
+long = ["rel0", "rel2"]
+super_long = { action = "all_off" }
 
-[[devices.j2.clickables]]
-name = "btn11"
+[devices.j2.buttons.btn11]
 id = 12
-pin = "CONTROLLINO_IN1"
-short = ["rel2"]
-long = { targets = ["rel2", "rel1"] }
+pin = "IN1"
+short = "rel2"
+long = ["rel2", "rel1"]
 super_long = { network = true, fallback = "do_nothing" }
 
-[[devices.j2.indicators]]
-name = "light6"
-pin = "CONTROLLINO_D6"
-actuators = ["rel6"]
+[devices.j2.indicators.light6]
+pin = "D6"
+when = "rel6"
 
-[[devices.j2.indicators]]
-name = "light7"
-pin = "CONTROLLINO_D7"
-actuators = ["rel7"]
+[devices.j2.indicators.light7]
+pin = "D7"
+when = "rel7"
 
-[[devices.j2.indicators]]
-name = "light8"
-pin = "CONTROLLINO_D8"
-actuators = ["rel8"]
+[devices.j2.indicators.light8]
+pin = "D8"
+when = "rel8"

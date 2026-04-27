@@ -7,12 +7,38 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from .models import DeviceConfig
+    from .models import (
+        ActuatorConfig,
+        ClickableConfig,
+        DeviceConfig,
+        IndicatorConfig,
+    )
+
+
+def _object_suffix(logical_name: str) -> str:
+    """Keep generated object names readable without depending on TOML uniqueness."""
+    suffix = logical_name.strip("_")
+    return suffix or "resource"
+
+
+def actuator_object_name(actuator_index: int, actuator: ActuatorConfig) -> str:
+    """Return the C++ object name for one generated actuator."""
+    return f"actuator{actuator_index}_{_object_suffix(actuator.name)}"
+
+
+def clickable_object_name(clickable_index: int, clickable: ClickableConfig) -> str:
+    """Return the C++ object name for one generated clickable."""
+    return f"button{clickable_index}_{_object_suffix(clickable.name)}"
+
+
+def indicator_object_name(indicator_index: int, indicator: IndicatorConfig) -> str:
+    """Return the C++ object name for one generated indicator."""
+    return f"indicator{indicator_index}_{_object_suffix(indicator.name)}"
 
 
 def actuator_name_at(device: DeviceConfig, actuator_index: int) -> str:
     """Return the generated C++ object name for one dense actuator index."""
-    return device.actuators[actuator_index].name
+    return actuator_object_name(actuator_index, device.actuators[actuator_index])
 
 
 def unprotected_actuator_indexes(device: DeviceConfig) -> list[int]:

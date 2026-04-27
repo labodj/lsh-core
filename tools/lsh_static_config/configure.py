@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .cpp import u8
+from .topology import (
+    actuator_object_name,
+    clickable_object_name,
+    indicator_object_name,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -43,10 +48,11 @@ def _packed_initial_state_lines(device: DeviceConfig) -> list[str]:
 
 def _actuator_registration_lines_for(index: int, actuator: ActuatorConfig) -> list[str]:
     """Render direct static registration for one generated actuator."""
+    object_name = actuator_object_name(index, actuator)
     return [
         "#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)",
-        f"{actuator.name}.setIndex({u8(index)});",
-        f"Actuators::actuators[{u8(index)}] = &{actuator.name};",
+        f"{object_name}.setIndex({u8(index)});",
+        f"Actuators::actuators[{u8(index)}] = &{object_name};",
         "#endif",
     ]
 
@@ -56,10 +62,11 @@ def _clickable_registration_lines_for(
     clickable: ClickableConfig,
 ) -> list[str]:
     """Render direct static registration for one generated clickable."""
+    object_name = clickable_object_name(index, clickable)
     return [
         "#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)",
-        f"{clickable.name}.setIndex({u8(index)});",
-        f"Clickables::clickables[{u8(index)}] = &{clickable.name};",
+        f"{object_name}.setIndex({u8(index)});",
+        f"Clickables::clickables[{u8(index)}] = &{object_name};",
         "#endif",
     ]
 
@@ -69,10 +76,11 @@ def _indicator_registration_lines_for(
     indicator: IndicatorConfig,
 ) -> list[str]:
     """Render direct static registration for one generated indicator."""
+    object_name = indicator_object_name(index, indicator)
     return [
         "#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)",
-        f"{indicator.name}.setIndex({u8(index)});",
-        f"Indicators::indicators[{u8(index)}] = &{indicator.name};",
+        f"{object_name}.setIndex({u8(index)});",
+        f"Indicators::indicators[{u8(index)}] = &{object_name};",
         "#endif",
     ]
 
@@ -104,8 +112,8 @@ def _indicator_registration_lines(device: DeviceConfig) -> list[str]:
 def _protected_actuator_lines(device: DeviceConfig) -> list[str]:
     """Render actuator protection setup statements."""
     return [
-        f"{actuator.name}.setProtected(true);"
-        for actuator in device.actuators
+        f"{actuator_object_name(index, actuator)}.setProtected(true);"
+        for index, actuator in enumerate(device.actuators)
         if actuator.protected
     ]
 

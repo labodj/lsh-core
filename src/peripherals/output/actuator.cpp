@@ -38,10 +38,9 @@ static_assert(constants::timings::ACTUATOR_DEBOUNCE_TIME_MS == 0U,
  */
 auto Actuator::setState(bool state) -> bool
 {
-    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
     // Keep the public single-actuator path lazy: if the state is already right,
     // do not pay the 32-bit cached-time read just to reject a no-op.
-    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    if (!this->wouldChangeState(state))
     {
         return false;
     }
@@ -62,10 +61,9 @@ auto Actuator::setState(bool state) -> bool
  */
 auto Actuator::setState(bool state, uint32_t now_ms) -> bool
 {
-    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
     // The generated multi-actuator path may already have paid for `now_ms`.
     // Still reject no-op writes before debounce and pin work.
-    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    if (!this->wouldChangeState(state))
     {
         return false;
     }
@@ -82,8 +80,7 @@ auto Actuator::setState(bool state, uint32_t now_ms) -> bool
  */
 auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state) -> bool
 {
-    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
-    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    if (!this->wouldChangeState(state))
     {
         return false;
     }
@@ -105,8 +102,7 @@ auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state) -> bool
  */
 auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state, uint32_t now_ms) -> bool
 {
-    const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
-    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == stateFlag)
+    if (!this->wouldChangeState(state))
     {
         return false;
     }
@@ -121,41 +117,14 @@ auto Actuator::setStateForIndex(uint8_t actuatorIndex, bool state, uint32_t now_
  * @return true if the state has been applied.
  * @return false otherwise.
  */
-__attribute__((always_inline)) inline auto Actuator::applyStateChange(bool state, uint32_t now_ms, uint8_t actuatorIndex) -> bool
+auto Actuator::applyStateChange(bool state, uint32_t now_ms, uint8_t actuatorIndex) -> bool
 {
-#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    using constants::timings::ACTUATOR_DEBOUNCE_TIME_MS;
-#else
-    static_cast<void>(now_ms);
-#endif
-
-    // Apply state if debounce is not active (elided at compile time) OR if it's active check if debounce time is elapsed
-#if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    if (ACTUATOR_DEBOUNCE_TIME_MS != 0U && (now_ms - this->lastTimeSwitched < ACTUATOR_DEBOUNCE_TIME_MS))
+    if (!this->debounceAllowsSwitch(now_ms))
     {
         return false;
     }
-#endif
-#ifdef CONFIG_USE_FAST_ACTUATORS
-    if (!state)
-    {
-        *this->pinPort &= ~this->pinMask;
-    }
-    else
-    {
-        *this->pinPort |= this->pinMask;
-    }
-#else
-    digitalWrite(this->pinNumber, static_cast<uint8_t>(state));  // Perform the switch
-#endif
-    if (state)
-    {
-        this->flags |= ACTUATOR_FLAG_ACTUAL_STATE;
-    }
-    else
-    {
-        this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_ACTUAL_STATE);
-    }
+    this->writePinState(state);
+    this->updateCachedStateFlag(state);
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     this->lastTimeSwitched = now_ms;
 #endif

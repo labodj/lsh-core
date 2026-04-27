@@ -23,11 +23,20 @@ class DefineValue:
 
 
 @dataclass
+class ActionStep:
+    """One deterministic local action emitted by generated static code."""
+
+    operation: str
+    targets: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ClickAction:
     """Normalized short/long/super-long action for one clickable."""
 
     enabled: bool = False
     targets: list[str] = field(default_factory=list)
+    steps: list[ActionStep] = field(default_factory=list)
     click_type: str = "NORMAL"
     network: bool = False
     fallback: str = "LOCAL_FALLBACK"
@@ -44,6 +53,8 @@ class ActuatorConfig:
     default_state: bool = False
     protected: bool = False
     auto_off_ms: int | None = None
+    pulse_ms: int | None = None
+    interlock_targets: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -54,6 +65,7 @@ class ClickableConfig:
     clickable_id: int
     pin: str
     short_targets: list[str] = field(default_factory=list)
+    short_steps: list[ActionStep] = field(default_factory=list)
     short_enabled: bool = False
     long: ClickAction = field(default_factory=ClickAction)
     super_long: ClickAction = field(default_factory=ClickAction)
@@ -95,6 +107,7 @@ class GeneratorSettings:
     """Generator-level output paths and naming conventions."""
 
     output_dir: Path
+    id_lock_file: Path
     config_dir: str = "lsh_configs"
     user_config_header: str = "lsh_user_config.hpp"
     static_config_router_header: str = "lsh_static_config_router.hpp"
@@ -109,6 +122,9 @@ class ProjectConfig:
     common_defines: DefineMap
     common_raw_build_flags: list[str]
     devices: dict[str, DeviceConfig]
+    id_lock_content: str
+    raw_define_paths: list[str] = field(default_factory=list)
+    auto_id_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -119,13 +135,20 @@ class StaticProfileData:
     clickable_ids: list[int]
     actuator_indexes: dict[str, int]
     auto_off_indexes: list[int]
+    pulse_indexes: list[int]
     short_link_sets: list[list[int]]
+    short_step_sets: list[list[tuple[str, list[int]]]]
     long_link_sets: list[list[int]]
+    long_step_sets: list[list[tuple[str, list[int]]]]
     super_long_link_sets: list[list[int]]
+    super_long_step_sets: list[list[tuple[str, list[int]]]]
     indicator_link_sets: list[list[int]]
     short_link_counts: list[int]
+    short_step_link_counts: list[int]
     long_link_counts: list[int]
+    long_step_link_counts: list[int]
     super_long_link_counts: list[int]
+    super_long_step_link_counts: list[int]
     indicator_link_counts: list[int]
     network_click_slots: list[tuple[int, str]]
     short_links: int

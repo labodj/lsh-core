@@ -76,6 +76,32 @@ void recordSwitchTime(uint8_t actuatorIndex, uint32_t now_ms);  // Records a sta
 void updatePackedState(uint8_t actuatorIndex, bool state);
 
 /**
+ * @brief Keep the packed actuator-state shadow aligned using a generated index.
+ *
+ * @details Generated profiles already know the dense actuator index at compile
+ *          time. Keeping this tiny helper in the header lets AVR-GCC fold the
+ *          byte index and bit mask instead of paying a runtime shift/mask path
+ *          for every static actuator transition.
+ *
+ * @tparam ActuatorIndex Dense runtime actuator index from the static profile.
+ * @param state new actuator state.
+ */
+template <uint8_t ActuatorIndex> __attribute__((always_inline)) inline void updatePackedStateStatic(bool state)
+{
+    static_assert(ActuatorIndex < CONFIG_MAX_ACTUATORS, "ActuatorIndex is outside the generated static profile.");
+    constexpr uint8_t byteIndex = static_cast<uint8_t>(ActuatorIndex >> 3U);
+    constexpr uint8_t bitMask = static_cast<uint8_t>(1U << (ActuatorIndex & 0x07U));
+    if (state)
+    {
+        packedActuatorStates[byteIndex] |= bitMask;
+    }
+    else
+    {
+        packedActuatorStates[byteIndex] &= static_cast<uint8_t>(~bitMask);
+    }
+}
+
+/**
  * @brief Return the number of packed bytes required by the active actuator topology.
  *
  * @return uint8_t number of bytes needed by the compact `ACTUATORS_STATE` payload.

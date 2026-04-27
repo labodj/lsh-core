@@ -57,6 +57,7 @@ static constexpr uint8_t CLICK_SCAN_NETWORK_PENDING = 0x02U;  //!< A network-cli
 [[nodiscard]] auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t;
 [[nodiscard]] auto turnOffAllActuators() noexcept -> bool;
 [[nodiscard]] auto turnOffUnprotectedActuators() noexcept -> bool;
+[[nodiscard]] auto checkPulseTimers(uint16_t elapsed_ms) noexcept -> bool;
 [[nodiscard]] auto checkAutoOffTimers(uint32_t now_ms) noexcept -> bool;
 [[nodiscard]] auto applyPackedActuatorStateByte(uint8_t byteIndex, uint8_t packedByte) noexcept -> bool;
 [[nodiscard]] auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool;

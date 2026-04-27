@@ -34,7 +34,11 @@ def generate(
     check: bool = False,
 ) -> int:
     """Generate headers for the selected devices, optionally as a stale check."""
-    changed = False
+    changed = write_if_changed(
+        project.settings.id_lock_file,
+        project.id_lock_content,
+        check=check,
+    )
     for path, content in generated_files(project, selected_devices).items():
         changed |= write_if_changed(path, content, check=check)
     return 1 if check and changed else 0

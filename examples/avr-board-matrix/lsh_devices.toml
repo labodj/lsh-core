@@ -1,0 +1,76 @@
+#:schema ../../docs/lsh_devices.schema.json
+
+schema_version = 2
+preset = "arduino-generic/json"
+
+[generator]
+output_dir = "include"
+config_dir = "lsh_configs"
+user_config_header = "lsh_user_config.hpp"
+
+[controller]
+hardware_include = "Arduino.h"
+debug_serial = "Serial"
+bridge_serial = "Serial"
+
+[features]
+fast_io = false
+
+[serial]
+bridge_baud = 115200
+flush_after_send = false
+
+[devices.mega2560_fast]
+name = "mega2560-fast"
+
+[devices.mega2560_fast.features]
+fast_io = true
+
+[devices.mega2560_fast.actuators.relay]
+id = 1
+pin = "4"
+interlock = "relay_b"
+
+[devices.mega2560_fast.actuators.relay_b]
+id = 2
+pin = "5"
+interlock = "relay"
+
+[devices.mega2560_fast.actuators.door_strike]
+id = 3
+pin = "6"
+pulse = "300ms"
+
+[devices.mega2560_fast.groups.room]
+targets = ["relay", "relay_b"]
+
+[devices.mega2560_fast.scenes.entry]
+off = "room"
+on = "door_strike"
+
+[devices.mega2560_fast.buttons.button]
+id = 1
+pin = "2"
+short = "relay"
+long = { scene = "entry" }
+super_long = { action = "off", group = "room" }
+
+[devices.mega2560_fast.indicators.led]
+pin = "13"
+when = "relay"
+
+[devices.atmega328p_basic]
+name = "atmega328p-basic"
+
+[devices.atmega328p_basic.actuators.relay]
+id = 1
+pin = "4"
+
+[devices.atmega328p_basic.buttons.button]
+id = 1
+pin = "2"
+short = "relay"
+
+[devices.atmega328p_basic.indicators.led]
+pin = "13"
+when = "relay"

@@ -29,9 +29,7 @@ SAFE_CPP_EXPR_FORBIDDEN = set("{};#\"'\n\r")
 LONG_CLICK_TYPES = {
     "normal": "NORMAL",
     "on_only": "ON_ONLY",
-    "on-only": "ON_ONLY",
     "off_only": "OFF_ONLY",
-    "off-only": "OFF_ONLY",
 }
 
 SUPER_LONG_CLICK_TYPES = {
@@ -41,10 +39,7 @@ SUPER_LONG_CLICK_TYPES = {
 
 NETWORK_FALLBACKS = {
     "local": "LOCAL_FALLBACK",
-    "local_fallback": "LOCAL_FALLBACK",
-    "local-fallback": "LOCAL_FALLBACK",
     "do_nothing": "DO_NOTHING",
-    "do-nothing": "DO_NOTHING",
 }
 
 INDICATOR_MODES = {

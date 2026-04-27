@@ -9,6 +9,7 @@ from .action_bodies import (
     render_switch_case_with_body,
     render_u8_sum_declaration,
 )
+from .action_calls import render_set_state_call, render_toggle_call
 from .cpp import render_values_condition, u8
 from .topology import actuator_name_at, unprotected_actuator_indexes
 
@@ -16,33 +17,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from .models import DeviceConfig, StaticProfileData
-
-
-def _toggle_call(
-    device: DeviceConfig,
-    actuator_index: int,
-    *,
-    cached_time: bool,
-) -> str:
-    """Render one generated timestamp-aware toggle call."""
-    object_name = actuator_name_at(device, actuator_index)
-    if not cached_time:
-        return f"{object_name}.toggleStateStatic<{u8(actuator_index)}>()"
-    return f"{object_name}.toggleStateStatic<{u8(actuator_index)}>(actionNow)"
-
-
-def _set_state_call(
-    device: DeviceConfig,
-    actuator_index: int,
-    state: str,
-    *,
-    cached_time: bool,
-) -> str:
-    """Render one generated timestamp-aware setState call."""
-    object_name = actuator_name_at(device, actuator_index)
-    if not cached_time:
-        return f"{object_name}.setStateStatic<{u8(actuator_index)}>({state})"
-    return f"{object_name}.setStateStatic<{u8(actuator_index)}>({state}, actionNow)"
 
 
 def render_short_click_body(
@@ -54,16 +28,40 @@ def render_short_click_body(
 ) -> list[str]:
     """Render the direct short-click action body for one clickable."""
     links = profile.short_link_sets[clickable_index]
-    cached_time = len(links) > 1
-    calls = [
-        _toggle_call(device, actuator_index, cached_time=cached_time)
+    step_sets = profile.short_step_sets[clickable_index]
+    total_calls = len(links) + sum(len(indexes) for _operation, indexes in step_sets)
+    cached_time = total_calls > 1
+    calls = render_action_step_calls(device, step_sets, cached_time=cached_time)
+    calls.extend(
+        render_toggle_call(device, actuator_index, cached_time=cached_time)
         for actuator_index in links
-    ]
+    )
     return render_bool_accumulator(
         calls,
         indent=indent,
         with_cached_time=cached_time,
     )
+
+
+def render_action_step_calls(
+    device: DeviceConfig,
+    step_sets: Sequence[tuple[str, list[int]]],
+    *,
+    cached_time: bool,
+) -> list[str]:
+    """Render deterministic scene/action-step calls in generated order."""
+    return [
+        render_toggle_call(device, actuator_index, cached_time=cached_time)
+        if operation == "TOGGLE"
+        else render_set_state_call(
+            device,
+            actuator_index,
+            "true" if operation == "ON" else "false",
+            cached_time=cached_time,
+        )
+        for operation, indexes in step_sets
+        for actuator_index in indexes
+    ]
 
 
 def render_long_normal_body(
@@ -80,7 +78,7 @@ def render_long_normal_body(
     ]
     cached_time = len(links) > 1
     calls = [
-        _set_state_call(
+        render_set_state_call(
             device,
             actuator_index,
             "stateToSet",
@@ -106,6 +104,15 @@ def render_long_click_body(
 ) -> list[str]:
     """Render the direct long-click action body for one clickable."""
     clickable = device.clickables[clickable_index]
+    step_sets = profile.long_step_sets[clickable_index]
+    if step_sets:
+        cached_time = sum(len(indexes) for _operation, indexes in step_sets) > 1
+        return render_bool_accumulator(
+            render_action_step_calls(device, step_sets, cached_time=cached_time),
+            indent=indent,
+            with_cached_time=cached_time,
+        )
+
     links = profile.long_link_sets[clickable_index]
     if clickable.long.click_type == "NORMAL":
         body = render_long_normal_body(device, links)
@@ -119,7 +126,12 @@ def render_long_click_body(
     state = "true" if clickable.long.click_type == "ON_ONLY" else "false"
     cached_time = len(links) > 1
     calls = [
-        _set_state_call(device, actuator_index, state, cached_time=cached_time)
+        render_set_state_call(
+            device,
+            actuator_index,
+            state,
+            cached_time=cached_time,
+        )
         for actuator_index in links
     ]
     return render_bool_accumulator(
@@ -138,6 +150,15 @@ def render_super_long_click_body(
 ) -> list[str]:
     """Render the direct super-long-click action body for one clickable."""
     clickable = device.clickables[clickable_index]
+    step_sets = profile.super_long_step_sets[clickable_index]
+    if step_sets:
+        cached_time = sum(len(indexes) for _operation, indexes in step_sets) > 1
+        return render_bool_accumulator(
+            render_action_step_calls(device, step_sets, cached_time=cached_time),
+            indent=indent,
+            with_cached_time=cached_time,
+        )
+
     if clickable.super_long.click_type == "NORMAL":
         return [f"{indent}return turnOffUnprotectedActuators();"]
 
@@ -153,7 +174,12 @@ def render_super_long_click_body(
     ]
     cached_time = len(links) > 1
     calls = [
-        _set_state_call(device, actuator_index, "false", cached_time=cached_time)
+        render_set_state_call(
+            device,
+            actuator_index,
+            "false",
+            cached_time=cached_time,
+        )
         for actuator_index in links
     ]
     return render_bool_accumulator(
@@ -232,7 +258,12 @@ def render_direct_turn_off_function(
     lines = [f"auto {function_name}() noexcept -> bool", "{"]
     cached_time = len(actuator_indexes) > 1
     calls = [
-        _set_state_call(device, actuator_index, "false", cached_time=cached_time)
+        render_set_state_call(
+            device,
+            actuator_index,
+            "false",
+            cached_time=cached_time,
+        )
         for actuator_index in actuator_indexes
     ]
     lines.extend(
@@ -509,8 +540,24 @@ def render_is_clickable_configuration_valid(
     profile: StaticProfileData,
 ) -> list[str]:
     """Render debug/runtime validation for generated clickable topology."""
+    protected_indexes = {
+        actuator_index
+        for actuator_index, actuator in enumerate(device.actuators)
+        if actuator.protected
+    }
     valid_indexes: list[int] = []
     for clickable_index, clickable in enumerate(device.clickables):
+        super_long_local = False
+        if clickable.super_long.enabled:
+            if profile.super_long_step_sets[clickable_index]:
+                super_long_local = True
+            elif clickable.super_long.click_type == "NORMAL":
+                super_long_local = bool(unprotected_actuator_indexes(device))
+            else:
+                super_long_local = any(
+                    actuator_index not in protected_indexes
+                    for actuator_index in profile.super_long_link_sets[clickable_index]
+                )
         has_enabled_click = (
             clickable.short_enabled
             or clickable.long.enabled
@@ -518,8 +565,10 @@ def render_is_clickable_configuration_valid(
         )
         has_local_action = (
             bool(profile.short_link_sets[clickable_index])
+            or bool(profile.short_step_sets[clickable_index])
             or bool(profile.long_link_sets[clickable_index])
-            or bool(profile.super_long_link_sets[clickable_index])
+            or bool(profile.long_step_sets[clickable_index])
+            or super_long_local
         )
         has_network_action = (clickable.long.enabled and clickable.long.network) or (
             clickable.super_long.enabled and clickable.super_long.network

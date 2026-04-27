@@ -8,13 +8,18 @@ from .action_bodies import (
     render_cached_action_time_declaration,
     render_u8_sum_declaration,
 )
+from .action_calls import render_set_state_call, render_toggle_call
 from .constants import (
     CLANG_FORMAT_COLUMN_LIMIT,
     DEFAULT_LONG_CLICK_MS,
     DEFAULT_SUPER_LONG_CLICK_MS,
 )
 from .cpp import u8, u16
-from .topology import actuator_name_at, unprotected_actuator_indexes
+from .topology import (
+    actuator_name_at,
+    clickable_object_name,
+    unprotected_actuator_indexes,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -47,33 +52,6 @@ def render_mark_state_changed(call: str, *, indent: str = "        ") -> list[st
     ]
 
 
-def _toggle_call(
-    device: DeviceConfig,
-    actuator_index: int,
-    *,
-    cached_time: bool,
-) -> str:
-    """Render one generated static-index toggle call for scan-local actions."""
-    object_name = actuator_name_at(device, actuator_index)
-    if cached_time:
-        return f"{object_name}.toggleStateStatic<{u8(actuator_index)}>(actionNow)"
-    return f"{object_name}.toggleStateStatic<{u8(actuator_index)}>()"
-
-
-def _set_state_call(
-    device: DeviceConfig,
-    actuator_index: int,
-    state: str,
-    *,
-    cached_time: bool,
-) -> str:
-    """Render one generated static-index setState call for scan-local actions."""
-    object_name = actuator_name_at(device, actuator_index)
-    if cached_time:
-        return f"{object_name}.setStateStatic<{u8(actuator_index)}>({state}, actionNow)"
-    return f"{object_name}.setStateStatic<{u8(actuator_index)}>({state})"
-
-
 def render_mark_any_state_changed(
     calls: Sequence[str],
     *,
@@ -101,16 +79,40 @@ def render_short_local_action(
 ) -> list[str]:
     """Render the scan-local short-click action without a dispatcher call."""
     links = profile.short_link_sets[clickable_index]
-    cached_time = len(links) > 1
-    calls = [
-        _toggle_call(device, actuator_index, cached_time=cached_time)
+    step_sets = profile.short_step_sets[clickable_index]
+    total_calls = len(links) + sum(len(indexes) for _operation, indexes in step_sets)
+    cached_time = total_calls > 1
+    calls = render_action_step_calls(device, step_sets, cached_time=cached_time)
+    calls.extend(
+        render_toggle_call(device, actuator_index, cached_time=cached_time)
         for actuator_index in links
-    ]
+    )
     return render_mark_any_state_changed(
         calls,
         indent=indent,
         with_cached_time=cached_time,
     )
+
+
+def render_action_step_calls(
+    device: DeviceConfig,
+    step_sets: Sequence[tuple[str, list[int]]],
+    *,
+    cached_time: bool,
+) -> list[str]:
+    """Render deterministic scene/action-step calls in generated order."""
+    return [
+        render_toggle_call(device, actuator_index, cached_time=cached_time)
+        if operation == "TOGGLE"
+        else render_set_state_call(
+            device,
+            actuator_index,
+            "true" if operation == "ON" else "false",
+            cached_time=cached_time,
+        )
+        for operation, indexes in step_sets
+        for actuator_index in indexes
+    ]
 
 
 def render_long_local_action(
@@ -122,6 +124,15 @@ def render_long_local_action(
 ) -> list[str]:
     """Render the scan-local long-click action without a dispatcher call."""
     clickable = device.clickables[clickable_index]
+    step_sets = profile.long_step_sets[clickable_index]
+    if step_sets:
+        cached_time = sum(len(indexes) for _operation, indexes in step_sets) > 1
+        return render_mark_any_state_changed(
+            render_action_step_calls(device, step_sets, cached_time=cached_time),
+            indent=indent,
+            with_cached_time=cached_time,
+        )
+
     links = profile.long_link_sets[clickable_index]
     if not links:
         return []
@@ -140,6 +151,7 @@ def render_long_local_action(
                 "actuatorsLongOn",
                 state_terms,
                 indent=indent,
+                outer_indent_width=4,
             )
         )
         lines.append(
@@ -152,7 +164,12 @@ def render_long_local_action(
 
     cached_time = len(links) > 1
     calls = [
-        _set_state_call(device, actuator_index, state, cached_time=cached_time)
+        render_set_state_call(
+            device,
+            actuator_index,
+            state,
+            cached_time=cached_time,
+        )
         for actuator_index in links
     ]
     lines.extend(
@@ -174,6 +191,15 @@ def render_super_long_local_action(
 ) -> list[str]:
     """Render the scan-local super-long action without a dispatcher call."""
     clickable = device.clickables[clickable_index]
+    step_sets = profile.super_long_step_sets[clickable_index]
+    if step_sets:
+        cached_time = sum(len(indexes) for _operation, indexes in step_sets) > 1
+        return render_mark_any_state_changed(
+            render_action_step_calls(device, step_sets, cached_time=cached_time),
+            indent=indent,
+            with_cached_time=cached_time,
+        )
+
     if clickable.super_long.click_type == "NORMAL":
         links = unprotected_actuator_indexes(device)
     else:
@@ -190,7 +216,12 @@ def render_super_long_local_action(
 
     cached_time = len(links) > 1
     calls = [
-        _set_state_call(device, actuator_index, "false", cached_time=cached_time)
+        render_set_state_call(
+            device,
+            actuator_index,
+            "false",
+            cached_time=cached_time,
+        )
         for actuator_index in links
     ]
     return render_mark_any_state_changed(
@@ -275,14 +306,15 @@ def render_scan_clickable(
 ) -> list[str]:
     """Render one generated clickable scan block."""
     clickable = device.clickables[clickable_index]
-    result_name = f"{clickable.name}ClickResult"
+    object_name = clickable_object_name(clickable_index, clickable)
+    result_name = f"{object_name}ClickResult"
     long_time_ms = click_action_time_ms(clickable.long, DEFAULT_LONG_CLICK_MS)
     super_long_time_ms = click_action_time_ms(
         clickable.super_long,
         DEFAULT_SUPER_LONG_CLICK_MS,
     )
     click_detection_call = (
-        f"{clickable.name}.clickDetection<"
+        f"{object_name}.clickDetection<"
         f"{render_detection_flags(clickable)}, {u16(long_time_ms)}, "
         f"{u16(super_long_time_ms)}>(elapsed_ms);"
     )

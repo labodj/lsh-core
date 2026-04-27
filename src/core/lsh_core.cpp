@@ -244,7 +244,7 @@ void loop()
     }
 #endif
 
-// Check actuators auto OFF timer
+    // Check actuators auto OFF timer
 #if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
     static uint16_t autoOffCheckAge_ms = 0U;  //!< Saturated age since the last generated auto-off timer sweep.
     autoOffCheckAge_ms = timeUtils::addElapsedTimeSaturated(autoOffCheckAge_ms, loopElapsed_ms);
@@ -252,6 +252,18 @@ void loop()
     {
         autoOffCheckAge_ms = 0U;
         noteActuatorStateChanged(lsh::core::static_config::checkAutoOffTimers(now));
+    }
+#endif
+
+#if LSH_STATIC_CONFIG_PULSE_ACTUATORS > 0
+    // Pulse actuators are momentary outputs: generated setters arm a compact
+    // uint16 countdown when an ON command is accepted, and this sweep turns the
+    // relay OFF when the pulse expires. The generated function first checks an
+    // 8-bit active counter, so keeping this in the main loop costs almost
+    // nothing while no pulse is pending.
+    if (loopElapsed_ms > 0U)
+    {
+        noteActuatorStateChanged(lsh::core::static_config::checkPulseTimers(loopElapsed_ms));
     }
 #endif
 

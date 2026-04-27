@@ -50,8 +50,10 @@ Use this README in different ways depending on what you need:
 - If you want the shortest answers to common adoption questions, skim the landing [`FAQ.md`](https://github.com/labodj/labo-smart-home/blob/main/FAQ.md).
 - If you want the shortest end-to-end bring-up path, read the landing [`GETTING_STARTED.md`](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md) before customizing this firmware.
 - If your first lab is partially alive but inconsistent, use the landing [`TROUBLESHOOTING.md`](https://github.com/labodj/labo-smart-home/blob/main/TROUBLESHOOTING.md).
+- If you are not using Controllino hardware, jump to [AVR Board Compatibility](#avr-board-compatibility).
 - If you want to wire a controller correctly, jump to [Hardware & Electrical Setup](#hardware--electrical-setup).
 - If you want to build your first controller project, jump to [Getting Started: Creating Your Project](#getting-started-creating-your-project).
+- If you want declarative TOML examples, read the [static config guide](./docs/static-toml-config.md) and the [configuration cookbook](./docs/cookbook.md).
 - If you want click semantics, fallbacks and network behavior, jump to [Configuring Device Behavior](#configuring-device-behavior).
 - If you want compile-time tuning knobs, jump to [Feature Flags](#feature-flags).
 - If you want class- and method-level details for the latest released API, use the [Doxygen API reference](https://labodj.github.io/lsh-core/).
@@ -70,6 +72,11 @@ Useful example profiles:
 - `J1_release`: leaner MsgPack profile, no network-click subsystem
 - `J2_release`: richer MsgPack profile that keeps the network-click path enabled
 
+For copyable configuration recipes, see:
+
+- [docs/cookbook.md](./docs/cookbook.md)
+- [examples/cookbook](./examples/cookbook)
+
 Build it directly from this repository:
 
 ```bash
@@ -77,8 +84,37 @@ platformio run -d examples/multi-device-project -e J1_release
 platformio run -d examples/multi-device-project -e J2_release
 ```
 
+The generic AVR compatibility example is:
+
+- [examples/avr-board-matrix](./examples/avr-board-matrix)
+
+It verifies a minimal non-Controllino profile on Arduino Mega 2560, Uno and
+Nano targets.
+
 For the stack-level bring-up order around this example, use the landing
 [`GETTING_STARTED.md`](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md).
+
+## AVR Board Compatibility
+
+`lsh-core` is not tied to Controllino. Controllino is the best documented
+industrial target and has dedicated presets, pin aliases and RTC/Ethernet
+helpers, but the portable path is standard Arduino AVR.
+
+The public compatibility matrix is intentionally small and CI-backed:
+
+| Board / family                  | PlatformIO board   | Example environment                               | Status                  | Recommended profile                 | Fast I/O       |
+| ------------------------------- | ------------------ | ------------------------------------------------- | ----------------------- | ----------------------------------- | -------------- |
+| Controllino Maxi                | `controllino_maxi` | `examples/multi-device-project:J1_release`        | supported               | `controllino-maxi/fast-msgpack`     | on             |
+| Arduino Mega 2560               | `megaatmega2560`   | `examples/avr-board-matrix:mega2560_fast_release` | supported               | `arduino-generic/json` or `msgpack` | on             |
+| Arduino Uno                     | `uno`              | `examples/avr-board-matrix:uno_release`           | supported, conservative | `arduino-generic/json`              | off by default |
+| Arduino Nano ATmega328P         | `nanoatmega328`    | `examples/avr-board-matrix:nano_release`          | supported, conservative | `arduino-generic/json`              | off by default |
+| Other Arduino AVR boards        | varies             | not in CI                                         | best effort             | `arduino-generic/json`              | off first      |
+| ATtiny and very small AVR cores | varies             | not in CI                                         | not promised            | custom profile                      | usually off    |
+
+For a new board, start with `preset = "arduino-generic/json"`,
+`hardware_include = "Arduino.h"`, numeric Arduino pins and `fast_io = false`.
+After the first release build and `pio check` are clean, enable faster codecs or
+`fast_io` deliberately.
 
 ## What is the Labo Smart Home (LSH) Ecosystem?
 
@@ -198,37 +234,44 @@ This is why the bridge and orchestration layers are treated as additive rather t
 ### 1. Project Setup
 
 1. Create a new, blank PlatformIO project.
-2. In your `platformio.ini`, add `lsh-core` as a dependency:
+2. In your `platformio.ini`, add `lsh-core` as a dependency. The recommended
+   public install path is the PlatformIO Registry package:
 
    ```ini
-    [env:my_device]
-    platform = atmelavr
-    framework = arduino
-    board = controllino_maxi
-    build_unflags = -std=gnu++11 -std=c++11
-    build_flags =
-        -I include
-        -std=gnu++17
-    lib_deps = https://github.com/labodj/lsh-core.git
+   [env:my_device]
+   platform = atmelavr
+   framework = arduino
+   board = controllino_maxi
+   lib_deps = labodj/lsh-core @ ^3.0.3
+   build_unflags = -std=gnu++11 -std=c++11
+   build_flags =
+       -I include
+       -std=gnu++17
    ```
 
-   If you are building the bundled example inside this repository, keep the local
-   `lsh-core=symlink://../..` dependency used by
-   `examples/multi-device-project/platformio.ini`.
+   During unreleased development you can still depend on the Git repository or
+   a local checkout:
+
+   ```ini
+   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.3
+   ; or, inside this repository's bundled examples:
+   ; lib_deps = lsh-core=symlink://../..
+   ```
 
 3. Add the generator hook and select a device profile:
 
    ```ini
-   extra_scripts = pre:path/to/lsh-core/tools/platformio_lsh_static_config.py
+   extra_scripts = pre:.pio/libdeps/my_device/lsh-core/tools/platformio_lsh_static_config.py
    custom_lsh_config = lsh_devices.toml
-
-   [env:my_device]
    custom_lsh_device = my_device
    ```
 
-   The `extra_scripts` path must point to an accessible `lsh-core` checkout.
-   The bundled example uses a local symlink dependency; consumer projects can
-   use an adjacent checkout, a submodule or another fixed local path.
+   The Registry package includes the TOML generator, so the hook can be loaded
+   from PlatformIO's installed `lib_deps` directory. The path contains the
+   environment name (`my_device` above); duplicate that line per environment or
+   point it at a shared local checkout/submodule when you prefer one stable path.
+   Run `platformio pkg install` once before invoking the generator manually from
+   `.pio/libdeps`.
 
 4. Create the following directory structure inside your project:
 
@@ -267,7 +310,7 @@ device.
 
 Keep the TOML as the source of truth and regenerate the headers. The generated
 profile owns registration order, dense indexes when validation needs them,
-resource counts, lookup helpers, direct action bodies, the clickable scan path,
+resource counts, lookup helpers, direct action bodies, the button scan path,
 indicator refreshes and auto-off checks.
 
 Generated capacity rule:
@@ -279,9 +322,9 @@ Generated capacity rule:
 
 Generated ID lookup:
 
-- Public actuator and clickable IDs may be sparse as long as they stay in `1..255`.
+- Public actuator and button IDs may be sparse as long as they stay in `1..255`.
 - The generator emits branch/range accessors for dense IDs and switches for sparse IDs; no user-authored lookup tables are needed.
-- The highest accepted ID is generated as `LSH_STATIC_CONFIG_MAX_ACTUATOR_ID` and `LSH_STATIC_CONFIG_MAX_CLICKABLE_ID`.
+- The highest accepted ID is generated as `LSH_STATIC_CONFIG_MAX_ACTUATOR_ID` and `LSH_STATIC_CONFIG_MAX_CLICKABLE_ID`; the second macro uses the internal `Clickable` name for the button FSM.
 
 Generated actuator-link pools:
 
@@ -294,15 +337,19 @@ Generated actuator-link pools:
 Generated runtime pools:
 
 - Per-click timing overrides from `long.time` and `super_long.time` are passed
-  as template constants by the generated clickable scanner; `Clickable` objects
+  as template constants by the generated button scanner; `Clickable` objects
   keep only dynamic FSM state and the compiler erases disabled click checks.
-- Release actuator/clickable/indicator objects do not keep dense registration
+- Release actuator/button/indicator objects do not keep dense registration
   indexes in SRAM; generated action paths pass those indexes as compile-time
   constants. Debug and runtime-check builds keep the indexes for invariant
   validation.
 - Multi-actuator generated actions share one cached timestamp when switch-time
   bookkeeping is active; single-actuator actions keep the lazy runtime path.
 - Auto-off pool size is counted from actuators with non-zero `auto_off`.
+- Pulse pool size is counted from actuators with non-zero `pulse`, and the
+  generated countdown first checks an 8-bit active counter in the hot loop.
+- Generated actuator wrappers centralize interlock and pulse behavior, so local
+  clicks, packed bridge state and direct serial commands follow the same rules.
 - Active network-click capacity is counted from configured network actions; one held button with both long and super-long network clicks needs two active transactions.
 - Compact actuator switch-time storage is selected automatically when a profile has auto-off actuators and `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0`. Otherwise each actuator keeps the timestamp needed to preserve debounce and auto-off semantics exactly.
 
@@ -314,7 +361,7 @@ Network-click derivation:
 
 Generated validation rule:
 
-- The generator assigns actuator, clickable and indicator indexes in a deterministic order.
+- The generator assigns actuator, button and indicator indexes in a deterministic order.
 - It rejects missing references, duplicated targets, empty indicators, disabled actions with active options and unsupported path/identifier expressions before compilation.
 - `Configurator::finalizeSetup()` still validates compact manager invariants before runtime starts.
 
@@ -360,36 +407,37 @@ public IDs, pins and click behavior; the generator emits the C++ objects,
 resource counts, lookup accessors and topology-specialized runtime paths.
 
 ```toml
-[generator]
-output_dir = "include"
-config_dir = "lsh_configs"
-user_config_header = "lsh_user_config.hpp"
-static_config_router_header = "lsh_static_config_router.hpp"
+#:schema ./.vscode/lsh_devices.schema.json
 
-[common]
-hardware_include = "Controllino.h"
+schema_version = 2
+preset = "controllino-maxi/fast-msgpack"
+
+[controller]
 debug_serial = "Serial"
-com_serial = "Serial2"
+bridge_serial = "Serial2"
 
 [devices.living_room]
 name = "LivingRoom"
 
-[[devices.living_room.actuators]]
-name = "mainLight"
+[devices.living_room.actuators.main_light]
 id = 1
-pin = "CONTROLLINO_R0"
+pin = "R0"
 
-[[devices.living_room.clickables]]
-name = "wallSwitch"
+[devices.living_room.buttons.wall_switch]
 id = 1
-pin = "CONTROLLINO_A0"
-short = ["mainLight"]
+pin = "A0"
+short = "main_light"
 ```
 
 Keep those generated header names unless you have a build-system reason to
 rename them. The PlatformIO hook passes the extra internal include-selector
 defines when the names are customized; manual builds must use
 `--print-platformio-defines` and pass the same values.
+
+Resource IDs can be omitted. The generator writes `lsh_devices.lock.toml` next
+to the TOML file and reuses those locked IDs on later runs, so users can insert
+new resources without hand-maintaining lookup tables. Commit the lockfile with
+the TOML profile.
 
 **Step 3: Add the Generator to the Build System**
 
@@ -399,12 +447,12 @@ profile and adds the correct `LSH_BUILD_*` macro.
 
 ```ini
 [common_base]
-extra_scripts = pre:path/to/lsh-core/tools/platformio_lsh_static_config.py
 custom_lsh_config = lsh_devices.toml
 build_src_filter = +<*> -<configs/>
 
 [env:LivingRoom_release]
 extends = common_release
+extra_scripts = pre:.pio/libdeps/LivingRoom_release/lsh-core/tools/platformio_lsh_static_config.py
 custom_lsh_device = living_room
 build_src_filter = ${common_base.build_src_filter}
 build_flags =
@@ -424,65 +472,111 @@ every accepted TOML option and is validated by CI. Use it as a syntax reference;
 use [examples/multi-device-project](examples/multi-device-project) as the
 buildable starting point.
 
+The generator also provides adoption tooling:
+
+- `--doctor` reports non-fatal configuration smells before they turn into
+  firmware surprises.
+- `--format-config` rewrites schema v2 TOML into a deterministic order.
+- `--print-json-schema` prints the editor schema committed at
+  [docs/lsh_devices.schema.json](docs/lsh_devices.schema.json).
+- `python3 tools/migrate_lsh_config.py` performs a one-shot conversion from
+  pre-v2 TOML.
+
 The sections below use the public TOML format. Generated C++ remains an
 implementation detail.
 
 ### Actuators (Relays)
 
 Declare an actuator in TOML. IDs must be unique in the device and stay in the
-wire range `1..255`.
+wire range `1..255`. If omitted, they are assigned through the lockfile.
 
 ```toml
-[[devices.living_room.actuators]]
-name = "main_light"
+[devices.living_room.actuators.main_light]
 id = 1
-pin = "CONTROLLINO_R0"
-default_state = false
+pin = "R0"
+default = false
 protected = false
 auto_off = "10m"
 ```
 
-The `pin` value must be a compile-time Arduino expression such as a board macro
-(`CONTROLLINO_R0`, `CONTROLLINO_A0`, ...) or a numeric literal. On supported AVR
-boards, the generator lets `lsh-core` resolve the final port/mask binding at
-compile time while keeping the hot write path on direct register access.
+With the `controllino-maxi/*` presets, `R0`, `A0`, `D0` and `IN0` expand to the
+matching Controllino pin macros. Raw Arduino expressions and numeric literals
+are still accepted when a profile needs them. On supported AVR boards, the
+generator lets `lsh-core` resolve the final port/mask binding at compile time
+while keeping the hot write path on direct register access.
 
 `auto_off` accepts durations such as `"900ms"`, `"30s"`, `"10m"` or `"1h"`.
 `protected = true` excludes that relay from global all-off super-long actions.
+Use `pulse` for momentary outputs: every ON command, including one received
+from the bridge, starts or restarts the pulse and OFF cancels it. Use
+`auto_off` instead for a latched relay with a guard timer. `interlock` is an
+actuator name or list that is switched OFF before this actuator turns ON.
 
-### Clickables (Buttons)
+```toml
+[devices.living_room.actuators.door_strike]
+pin = "R1"
+pulse = "300ms"
+
+[devices.living_room.actuators.pump_a]
+pin = "R2"
+interlock = "pump_b"
+```
+
+### Groups and Scenes
+
+Groups and scenes keep larger TOML profiles readable without adding runtime
+lookup tables:
+
+```toml
+[devices.living_room.groups.ambient]
+targets = ["main_light", "side_light"]
+
+[devices.living_room.scenes.movie]
+off = "ambient"
+on = "tv_backlight"
+
+[devices.living_room.buttons.scene]
+pin = "A1"
+short = { scene = "movie" }
+long = { action = "off", group = "ambient" }
+```
+
+Groups are expanded by the generator. Scenes are emitted as direct ordered
+steps: `off`, then `on`, then `toggle`.
+
+### Buttons
 
 Declare inputs in TOML and reference actuators by name. The generator resolves
 those names into dense indexes and exact link pools before compilation.
 
 ```toml
-[[devices.living_room.clickables]]
-name = "wall_switch"
+[devices.living_room.buttons.wall_switch]
 id = 1
-pin = "CONTROLLINO_A0"
-short = ["main_light"]
-long = { targets = ["main_light"], type = "on_only", time = "900ms" }
-super_long = { type = "selective", targets = ["main_light"] }
+pin = "A0"
+short = "main_light"
+long = { action = "on", target = "main_light", after = "900ms" }
+super_long = { action = "off", targets = ["main_light"] }
 ```
 
-Short clicks toggle their local targets. Long clicks support `normal`,
-`on_only`/`on-only` and `off_only`/`off-only`. Super-long clicks support
-`normal` global all-off behavior or `selective` target lists. Both long and
-super-long actions can set `network = true` and choose a fallback policy.
+Short clicks toggle their local targets. Long clicks support `toggle`, `on` and
+`off`. Super-long clicks support `all_off` for every unprotected actuator or
+`off` for explicit target lists. Both long and super-long actions can set
+`network = true` and choose a fallback policy. Action tables may use `target`,
+`targets`, `group`, `groups` or `scene` depending on whether they address one
+relay, a list, a named group or a deterministic scene.
 
 ### Indicators (LEDs)
 
 Declare an indicator and the actuators it watches:
 
 ```toml
-[[devices.living_room.indicators]]
-name = "main_light_led"
-pin = "CONTROLLINO_D0"
-actuators = ["main_light"]
-mode = "any"
+[devices.living_room.indicators.main_light_led]
+pin = "D0"
+when = "main_light"
 ```
 
-`mode` can be `any`, `all` or `majority`.
+`when` can be a single actuator, a list, or `{ any = [...] }`,
+`{ all = [...] }` / `{ majority = [...] }`.
 
 ### Network Clicks and Fallback Logic
 
@@ -498,14 +592,14 @@ If the same button has both long and super-long network clicks enabled, `lsh-cor
 
 You can choose between two different fallback types:
 
-1. **`local` / `local_fallback` (Default)**
+1. **`local` (Default)**
    If a network problem occurs, the click is treated as a standard, local-only action. The actuators listed in the same action's `targets` field will be triggered on the device itself. This ensures the button always does _something_.
 
    ```toml
-   long = { network = true, fallback = "local", targets = ["main_light"], type = "on_only" }
+   long = { network = true, fallback = "local", targets = ["main_light"], action = "on" }
    ```
 
-2. **`do_nothing` / `do-nothing`**
+2. **`do_nothing`**
    If a network problem occurs, the click is simply ignored. This is useful for actions that only make sense in a network context (e.g., "All Lights Off" across the entire house).
 
    ```toml
@@ -563,12 +657,33 @@ slow or unavailable.
 
 ## Feature Flags
 
-LSH-Core can be fine-tuned at compile-time using feature flags. These flags allow you to enable or disable specific functionalities to optimize for performance, memory usage, or specific hardware capabilities.
+LSH-Core can be fine-tuned at compile time. In schema v2, prefer semantic TOML
+fields first:
 
-For TOML-backed profiles, put shared feature flags in `[common.defines]` and
-per-device overrides in `[devices.<name>.defines]`. PlatformIO-only global
-defaults can still live in `platformio.ini` when they are intentionally shared
-by every environment.
+```toml
+[features]
+codec = "msgpack"
+fast_io = true
+
+[timing]
+button_debounce = "20ms"
+long_click = "400ms"
+
+[serial]
+bridge_baud = 500000
+max_rx_bytes_per_loop = 64
+```
+
+When a profile needs a low-level knob that has no semantic field yet, use the
+expert escape hatch:
+
+```toml
+[advanced.defines]
+CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP = 64
+```
+
+PlatformIO-only global defaults can still live in `platformio.ini` when they
+are intentionally shared by every environment.
 
 For AVR static profiles, the recommended baseline assumes this priority order:
 runtime speed first, SRAM second, flash third. In that mode, enable
@@ -808,4 +923,25 @@ platformio run -e J1_release
 
 # Build and upload the 'J1_debug' environment
 platformio run -e J1_debug --target upload
+```
+
+## PlatformIO Registry Releases
+
+Maintainers publish the library as a PlatformIO package only after the package
+smoke test has passed. That test packs the current checkout, verifies that the
+TOML generator and schema are present, rejects local cache/build directories,
+and builds a temporary consumer project from the packed archive.
+
+Manual release commands:
+
+```bash
+platformio pkg pack
+platformio account login
+platformio pkg publish --owner labodj --type library --no-interactive
+```
+
+After a Registry release, consumers should prefer:
+
+```ini
+lib_deps = labodj/lsh-core @ ^3.0.3
 ```

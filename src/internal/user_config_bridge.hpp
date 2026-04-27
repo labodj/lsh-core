@@ -74,6 +74,9 @@
 #ifndef LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS
 #error "LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS must be defined by the static profile."
 #endif
+#ifndef LSH_STATIC_CONFIG_PULSE_ACTUATORS
+#error "LSH_STATIC_CONFIG_PULSE_ACTUATORS must be defined by the static profile."
+#endif
 #ifndef LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS
 #error "LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS must be defined by the static profile."
 #endif
@@ -153,6 +156,15 @@ static_assert(CONFIG_MAX_AUTO_OFF_ACTUATORS_WIDE <= static_cast<uint16_t>(CONFIG
 static constexpr uint8_t CONFIG_MAX_AUTO_OFF_ACTUATORS =
     static_cast<uint8_t>(CONFIG_MAX_AUTO_OFF_ACTUATORS_WIDE);  //!< Number of actuators with an auto-off timer in the whole device.
 static constexpr uint8_t CONFIG_AUTO_OFF_STORAGE_CAPACITY = (CONFIG_MAX_AUTO_OFF_ACTUATORS == 0U) ? 1U : CONFIG_MAX_AUTO_OFF_ACTUATORS;
+
+static_assert(LSH_STATIC_CONFIG_PULSE_ACTUATORS >= 0, "LSH_STATIC_CONFIG_PULSE_ACTUATORS must be non-negative.");
+static_assert(LSH_STATIC_CONFIG_PULSE_ACTUATORS <= UINT8_MAX, "LSH_STATIC_CONFIG_PULSE_ACTUATORS must fit in uint8_t.");
+static constexpr uint16_t CONFIG_MAX_PULSE_ACTUATORS_WIDE = static_cast<uint16_t>(LSH_STATIC_CONFIG_PULSE_ACTUATORS);
+static_assert(CONFIG_MAX_PULSE_ACTUATORS_WIDE <= static_cast<uint16_t>(CONFIG_MAX_ACTUATORS),
+              "LSH_STATIC_CONFIG_PULSE_ACTUATORS cannot exceed LSH_STATIC_CONFIG_ACTUATORS.");
+static constexpr uint8_t CONFIG_MAX_PULSE_ACTUATORS =
+    static_cast<uint8_t>(CONFIG_MAX_PULSE_ACTUATORS_WIDE);  //!< Number of generated momentary/pulse actuators in the device.
+static constexpr uint8_t CONFIG_PULSE_STORAGE_CAPACITY = (CONFIG_MAX_PULSE_ACTUATORS == 0U) ? 1U : CONFIG_MAX_PULSE_ACTUATORS;
 
 #if defined(LSH_COMPACT_ACTUATOR_SWITCH_TIMES)
 #error "LSH_COMPACT_ACTUATOR_SWITCH_TIMES was removed; set CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0 for automatic compact storage."

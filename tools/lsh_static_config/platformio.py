@@ -20,6 +20,33 @@ def _quoted_header_value(header_name: str) -> str:
     return f'"{header_name}"'
 
 
+def define_needs_escaped_build_flag(define: DefineValue) -> bool:
+    """Return true when SCons CPPDEFINES would lose meaningful token syntax.
+
+    Most lsh-core defines are plain booleans or integers and should stay in
+    CPPDEFINES so PlatformIO can manage them normally. Include-operand defines
+    are different: shell-based AVR commands consume unescaped quotes and angle
+    brackets before the preprocessor sees them. Those values must be emitted as
+    raw build flags with the delimiters escaped.
+    """
+    if define.value is None:
+        return False
+    return any(character in define.value for character in ('"', "<", ">"))
+
+
+def render_escaped_build_flag_define(define: DefineValue) -> str:
+    """Render one define as a raw `-D` flag preserving C preprocessor tokens."""
+    if define.value is None:
+        return f"-D{define.name}"
+    value = (
+        define.value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("<", "\\<")
+        .replace(">", "\\>")
+    )
+    return f"-D{define.name}={value}"
+
+
 def merged_defines(project: ProjectConfig, device: DeviceConfig) -> list[DefineValue]:
     """Merge common and device defines into PlatformIO-compatible values."""
     merged = dict(project.common_defines)

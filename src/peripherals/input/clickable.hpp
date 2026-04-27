@@ -41,28 +41,11 @@
 class Clickable
 {
 private:
-    /**
-     * @brief Explicit states for the finite state machine (FSM).
-     *
-     */
-    enum class State : uint8_t
-    {
-        IDLE,        //!< The button is not pressed, waiting for a press.
-        DEBOUNCING,  //!< A change was detected, waiting for the signal to stabilize.
-        PRESSED,     //!< The press is confirmed and stable. Timing for long/super-long actions.
-        RELEASED     //!< The button was just released. A transient state to determine the final action.
-    };
-
-    /**
-     * @brief This enum is used to track which timed action was fired during a press sequence.
-     *
-     */
-    enum class ActionFired : uint8_t
-    {
-        NONE,
-        LONG,
-        SUPER_LONG
-    };
+    static constexpr uint8_t CLICKABLE_FLAG_STABLE_PRESSED = 0x01U;
+    static constexpr uint8_t CLICKABLE_FLAG_CANDIDATE_PRESSED = 0x02U;
+    static constexpr uint8_t CLICKABLE_FLAG_DEBOUNCING = 0x04U;
+    static constexpr uint8_t CLICKABLE_FLAG_LONG_FIRED = 0x08U;
+    static constexpr uint8_t CLICKABLE_FLAG_SUPER_LONG_FIRED = 0x10U;
 
 #ifndef CONFIG_USE_FAST_CLICKABLES
     const uint8_t pinNumber;  //!< The pin to which the clickable is connected to, for conventional IO
@@ -79,14 +62,120 @@ private:
      * register read in `getState()` with no extra dispatch in the scan loop.
      */
     explicit Clickable(lsh::core::avr::FastInputPinBinding binding) noexcept : pinMask(binding.mask), pinPort(binding.pinPort)
-    {}
+    {
+        // lsh-core expects externally pulled-down buttons. Explicitly disabling
+        // the AVR pull-up avoids inheriting a previous firmware's PORT latch
+        // state before the scan loop starts sampling the direct input register.
+        const uint8_t oldSREG = SREG;
+        cli();
+        *binding.outputPort &= ~this->pinMask;
+        *binding.modePort &= ~this->pinMask;
+        SREG = oldSREG;
+    }
 #endif
-    uint16_t stateAge_ms = 0U;  //!< Elapsed time spent in the current non-idle state, saturated at 65535 ms.
+    uint16_t pressAge_ms = 0U;    //!< Debounced press duration, frozen while a release is only a debounce candidate.
+    uint8_t debounceAge_ms = 0U;  //!< Elapsed time spent validating the raw candidate edge.
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     uint8_t index = UINT8_MAX;  //!< Debug/runtime-check registration index; stripped from release objects.
 #endif
-    State currentState = State::IDLE;                 //!< The current state of the FSM.
-    ActionFired lastActionFired = ActionFired::NONE;  //!< Tracks which timed action has already been triggered.
+    uint8_t flags = 0U;  //!< Packed debounce state and once-per-press action markers.
+
+    [[nodiscard]] auto hasClickableFlag(uint8_t flag) const noexcept -> bool
+    {
+        return (this->flags & flag) != 0U;
+    }
+
+    void setClickableFlag(uint8_t flag, bool enabled) noexcept
+    {
+        if (enabled)
+        {
+            this->flags |= flag;
+        }
+        else
+        {
+            this->flags &= static_cast<uint8_t>(~flag);
+        }
+    }
+
+    [[nodiscard]] auto stablePressed() const noexcept -> bool
+    {
+        return this->hasClickableFlag(CLICKABLE_FLAG_STABLE_PRESSED);
+    }
+
+    [[nodiscard]] auto candidatePressed() const noexcept -> bool
+    {
+        return this->hasClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED);
+    }
+
+    [[nodiscard]] auto isDebouncing() const noexcept -> bool
+    {
+        return this->hasClickableFlag(CLICKABLE_FLAG_DEBOUNCING);
+    }
+
+    [[nodiscard]] auto releaseDebouncePending() const noexcept -> bool
+    {
+        return this->isDebouncing() && this->stablePressed() && !this->candidatePressed();
+    }
+
+    void clearTimedActionFlags() noexcept
+    {
+        this->flags &= static_cast<uint8_t>(~(CLICKABLE_FLAG_LONG_FIRED | CLICKABLE_FLAG_SUPER_LONG_FIRED));
+    }
+
+    void startDebounce(bool candidatePressed) noexcept
+    {
+        this->setClickableFlag(CLICKABLE_FLAG_DEBOUNCING, true);
+        this->setClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED, candidatePressed);
+        this->debounceAge_ms = 0U;
+    }
+
+    [[nodiscard]] auto confirmDebouncedEdge(bool pressed) noexcept -> constants::ClickResult
+    {
+        this->setClickableFlag(CLICKABLE_FLAG_DEBOUNCING, false);
+        this->debounceAge_ms = 0U;
+        this->setClickableFlag(CLICKABLE_FLAG_STABLE_PRESSED, pressed);
+        this->setClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED, pressed);
+        return pressed ? constants::ClickResult::NO_CLICK_KEEPING_CLICKED : constants::ClickResult::NO_CLICK;
+    }
+
+    [[nodiscard]] auto updateDebouncedEdge(bool rawPressed, uint16_t elapsed_ms) noexcept -> constants::ClickResult
+    {
+        using constants::ClickResult;
+        using constants::timings::CLICKABLE_DEBOUNCE_TIME_MS;
+
+        if (!this->isDebouncing())
+        {
+            if (rawPressed == this->stablePressed())
+            {
+                return ClickResult::NO_CLICK;
+            }
+            if (CLICKABLE_DEBOUNCE_TIME_MS == 0U)
+            {
+                return this->confirmDebouncedEdge(rawPressed);
+            }
+            this->startDebounce(rawPressed);
+            return ClickResult::NO_CLICK;
+        }
+
+        if (rawPressed != this->candidatePressed())
+        {
+            // The raw input bounced back to the stable level before the
+            // candidate edge became valid. Keep the same logical press, which
+            // prevents a noisy release from arming another long click.
+            this->setClickableFlag(CLICKABLE_FLAG_DEBOUNCING, false);
+            this->setClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED, this->stablePressed());
+            this->debounceAge_ms = 0U;
+            return ClickResult::NO_CLICK;
+        }
+
+        const uint16_t nextDebounceAge = timeUtils::addElapsedTimeSaturated(this->debounceAge_ms, elapsed_ms);
+        this->debounceAge_ms = nextDebounceAge > UINT8_MAX ? UINT8_MAX : static_cast<uint8_t>(nextDebounceAge);
+        if (this->debounceAge_ms >= CLICKABLE_DEBOUNCE_TIME_MS)
+        {
+            return this->confirmDebouncedEdge(rawPressed);
+        }
+        return ClickResult::NO_CLICK;
+    }
 
     /**
      * @brief Shared click FSM implementation for runtime and generated-static paths.
@@ -103,102 +192,34 @@ private:
         using constants::ClickResult;
         using namespace constants::clickDetection;
 
-        const bool isPressed = this->getState();
-        if (this->currentState != State::IDLE)
+        const bool wasStablePressed = this->stablePressed();
+        static_cast<void>(this->updateDebouncedEdge(this->getState(), elapsed_ms));
+        const bool isStablePressed = this->stablePressed();
+
+        if (!wasStablePressed && isStablePressed)
         {
-            this->stateAge_ms = timeUtils::addElapsedTimeSaturated(this->stateAge_ms, elapsed_ms);
+            this->pressAge_ms = 0U;
+            this->clearTimedActionFlags();
+            if constexpr (StaticConfigKnown)
+            {
+                if constexpr ((StaticDetectionFlags & QUICK_SHORT) != 0U)
+                {
+                    return ClickResult::SHORT_CLICK_QUICK;
+                }
+            }
+            else if (hasFlag(detectionFlags, QUICK_SHORT))
+            {
+                return ClickResult::SHORT_CLICK_QUICK;
+            }
+            return ClickResult::NO_CLICK_KEEPING_CLICKED;
         }
 
-        switch (this->currentState)
+        if (wasStablePressed && !isStablePressed)
         {
-        case State::IDLE:
-            if (isPressed)
-            {
-                this->currentState = State::DEBOUNCING;
-                this->stateAge_ms = 0U;
-            }
-            break;
-
-        case State::DEBOUNCING:
-            if (this->stateAge_ms >= constants::timings::CLICKABLE_DEBOUNCE_TIME_MS)
-            {
-                if (isPressed)
-                {
-                    this->currentState = State::PRESSED;
-                    this->stateAge_ms = 0U;
-                    this->lastActionFired = ActionFired::NONE;
-                    if constexpr (StaticConfigKnown)
-                    {
-                        if constexpr ((StaticDetectionFlags & QUICK_SHORT) != 0U)
-                        {
-                            return ClickResult::SHORT_CLICK_QUICK;
-                        }
-                    }
-                    else if (hasFlag(detectionFlags, QUICK_SHORT))
-                    {
-                        return ClickResult::SHORT_CLICK_QUICK;
-                    }
-                }
-                else
-                {
-                    this->currentState = State::IDLE;
-                }
-            }
-            break;
-
-        case State::PRESSED:
-            if (isPressed)
-            {
-                // Preserve the old action ordering: a slow scan that crosses
-                // both thresholds emits LONG first and SUPER_LONG on the next
-                // scan, so bridge-assisted sequences keep their correlation.
-                if constexpr (StaticConfigKnown)
-                {
-                    if constexpr ((StaticDetectionFlags & LONG_ENABLED) != 0U)
-                    {
-                        if (this->lastActionFired < ActionFired::LONG && this->stateAge_ms >= StaticLongClick_ms)
-                        {
-                            this->lastActionFired = ActionFired::LONG;
-                            return ClickResult::LONG_CLICK;
-                        }
-                    }
-
-                    if constexpr ((StaticDetectionFlags & SUPER_LONG_ENABLED) != 0U)
-                    {
-                        if (this->lastActionFired < ActionFired::SUPER_LONG && this->stateAge_ms >= StaticSuperLongClick_ms)
-                        {
-                            this->lastActionFired = ActionFired::SUPER_LONG;
-                            return ClickResult::SUPER_LONG_CLICK;
-                        }
-                    }
-                }
-                else
-                {
-                    if (hasFlag(detectionFlags, LONG_ENABLED) && this->lastActionFired < ActionFired::LONG &&
-                        this->stateAge_ms >= longClick_ms)
-                    {
-                        this->lastActionFired = ActionFired::LONG;
-                        return ClickResult::LONG_CLICK;
-                    }
-
-                    if (hasFlag(detectionFlags, SUPER_LONG_ENABLED) && this->lastActionFired < ActionFired::SUPER_LONG &&
-                        this->stateAge_ms >= superLongClick_ms)
-                    {
-                        this->lastActionFired = ActionFired::SUPER_LONG;
-                        return ClickResult::SUPER_LONG_CLICK;
-                    }
-                }
-
-                return ClickResult::NO_CLICK_KEEPING_CLICKED;
-            }
-
-            this->currentState = State::RELEASED;
-            [[fallthrough]];
-
-        case State::RELEASED:
-            this->currentState = State::IDLE;
-            this->stateAge_ms = 0U;
-
+            const bool timedActionFired =
+                this->hasClickableFlag(CLICKABLE_FLAG_LONG_FIRED) || this->hasClickableFlag(CLICKABLE_FLAG_SUPER_LONG_FIRED);
+            this->pressAge_ms = 0U;
+            this->clearTimedActionFlags();
             if constexpr (StaticConfigKnown)
             {
                 if constexpr ((StaticDetectionFlags & QUICK_SHORT) != 0U)
@@ -207,28 +228,69 @@ private:
                 }
                 if constexpr ((StaticDetectionFlags & SHORT_ENABLED) != 0U)
                 {
-                    if (this->lastActionFired == ActionFired::NONE)
-                    {
-                        return ClickResult::SHORT_CLICK;
-                    }
+                    return timedActionFired ? ClickResult::NO_CLICK : ClickResult::SHORT_CLICK;
                 }
                 return ClickResult::NO_CLICK;
             }
-            else
+            if (hasFlag(detectionFlags, QUICK_SHORT))
             {
-                if (hasFlag(detectionFlags, QUICK_SHORT))
-                {
-                    return ClickResult::NO_CLICK;
-                }
-
-                if (this->lastActionFired == ActionFired::NONE)
-                {
-                    return hasFlag(detectionFlags, SHORT_ENABLED) ? ClickResult::SHORT_CLICK : ClickResult::NO_CLICK_NOT_SHORT_CLICKABLE;
-                }
                 return ClickResult::NO_CLICK;
+            }
+            if (!timedActionFired)
+            {
+                return hasFlag(detectionFlags, SHORT_ENABLED) ? ClickResult::SHORT_CLICK : ClickResult::NO_CLICK_NOT_SHORT_CLICKABLE;
+            }
+            return ClickResult::NO_CLICK;
+        }
+
+        if (!isStablePressed)
+        {
+            return ClickResult::NO_CLICK;
+        }
+
+        if (this->releaseDebouncePending())
+        {
+            return ClickResult::NO_CLICK_KEEPING_CLICKED;
+        }
+
+        this->pressAge_ms = timeUtils::addElapsedTimeSaturated(this->pressAge_ms, elapsed_ms);
+        if constexpr (StaticConfigKnown)
+        {
+            if constexpr ((StaticDetectionFlags & LONG_ENABLED) != 0U)
+            {
+                if (!this->hasClickableFlag(CLICKABLE_FLAG_LONG_FIRED) && this->pressAge_ms >= StaticLongClick_ms)
+                {
+                    this->setClickableFlag(CLICKABLE_FLAG_LONG_FIRED, true);
+                    return ClickResult::LONG_CLICK;
+                }
+            }
+
+            if constexpr ((StaticDetectionFlags & SUPER_LONG_ENABLED) != 0U)
+            {
+                if (!this->hasClickableFlag(CLICKABLE_FLAG_SUPER_LONG_FIRED) && this->pressAge_ms >= StaticSuperLongClick_ms)
+                {
+                    this->setClickableFlag(CLICKABLE_FLAG_SUPER_LONG_FIRED, true);
+                    return ClickResult::SUPER_LONG_CLICK;
+                }
             }
         }
-        return ClickResult::NO_CLICK;
+        else
+        {
+            if (hasFlag(detectionFlags, LONG_ENABLED) && !this->hasClickableFlag(CLICKABLE_FLAG_LONG_FIRED) &&
+                this->pressAge_ms >= longClick_ms)
+            {
+                this->setClickableFlag(CLICKABLE_FLAG_LONG_FIRED, true);
+                return ClickResult::LONG_CLICK;
+            }
+
+            if (hasFlag(detectionFlags, SUPER_LONG_ENABLED) && !this->hasClickableFlag(CLICKABLE_FLAG_SUPER_LONG_FIRED) &&
+                this->pressAge_ms >= superLongClick_ms)
+            {
+                this->setClickableFlag(CLICKABLE_FLAG_SUPER_LONG_FIRED, true);
+                return ClickResult::SUPER_LONG_CLICK;
+            }
+        }
+        return ClickResult::NO_CLICK_KEEPING_CLICKED;
     }
 
 public:
@@ -239,7 +301,10 @@ public:
      * @param pin pin number
      */
     explicit LSH_OPTIONAL_CONSTEXPR_CTOR Clickable(uint8_t pin) noexcept : pinNumber(pin)
-    {}
+    {
+        pinMode(pin, INPUT);
+        digitalWrite(pin, LOW);
+    }
 
     /**
      * @brief Construct a clickable from a compile-time pin tag on the slow-I/O path.

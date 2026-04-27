@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import cast
 
@@ -21,6 +22,7 @@ from .constants import (
 )
 from .errors import fail
 from .models import (
+    ActionStep,
     ActuatorConfig,
     ClickableConfig,
     ClickAction,
@@ -33,16 +35,8 @@ from .models import (
     TomlTable,
     TomlValue,
 )
-from .validation import validate_device
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised only on Python < 3.11
-    try:
-        import tomli as tomllib  # type: ignore[import-not-found,no-redef]
-    except ModuleNotFoundError:
-        message = "TOML support requires Python 3.11+ or `pip install tomli`."
-        raise SystemExit(message) from None
+from .public_schema import normalize_public_schema
+from .validation import validate_device, validate_project
 
 
 def expect_table(value: TomlValue | None, path: str) -> TomlTable:
@@ -135,11 +129,42 @@ def validate_cpp_expr(value: str, path: str) -> str:
     return value
 
 
-def normalize_include(value: str) -> str:
+def normalize_include(value: str, path: str) -> str:
     """Normalize bare hardware include names into angle-bracket includes."""
-    if value.startswith(("<", '"')):
+    if value.strip() != value:
+        fail(f"{path} must not be padded with spaces.")
+    if value.startswith("<"):
+        if not value.endswith(">") or value == "<>":
+            fail(f"{path} must use a balanced <header.h> include.")
         return value
+    if value.startswith('"'):
+        if not value.endswith('"') or value == '""':
+            fail(f"{path} must use a balanced quoted include.")
+        return value
+    if value.endswith((">", '"')):
+        fail(f"{path} has an include delimiter without a matching opener.")
+    value = validate_cpp_expr(value, path)
+    if "/" in value or "\\" in value:
+        fail(f"{path} must be a bare include name or an explicit include operand.")
+    if value == "":
+        fail(f"{path} must not be empty.")
     return f"<{value}>"
+
+
+def hardware_include_looks_controllino(value: str) -> bool:
+    """Return true if the include operand clearly targets Controllino headers."""
+    return "controllino" in value.lower()
+
+
+def validate_controllino_options(device: DeviceConfig, device_path: str) -> None:
+    """Reject Controllino-only setup switches on non-Controllino profiles."""
+    if not (device.disable_rtc or device.disable_eth):
+        return
+    if hardware_include_looks_controllino(device.hardware_include):
+        return
+    fail(
+        f"{device_path}.disable_rtc/disable_eth require a Controllino hardware_include."
+    )
 
 
 def normalize_serial(value: str, path: str) -> str:
@@ -235,30 +260,61 @@ def parse_targets(value: TomlValue | None, path: str) -> list[str]:
     return parsed
 
 
-def parse_short_action(raw: TomlValue | None, path: str) -> tuple[bool, list[str]]:
+def parse_action_steps(raw: TomlValue | None, path: str) -> list[ActionStep]:
+    """Parse deterministic generated action steps for scenes and advanced actions."""
+    if raw is None:
+        return []
+    steps = expect_list(raw, path)
+    parsed: list[ActionStep] = []
+    for index, raw_step in enumerate(steps):
+        step_path = f"{path}[{index}]"
+        table = expect_table(raw_step, step_path)
+        operation = expect_string(
+            table.get("operation"), f"{step_path}.operation"
+        ).upper()
+        if operation not in {"TOGGLE", "ON", "OFF"}:
+            fail(f"{step_path}.operation must be one of: TOGGLE, ON, OFF.")
+        parsed.append(
+            ActionStep(
+                operation=operation,
+                targets=parse_targets(table.get("targets", []), f"{step_path}.targets"),
+            )
+        )
+        if not parsed[-1].targets:
+            fail(f"{step_path}.targets must contain at least one actuator.")
+    return parsed
+
+
+def parse_short_action(
+    raw: TomlValue | None,
+    path: str,
+) -> tuple[bool, list[str], list[ActionStep]]:
     """Parse the short-click shorthand/table syntax."""
     if raw is None:
-        return False, []
+        return False, [], []
     if isinstance(raw, bool):
         if raw:
             fail(
                 f'{path}=true is ambiguous; use {path} = ["actuator_name"] '
                 "or a table with targets."
             )
-        return False, []
+        return False, [], []
     if isinstance(raw, list):
         targets = parse_targets(raw, path)
         if not targets:
             fail(f"{path} must contain at least one actuator when enabled.")
-        return True, targets
+        return True, targets, []
     table = expect_table(raw, path)
     enabled = get_bool(table, "enabled", path, default=True)
     targets = parse_targets(table.get("targets", []), f"{path}.targets")
-    if enabled and not targets:
+    steps = parse_action_steps(table.get("steps"), f"{path}.steps")
+    if enabled and not targets and not steps:
         fail(f"{path} is enabled but has no targets.")
     if not enabled and targets:
         fail(f"{path} has targets but is disabled.")
-    return enabled, targets
+    if not enabled and steps:
+        fail(f"{path} has steps but is disabled.")
+    return enabled, targets, steps
 
 
 def _parse_click_type(raw_type: str, path: str, action_name: str) -> str:
@@ -276,11 +332,9 @@ def _parse_click_type(raw_type: str, path: str, action_name: str) -> str:
 
 
 def _apply_click_targets(action: ClickAction, table: TomlTable, path: str) -> None:
-    """Apply the supported local target aliases to a click action."""
+    """Apply the normalized local target list to a click action."""
     if "targets" in table:
         action.targets = parse_targets(table["targets"], f"{path}.targets")
-    elif "actuators" in table:
-        action.targets = parse_targets(table["actuators"], f"{path}.actuators")
 
 
 def _apply_click_timing(action: ClickAction, table: TomlTable, path: str) -> None:
@@ -301,6 +355,7 @@ def _apply_click_action_table(
 ) -> None:
     """Apply table-only click options to an already-created action."""
     _apply_click_targets(action, table, path)
+    action.steps = parse_action_steps(table.get("steps"), f"{path}.steps")
 
     if "type" in table:
         raw_type = expect_string(table["type"], f"{path}.type").lower()
@@ -322,23 +377,31 @@ def _apply_click_action_table(
 def _validate_click_action(action: ClickAction, path: str, action_name: str) -> None:
     """Reject actions that would be enabled but inert or contradictory."""
     if not action.enabled:
-        if action.targets or action.network or action.time_ms is not None:
+        if (
+            action.targets
+            or action.steps
+            or action.network
+            or action.time_ms is not None
+        ):
             fail(f"{path} is disabled but still contains active options.")
         return
 
-    if action_name == "long" and not action.targets and not action.network:
+    if (
+        action_name == "long"
+        and not action.targets
+        and not action.steps
+        and not action.network
+    ):
         fail(f"{path} is enabled but has neither local targets nor network=true.")
 
-    # A selective super-long with no local/network target is a deliberate no-op.
-    # It preserves legacy profiles that used SELECTIVE to suppress the default
-    # global-off action without attaching any secondary actuator.
     if (
         action_name == "super_long"
         and action.click_type == "SELECTIVE"
         and not action.targets
+        and not action.steps
         and not action.network
     ):
-        return
+        fail(f"{path} is selective but has no targets.")
 
 
 def parse_click_action(
@@ -426,6 +489,18 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
             actuator.auto_off_ms = parse_duration_ms(
                 table["auto_off_ms"], f"{item_path}.auto_off_ms"
             )
+        if "pulse" in table:
+            actuator.pulse_ms = parse_duration_ms(
+                table["pulse"], f"{item_path}.pulse", UINT16_MAX
+            )
+        if "pulse_ms" in table:
+            actuator.pulse_ms = parse_duration_ms(
+                table["pulse_ms"], f"{item_path}.pulse_ms", UINT16_MAX
+            )
+        if "interlock" in table:
+            actuator.interlock_targets = parse_targets(
+                table["interlock"], f"{item_path}.interlock"
+            )
         actuators.append(actuator)
     return actuators
 
@@ -445,9 +520,11 @@ def parse_clickables(raw: TomlValue | None, path: str) -> list[ClickableConfig]:
                 get_string(table, "pin", item_path), f"{item_path}.pin"
             ),
         )
-        clickable.short_enabled, clickable.short_targets = parse_short_action(
-            table.get("short"), f"{item_path}.short"
-        )
+        (
+            clickable.short_enabled,
+            clickable.short_targets,
+            clickable.short_steps,
+        ) = parse_short_action(table.get("short"), f"{item_path}.short")
         clickable.long = parse_click_action(
             table.get("long"), f"{item_path}.long", "long"
         )
@@ -477,8 +554,8 @@ def parse_indicators(raw: TomlValue | None, path: str) -> list[IndicatorConfig]:
                     get_string(table, "pin", item_path), f"{item_path}.pin"
                 ),
                 targets=parse_targets(
-                    table.get("actuators", table.get("targets", [])),
-                    f"{item_path}.actuators",
+                    table.get("targets", []),
+                    f"{item_path}.targets",
                 ),
                 mode=INDICATOR_MODES[raw_mode],
             ),
@@ -496,7 +573,22 @@ def parse_project(path: Path) -> ProjectConfig:
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")
 
-    root_table = expect_table(root, "root")
+    raw_root_table = expect_table(root, "root")
+    raw_generator_table = expect_table(raw_root_table.get("generator", {}), "generator")
+    lock_file = safe_path_fragment(
+        get_string(
+            raw_generator_table,
+            "id_lock_file",
+            "generator",
+            "lsh_devices.lock.toml",
+        ),
+        "generator.id_lock_file",
+    )
+    public_schema = normalize_public_schema(
+        raw_root_table,
+        (path.parent / lock_file).resolve(),
+    )
+    root_table = public_schema.normalized
     generator_table = expect_table(root_table.get("generator", {}), "generator")
     common_table = expect_table(root_table.get("common", {}), "common")
     devices_table = expect_table(root_table.get("devices"), "devices")
@@ -507,6 +599,7 @@ def parse_project(path: Path) -> ProjectConfig:
     )
     settings = GeneratorSettings(
         output_dir=(path.parent / output_dir).resolve(),
+        id_lock_file=(path.parent / lock_file).resolve(),
         config_dir=safe_path_fragment(
             get_string(generator_table, "config_dir", "generator", "lsh_configs"),
             "generator.config_dir",
@@ -565,7 +658,8 @@ def parse_project(path: Path) -> ProjectConfig:
                 f"{device_path}.build_macro",
             ),
             hardware_include=normalize_include(
-                expect_string(hardware_include, f"{device_path}.hardware_include")
+                expect_string(hardware_include, f"{device_path}.hardware_include"),
+                f"{device_path}.hardware_include",
             ),
             com_serial=normalize_serial(
                 get_string(
@@ -610,15 +704,23 @@ def parse_project(path: Path) -> ProjectConfig:
             ),
         )
         validate_device(device)
+        validate_controllino_options(device, device_path)
+        if safe_key in devices:
+            fail(f"{device_path} normalizes to duplicate device key {safe_key!r}.")
         devices[safe_key] = device
 
     if not devices:
         fail("devices must contain at least one device profile.")
 
-    return ProjectConfig(
+    project = ProjectConfig(
         source_path=path.resolve(),
         settings=settings,
         common_defines=common_defines,
         common_raw_build_flags=common_raw_build_flags,
         devices=devices,
+        id_lock_content=public_schema.id_lock_content,
+        raw_define_paths=public_schema.raw_define_paths,
+        auto_id_paths=public_schema.auto_id_paths,
     )
+    validate_project(project)
+    return project

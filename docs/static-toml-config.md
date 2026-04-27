@@ -1,114 +1,110 @@
 # Static TOML Configuration
 
-`lsh-core` uses TOML as the public device configuration format. Users describe
-devices with names, pins, IDs and click actions; the generator validates that
-profile and emits the optimized C++ headers consumed by the library.
+`lsh-core` uses TOML as the public device configuration format. A user describes
+controllers, relays, buttons, indicators and click behavior in one declarative
+file; the generator validates it and emits optimized C++ for the selected
+firmware profile.
 
-Generated headers are an implementation detail. Edit the TOML, regenerate, and
-compile.
+Generated headers are implementation detail. Edit `lsh_devices.toml`,
+regenerate, and build. Commit `lsh_devices.lock.toml` with the TOML profile
+whenever IDs are auto-assigned, because it preserves the public wire IDs across
+future edits.
 
 ## Mental Model
 
-A device profile has two parts:
+A profile has two layers:
 
-- human input: `lsh_devices.toml`
-- generated output: C++ headers under `include/`
+- public input: `lsh_devices.toml`
+- generated output: C++ headers under the configured include directory
 
-For most projects, the TOML file is the file people maintain. It contains
-names, public IDs, pins, click behavior, serial choices and compile-time
-defines. The generated C++ contains dense indexes, lookup branches, static
-payload bytes and registration code tailored to that profile.
+The public schema is intentionally friendly: resources are named TOML tables,
+buttons reference actuators by name, Controllino presets accept short pin names
+such as `R0` and `A0`, and common behavior uses semantic fields instead of raw
+preprocessor defines.
 
-This split is intentional. It keeps configuration readable while still allowing
-the compiled firmware to be small and predictable on 8-bit AVR targets.
-
-The generator specializes the runtime for the selected profile: click detection
-uses compile-time flags and thresholds, multi-actuator actions share one cached
-timestamp only when that is cheaper, ID lookups choose compact ranges or sparse
-switches, and auto-off checks consume the loop timestamp instead of reading time
-again.
+The generated C++ is intentionally not friendly: it contains dense indexes,
+specialized switch/range lookups, static payload bytes, direct click action
+bodies and exact resource counts tailored to one device. This split keeps the
+configuration easy to read while still giving the AVR firmware compile-time
+topology.
 
 ## Quick Start
 
-Create `lsh_devices.toml` in the consumer project:
+Install the library from the PlatformIO Registry:
+
+```ini
+[env:Kitchen_release]
+platform = atmelavr
+framework = arduino
+board = controllino_maxi
+lib_deps = labodj/lsh-core @ ^3.0.3
+```
+
+Then create `lsh_devices.toml` in the consumer project with the guided
+scaffold. Run `platformio pkg install` once first if the package has not yet
+been downloaded into `.pio/libdeps`:
+
+```bash
+platformio pkg install
+python3 .pio/libdeps/Kitchen_release/lsh-core/tools/generate_lsh_static_config.py \
+  --init-config lsh_devices.toml \
+  --preset controllino-maxi/fast-msgpack \
+  --device-key kitchen \
+  --relays 4 \
+  --buttons 4 \
+  --indicators 1
+```
+
+The command also writes `.vscode/lsh_devices.schema.json`, a project-specific
+autocomplete schema that knows the actuator, group and scene names in your TOML.
+
+A compact hand-written profile looks like this:
 
 ```toml
-[generator]
-output_dir = "include"
-config_dir = "lsh_configs"
-user_config_header = "lsh_user_config.hpp"
-static_config_router_header = "lsh_static_config_router.hpp"
+#:schema ./.vscode/lsh_devices.schema.json
 
-[common]
-hardware_include = "Controllino.h"
+schema_version = 2
+preset = "controllino-maxi/fast-msgpack"
+
+[controller]
 debug_serial = "Serial"
-com_serial = "Serial2"
-
-[common.defines]
-CONFIG_MSG_PACK = true
-CONFIG_USE_FAST_CLICKABLES = true
-CONFIG_USE_FAST_ACTUATORS = true
-CONFIG_USE_FAST_INDICATORS = true
+bridge_serial = "Serial2"
 
 [devices.kitchen]
 name = "kitchen"
 
-[[devices.kitchen.actuators]]
-name = "ceiling"
-id = 10
-pin = "CONTROLLINO_R0"
+[devices.kitchen.actuators.ceiling]
+pin = "R0"
 auto_off = "30m"
 
-[[devices.kitchen.clickables]]
-name = "door_button"
-id = 42
-pin = "CONTROLLINO_A0"
-short = ["ceiling"]
-long = { targets = ["ceiling"], type = "off_only", time = "900ms" }
+[devices.kitchen.buttons.door]
+pin = "A0"
+short = "ceiling"
+long = { after = "900ms", action = "off", target = "ceiling" }
+super_long = { action = "all_off" }
 
-[[devices.kitchen.indicators]]
-name = "ceiling_led"
-pin = "CONTROLLINO_D0"
-actuators = ["ceiling"]
+[devices.kitchen.indicators.ceiling_led]
+pin = "D0"
+when = "ceiling"
 ```
 
 Add the PlatformIO pre-build hook:
 
 ```ini
-[common_base]
-extra_scripts = pre:path/to/lsh-core/tools/platformio_lsh_static_config.py
+[env:Kitchen_release]
+extra_scripts = pre:.pio/libdeps/Kitchen_release/lsh-core/tools/platformio_lsh_static_config.py
 custom_lsh_config = lsh_devices.toml
+custom_lsh_device = kitchen
 build_src_filter = +<*> -<configs/>
-
-[env:Kitchen_release]
-extends = common_release
-custom_lsh_device = kitchen
-build_src_filter = ${common_base.build_src_filter}
 ```
 
-The hook validates the TOML, writes generated headers under `output_dir`, adds
-the selected `LSH_BUILD_*` macro, appends the generated include path, and applies
-the merged TOML build defines.
+The hook validates the TOML, writes generated headers, adds the selected
+`LSH_BUILD_*` macro, appends the generated include path, and applies the merged
+semantic options, expert defines and raw build flags.
 
-`extra_scripts` must point to a real `lsh-core` checkout. The public example
-uses a local symlink dependency; a consumer project can use an adjacent checkout
-or a submodule when it wants a fixed release.
-
-The selected device comes from PlatformIO:
-
-```ini
-[env:Kitchen_release]
-custom_lsh_device = kitchen
-```
-
-Device keys may be lowercase, mixed with underscores, and independent from the
-runtime device name sent on the wire. Public actuator and clickable IDs may be
-sparse; users do not need to maintain lookup tables by hand.
-
-For a deliberately exhaustive syntax catalog, see
-`examples/all-options-toml/lsh_devices.toml`. It contains every currently
-accepted field, duration form, click-action form, define value type and indicator
-mode. It is validated by CI by generating headers in a temporary directory.
+For a local checkout or submodule, keep the same TOML but point the hook at that
+checkout instead, for example
+`extra_scripts = pre:../lsh-core/tools/platformio_lsh_static_config.py`.
 
 Manual generation is useful in CI or non-PlatformIO builds:
 
@@ -118,417 +114,475 @@ python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --check
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --list-devices
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --device kitchen
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-platformio-defines kitchen
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --doctor
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --format-config
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --check-format
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --write-vscode-schema
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-project-json-schema
+python3 tools/generate_lsh_static_config.py --print-json-schema
+python3 tools/generate_lsh_static_config.py --init-config path/to/lsh_devices.toml
 ```
 
-Python 3.11+ is preferred because it includes `tomllib`. Older Python versions
-need the small `tomli` package.
+Python 3.11+ is required by the project tooling.
 
-## Recommended First Profile
+## Editor Autocomplete
 
-For a first controller, keep the profile deliberately small:
+Use a schema file inside the same workspace as the consumer project. This keeps
+Taplo-based VS Code extensions, including Even Better TOML, away from paths
+outside the opened folder.
+
+```bash
+python3 path/to/lsh-core/tools/generate_lsh_static_config.py lsh_devices.toml --write-vscode-schema
+```
+
+Then keep the directive at the top of `lsh_devices.toml`:
 
 ```toml
-[common]
-hardware_include = "Controllino.h"
-debug_serial = "Serial"
-com_serial = "Serial2"
-
-[common.defines]
-CONFIG_MSG_PACK = true
-CONFIG_USE_FAST_CLICKABLES = true
-CONFIG_USE_FAST_ACTUATORS = true
-CONFIG_USE_FAST_INDICATORS = true
-
-[devices.first_panel]
-name = "first_panel"
-
-[[devices.first_panel.actuators]]
-name = "relay_1"
-id = 1
-pin = "CONTROLLINO_R0"
-
-[[devices.first_panel.clickables]]
-name = "button_1"
-id = 1
-pin = "CONTROLLINO_A0"
-short = ["relay_1"]
+#:schema ./.vscode/lsh_devices.schema.json
 ```
 
-Add indicators, long-clicks, auto-off timers and network-click behavior only
-after this basic path builds and behaves as expected. That keeps first failures
-easy to diagnose.
+The generated schema is project-specific: it suggests the actual actuator,
+group and scene names already present in the TOML file. Re-run the command
+after adding or renaming resources.
 
-## Files To Commit
+## Presets
 
-For library examples and reproducible firmware projects, commit:
+`preset` is the fastest adoption path. It selects safe defaults that can still
+be overridden later.
 
-- `lsh_devices.toml`
-- generated headers under `include/`
-- the PlatformIO configuration that selects `custom_lsh_device`
+| Preset                          | Board defaults                                 | Codec   | Fast I/O |
+| ------------------------------- | ---------------------------------------------- | ------- | -------- |
+| `controllino-maxi/fast-msgpack` | `Controllino.h`, `Serial2` bridge, pin aliases | MsgPack | on       |
+| `controllino-maxi/fast-json`    | `Controllino.h`, `Serial2` bridge, pin aliases | JSON    | on       |
+| `arduino-generic/msgpack`       | `Arduino.h`, `Serial` bridge                   | MsgPack | off      |
+| `arduino-generic/json`          | `Arduino.h`, `Serial` bridge                   | JSON    | off      |
 
-For experiments where the build environment always runs the generator, generated
-headers can be treated as build artifacts. The public examples commit them so a
-reader can inspect the produced firmware profile without running tools first.
+## AVR Board Matrix
 
-## Generator Section
+Controllino is a supported board family, not a hard dependency. For non-
+Controllino hardware, use the generic presets and keep the first profile
+conservative:
 
-`[generator]` controls where generated files are written.
+```toml
+schema_version = 2
+preset = "arduino-generic/json"
 
-| Field                         | Type   | Default                          | Meaning                                                                                         |
-| ----------------------------- | ------ | -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `output_dir`                  | string | `"include"`                      | Relative output directory under the TOML file directory. It must not escape the project.        |
-| `config_dir`                  | string | `"lsh_configs"`                  | Generated subdirectory inside `output_dir`. Must be one path component.                         |
-| `user_config_header`          | string | `"lsh_user_config.hpp"`          | Generated public profile router included by `lsh-core`. Must be one file name.                  |
-| `static_config_router_header` | string | `"lsh_static_config_router.hpp"` | Generated internal two-pass static-profile router. Must be one file name and normally stays default. |
+[controller]
+hardware_include = "Arduino.h"
+debug_serial = "Serial"
+bridge_serial = "Serial"
 
-Do not point `output_dir`, `config_dir`, `config_include` or
-`static_config_include` outside the generated include directory.
+[features]
+fast_io = false
+```
 
-Keep the default generated header names unless a build system has a clear
-reason to rename them. The PlatformIO hook injects the internal include-selector
-defines required by custom `user_config_header` and
-`static_config_router_header` values; manual builds must consume
-`--print-platformio-defines` and pass those defines as well.
+The repository keeps a CI-backed smoke matrix in
+`examples/avr-board-matrix`:
 
-## Common Section
+| Board / family          | PlatformIO board | Profile            | Fast I/O | Status                  |
+| ----------------------- | ---------------- | ------------------ | -------- | ----------------------- |
+| Arduino Mega 2560       | `megaatmega2560` | `mega2560_fast`    | on       | supported               |
+| Arduino Uno             | `uno`            | `atmega328p_basic` | off      | supported, conservative |
+| Arduino Nano ATmega328P | `nanoatmega328`  | `atmega328p_basic` | off      | supported, conservative |
 
-`[common]` supplies defaults shared by all devices.
+The Controllino Maxi path is covered separately by
+`examples/multi-device-project`, because that profile intentionally uses
+Controllino-specific headers, aliases and optional board helpers.
 
-| Field              | Type             | Default                                   | Meaning                                                                                                            |
-| ------------------ | ---------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `hardware_include` | string           | required unless every device overrides it | Board header. `"Controllino.h"` becomes `<Controllino.h>`. Values already starting with `<` or `"` are kept as-is. |
-| `debug_serial`     | string           | `"Serial"`                                | Debug serial object. `Serial` becomes `&Serial`.                                                                   |
-| `com_serial`       | string           | `"Serial"`                                | Controller-to-bridge serial object. `Serial2` becomes `&Serial2`.                                                  |
-| `raw_build_flags`  | array of strings | `[]`                                      | Raw PlatformIO build flags appended for every device.                                                              |
+Boards outside this matrix can still work when they provide the normal Arduino
+AVR API and enough flash/RAM, but treat them as best effort until they build and
+pass static analysis in your own CI.
 
-`[common.defines]` is merged into every device define table.
+Controllino pin aliases expand as follows:
 
-## Device Section
+```toml
+pin = "R0"   # CONTROLLINO_R0
+pin = "A0"   # CONTROLLINO_A0
+pin = "D6"   # CONTROLLINO_D6
+pin = "IN0"  # CONTROLLINO_IN0
+```
 
-Each `[devices.<key>]` declares one buildable device. The key is also the default
-selector used by PlatformIO and CLI commands.
+Use `pin = "raw:MY_PIN_EXPR"` when a symbol intentionally looks like an alias
+but must be passed through unchanged.
 
-| Field                   | Type             | Default                                | Meaning                                                 |
-| ----------------------- | ---------------- | -------------------------------------- | ------------------------------------------------------- |
-| `name`                  | string           | device key                             | Runtime device name sent on the wire.                   |
-| `build_macro`           | string           | `LSH_BUILD_<KEY>`                      | Preprocessor macro generated for this profile.          |
-| `hardware_include`      | string           | `[common].hardware_include`            | Device-specific board header.                           |
-| `debug_serial`          | string           | `[common].debug_serial`                | Device-specific debug serial.                           |
-| `com_serial`            | string           | `[common].com_serial`                  | Device-specific bridge serial.                          |
-| `config_include`        | string           | `<config_dir>/<key>_config.hpp`        | Generated constants header path.                        |
-| `static_config_include` | string           | `<config_dir>/<key>_static_config.hpp` | Generated static profile header path.                   |
-| `disable_rtc`           | bool             | `false`                                | Emits `disableRtc()` during configuration.              |
-| `disable_eth`           | bool             | `false`                                | Emits `disableEth()` during configuration.              |
-| `raw_build_flags`       | array of strings | `[]`                                   | Raw PlatformIO build flags appended after common flags. |
+## Project Sections
 
-`[devices.<key>.defines]` overrides `[common.defines]`. Set a common define to
-`false` in a device to remove it for that device.
+### `schema_version`
+
+Always set:
+
+```toml
+schema_version = 2
+```
+
+Schema v2 is the public, ergonomic dialect. Old generated internals are not part
+of the user contract.
+
+### `[generator]`
+
+Optional. Defaults are good for most PlatformIO projects.
+
+| Field                         | Default                          | Meaning                                               |
+| ----------------------------- | -------------------------------- | ----------------------------------------------------- |
+| `output_dir`                  | `"include"`                      | Generated output directory relative to the TOML file. |
+| `config_dir`                  | `"lsh_configs"`                  | Generated subdirectory inside `output_dir`.           |
+| `user_config_header`          | `"lsh_user_config.hpp"`          | Generated public router header.                       |
+| `static_config_router_header` | `"lsh_static_config_router.hpp"` | Generated internal two-pass router header.            |
+| `id_lock_file`                | `"lsh_devices.lock.toml"`        | Generated stable-ID lockfile beside the TOML config.  |
+
+### `[controller]`
+
+Project-wide hardware defaults.
+
+| Field                     | Meaning                                                     |
+| ------------------------- | ----------------------------------------------------------- |
+| `hardware_include`        | Board header. Bare names become angle-bracket includes.     |
+| `debug_serial`            | Debug serial object, for example `Serial`.                  |
+| `bridge_serial`           | Controller-to-bridge serial object, for example `Serial2`.  |
+| `disable_rtc`             | Emit Controllino RTC chip-select disable during setup.      |
+| `disable_eth`             | Emit Controllino Ethernet chip-select disable during setup. |
+| `controllino_pin_aliases` | Enable or disable `R0` / `A0` / `D0` / `IN0` expansion.     |
+
+### `[features]`
+
+Semantic feature switches. These are preferred over raw `CONFIG_*` defines.
+
+| Field                         | Values                       | Meaning                                                         |
+| ----------------------------- | ---------------------------- | --------------------------------------------------------------- |
+| `codec`                       | `"msgpack"` or `"json"`      | Serial payload codec.                                           |
+| `fast_io`                     | bool                         | Apply one fast-I/O policy to buttons, actuators and indicators. |
+| `fast_buttons`                | bool                         | Override fast input reads only.                                 |
+| `fast_actuators`              | bool                         | Override fast actuator writes only.                             |
+| `fast_indicators`             | bool                         | Override fast indicator writes only.                            |
+| `bench`                       | bool                         | Enable the developer loop benchmark.                            |
+| `bench_iterations`            | integer                      | Benchmark loop count.                                           |
+| `aggressive_constexpr_ctors`  | `true`, `false`, or `"auto"` | Constructor constexpr policy.                                   |
+| `etl_profile_override_header` | string or `false`            | Optional consumer ETL profile override header.                  |
+
+### `[timing]`
+
+Durations accept integers in milliseconds or strings ending in `ms`, `s`, `m`
+or `h`.
+
+| Field                          | Meaning                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| `actuator_debounce`            | Minimum interval between actuator switches. `0ms` is allowed. |
+| `button_debounce`              | Button debounce threshold.                                    |
+| `scan_interval`                | Minimum elapsed time between input scan passes.               |
+| `long_click`                   | Default long-click threshold.                                 |
+| `super_long_click`             | Default super-long-click threshold.                           |
+| `network_click_timeout`        | Network-click ACK timeout.                                    |
+| `ping_interval`                | Bridge ping interval.                                         |
+| `connection_timeout`           | Bridge liveness timeout.                                      |
+| `bridge_boot_retry`            | BOOT retry interval.                                          |
+| `bridge_state_timeout`         | Timeout while waiting for bridge state request.               |
+| `post_receive_delay`           | Quiet window after bridge-side state changes.                 |
+| `network_click_check_interval` | Pending network-click polling interval.                       |
+| `auto_off_check_interval`      | Auto-off scan interval.                                       |
+
+`long_click` and `super_long_click` are also propagated into generated static
+button scanner templates for actions that do not define their own `after` /
+`time` value.
+
+### `[serial]`
+
+Serial transport tuning.
+
+| Field                        | Meaning                                            |
+| ---------------------------- | -------------------------------------------------- |
+| `debug_baud`                 | Debug UART baud rate.                              |
+| `bridge_baud`                | Controller-to-bridge UART baud rate.               |
+| `timeout`                    | Compatibility serial timeout.                      |
+| `msgpack_frame_idle_timeout` | Timeout used to discard incomplete MsgPack frames. |
+| `max_rx_payloads_per_loop`   | Max complete bridge payloads dispatched per loop.  |
+| `max_rx_bytes_per_loop`      | Max raw UART bytes drained per loop.               |
+| `flush_after_send`           | Force serial flush after sends.                    |
+| `rx_buffer_size`             | Emits `-D SERIAL_RX_BUFFER_SIZE=<value>`.          |
+| `tx_buffer_size`             | Emits `-D SERIAL_TX_BUFFER_SIZE=<value>`.          |
+
+### `[advanced]`
+
+Expert-only escape hatch. Keep normal profiles on semantic fields.
+
+```toml
+[advanced]
+build_flags = ["-flto=auto"]
+
+[advanced.defines]
+CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP = 64
+```
+
+Device sections also support `[devices.<key>.features]`,
+`[devices.<key>.timing]`, `[devices.<key>.serial]` and
+`[devices.<key>.advanced]`. Device values override project defaults.
+
+## Devices
+
+Each `[devices.<key>]` declares one buildable firmware profile. The key is the
+PlatformIO selector used by `custom_lsh_device`.
+
+```toml
+[devices.kitchen]
+name = "kitchen"
+```
+
+Common device fields:
+
+| Field                     | Meaning                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `name`                    | Runtime device name sent on the wire. Defaults to the key. |
+| `build_macro`             | Expert override for the generated `LSH_BUILD_*` macro.     |
+| `hardware_include`        | Device-specific board header.                              |
+| `debug_serial`            | Device-specific debug serial object.                       |
+| `bridge_serial`           | Device-specific bridge serial object.                      |
+| `config_include`          | Expert generated constants header path.                    |
+| `static_config_include`   | Expert generated static profile header path.               |
+| `disable_rtc`             | Device override for Controllino RTC disable.               |
+| `disable_eth`             | Device override for Controllino Ethernet disable.          |
+| `controllino_pin_aliases` | Device override for pin alias expansion.                   |
 
 ## Actuators
 
-Declare actuators with `[[devices.<key>.actuators]]`.
-
-| Field           | Type                  | Required | Meaning                                                                       |
-| --------------- | --------------------- | -------- | ----------------------------------------------------------------------------- |
-| `name`          | C++ identifier string | yes      | Local name used by clickables and indicators.                                 |
-| `id`            | integer `1..255`      | yes      | Public wire ID. IDs may be sparse.                                            |
-| `pin`           | string                | yes      | Compile-time Arduino pin expression, for example `"CONTROLLINO_R0"` or `"6"`. |
-| `default_state` | bool                  | no       | Construct the actuator ON by default.                                         |
-| `protected`     | bool                  | no       | Exclude the actuator from global super-long OFF.                              |
-| `auto_off`      | duration              | no       | Auto-off timer, for example `"10m"`.                                          |
-| `auto_off_ms`   | duration              | no       | Same timer expressed as milliseconds.                                         |
-
-Durations accept integer milliseconds or strings ending in `ms`, `s`, `m`, `h`.
-
-## Clickables
-
-Declare buttons and inputs with `[[devices.<key>.clickables]]`.
-
-| Field        | Type                  | Required           | Meaning                              |
-| ------------ | --------------------- | ------------------ | ------------------------------------ |
-| `name`       | C++ identifier string | yes                | Local button name.                   |
-| `id`         | integer `1..255`      | yes                | Public wire ID. IDs may be sparse.   |
-| `pin`        | string                | yes                | Compile-time Arduino pin expression. |
-| `short`      | action                | yes for normal use | Short-click behavior.                |
-| `long`       | action                | no                 | Long-click behavior.                 |
-| `super_long` | action                | no                 | Super-long-click behavior.           |
-
-Every clickable must have at least one enabled action.
-
-### Short Click
-
-Accepted forms:
+Actuators are named subtables:
 
 ```toml
+[devices.kitchen.actuators.ceiling]
+pin = "R0"
+auto_off = "30m"
+```
+
+| Field         | Required | Meaning                                                               |
+| ------------- | -------- | --------------------------------------------------------------------- |
+| `id`          | no       | Public wire ID. Omit to auto-assign a deterministic ID.               |
+| `pin`         | yes      | Arduino pin expression or board alias.                                |
+| `default`     | no       | Start ON.                                                             |
+| `protected`   | no       | Exclude from global super-long OFF.                                   |
+| `auto_off`    | no       | Auto-off duration.                                                    |
+| `auto_off_ms` | no       | Auto-off duration in milliseconds.                                    |
+| `pulse`       | no       | Momentary output duration, for example `300ms`.                       |
+| `pulse_ms`    | no       | Momentary output duration in milliseconds.                            |
+| `interlock`   | no       | Actuator or list of actuators to switch OFF before this one turns ON. |
+
+When `id` is omitted, the generator writes `lsh_devices.lock.toml` and reuses
+that locked value on future runs. Commit the lockfile with the TOML profile so
+public wire IDs remain stable even when resources are reordered or inserted.
+
+`pulse` is for hardware that must receive a short ON pulse, such as a strike,
+bell or garage input. Any generated ON command, including serial commands from
+the bridge, starts or restarts the pulse countdown. OFF cancels a pending pulse
+and switches the output off. Use `auto_off` instead when the relay is a normal
+latched output that should stay ON but have a guard timer.
+
+`interlock` is resolved at generation time. The emitted setter turns listed
+actuators OFF before turning the selected actuator ON, and the same rule is used
+by local clicks, scenes, packed bridge state and direct serial commands.
+
+## Groups and Scenes
+
+Groups are local aliases for actuator lists. They are only TOML conveniences;
+the generated code receives the expanded actuator indexes directly.
+
+```toml
+[devices.kitchen.groups.worktop]
+targets = ["left_strip", "right_strip"]
+
+[devices.kitchen.buttons.worktop]
+pin = "A1"
+short = { group = "worktop" }
+long = { action = "off", group = "worktop" }
+```
+
+Scenes are deterministic steps. `off` runs first, then `on`, then `toggle`, so
+the generated code stays predictable even when a scene mixes operations.
+
+```toml
+[devices.kitchen.scenes.cooking]
+off = "ambient"
+on = ["worktop", "ceiling"]
+toggle = "extractor"
+
+[devices.kitchen.buttons.scene]
+pin = "A2"
+short = { scene = "cooking" }
+```
+
+Scene entries may name actuators or groups. If an actuator and a group share the
+same name, the scene is rejected as ambiguous; explicit `group = ...` action
+fields do not have that ambiguity.
+
+## Buttons
+
+Buttons use `[devices.<key>.buttons.<name>]`.
+Button, actuator and indicator names are independent: the same logical name may
+be reused in each family, and actuator references still resolve only against
+`actuators`.
+
+```toml
+[devices.kitchen.buttons.door]
+pin = "A0"
+short = "ceiling"
+long = { after = "900ms", action = "off", target = "ceiling" }
+super_long = { action = "all_off" }
+```
+
+| Field        | Required   | Meaning                                |
+| ------------ | ---------- | -------------------------------------- |
+| `id`         | no         | Public wire ID. Omit to auto-assign.   |
+| `pin`        | yes        | Arduino pin expression or board alias. |
+| `short`      | normal use | Short-click behavior.                  |
+| `long`       | no         | Long-click behavior.                   |
+| `super_long` | no         | Super-long-click behavior.             |
+
+Target shorthands:
+
+```toml
+short = "relay_a"
 short = ["relay_a", "relay_b"]
-short = { targets = ["relay_a"] }
-short = { enabled = true, targets = ["relay_a"] }
+short = { target = "relay_a" }
+short = { targets = ["relay_a", "relay_b"] }
+short = { group = "room" }
+short = { scene = "evening" }
 short = false
 ```
 
-`short = true` is rejected because it is ambiguous.
-
-### Long Click
-
-Accepted forms:
+Long-click actions:
 
 ```toml
-long = ["relay_a"]
-long = { targets = ["relay_a", "relay_b"] }
-long = { actuators = ["relay_a"] }
-long = { targets = ["relay_a"], type = "off_only", time = "900ms" }
+long = "relay_a"                                      # toggle target
+long = ["relay_a", "relay_b"]                         # toggle targets
+long = { action = "on", targets = ["relay_a"] }
+long = { action = "off", target = "relay_a", after = "900ms" }
+long = { action = "off", group = "room" }
+long = { scene = "evening", after = "900ms" }
 long = { network = true, fallback = "do_nothing" }
 long = { enabled = false }
 ```
 
-Supported `type` values:
+Supported long actions: `toggle`, `on`, `off`.
 
-- `normal`
-- `on_only` or `on-only`
-- `off_only` or `off-only`
-
-A long-click action must have at least one local target or `network = true`.
-
-### Super-Long Click
-
-Accepted forms:
+Super-long actions:
 
 ```toml
-super_long = true
-super_long = { type = "normal" }
-super_long = { type = "selective", targets = ["relay_a"] }
-super_long = { type = "selective", actuators = ["relay_a"] }
-super_long = { type = "selective" }
+super_long = { action = "all_off" }
+super_long = { action = "off", targets = ["relay_a", "relay_b"] }
+super_long = { action = "off", group = "room" }
+super_long = { scene = "shutdown" }
 super_long = { network = true, fallback = "do_nothing" }
 super_long = { enabled = false }
 ```
 
-Supported `type` values:
+Supported super-long actions:
 
-- `normal`: global OFF for all unprotected actuators.
-- `selective`: only the listed actuators are affected.
+- `all_off`: switch off every unprotected actuator.
+- `off`: switch off only the listed targets.
 
-`super_long = { type = "selective" }` is an explicit no-op. It is supported for
-legacy profiles that used selective super-long clicks to suppress the global OFF
-behavior without attaching secondary actuators.
+Network-click options on `long` and `super_long`:
 
-### Network Clicks
+| Field      | Values                        | Meaning                                       |
+| ---------- | ----------------------------- | --------------------------------------------- |
+| `network`  | bool                          | Send the click to `lsh-bridge` / `lsh-logic`. |
+| `fallback` | `local`, `do_nothing`, `none` | Behavior if the network path fails.           |
 
-Both long and super-long actions support:
-
-| Field      | Type   | Meaning                                             |
-| ---------- | ------ | --------------------------------------------------- |
-| `network`  | bool   | Send this click to `lsh-bridge` / `lsh-logic`.      |
-| `fallback` | string | Local behavior if the network path cannot complete. |
-
-Supported fallbacks:
-
-- `local`, `local_fallback` or `local-fallback`
-- `do_nothing` or `do-nothing`
-
-If any action sets `network = true`, the generated profile keeps the network
-click pool enabled and sizes it exactly. If no action uses network clicks, the
-network-click subsystem is compiled out for that device.
+If no enabled action uses `network = true`, the generated profile compiles out
+the network-click runtime for that device.
 
 ## Indicators
 
-Declare indicators with `[[devices.<key>.indicators]]`.
-
-| Field                    | Type                    | Required | Meaning                                       |
-| ------------------------ | ----------------------- | -------- | --------------------------------------------- |
-| `name`                   | C++ identifier string   | yes      | Local indicator name.                         |
-| `pin`                    | string                  | yes      | Compile-time Arduino pin expression.          |
-| `actuators` or `targets` | array of actuator names | yes      | Actuators watched by the indicator.           |
-| `mode`                   | string                  | no       | `any`, `all` or `majority`; default is `any`. |
-
-Indicators must reference at least one actuator.
-
-## Defines
-
-Defines can be placed in `[common.defines]` or `[devices.<key>.defines]`.
+Indicators are named subtables:
 
 ```toml
-[common.defines]
-CONFIG_MSG_PACK = true
-CONFIG_USE_FAST_ACTUATORS = true
-CONFIG_DEBUG_SERIAL_BAUD = 500000
-
-[devices.garage.defines]
-CONFIG_MSG_PACK = false
-CONFIG_CLICKABLE_DEBOUNCE_TIME_MS = 30
-CONFIG_COM_SERIAL_FLUSH_AFTER_SEND = 1
+[devices.kitchen.indicators.ceiling_led]
+pin = "D0"
+when = "ceiling"
 ```
 
-Value rules:
-
-- `true`: emit a macro without value, for example `CONFIG_MSG_PACK`.
-- `false`: do not emit this macro; useful to disable a common define.
-- integer: emit `NAME=value`.
-- string: emit `NAME=value` exactly as written.
-
-String define values are raw preprocessor text. Use PlatformIO `build_flags`
-when a value needs shell or INI interpolation, or when an include-like value
-needs careful quoting.
-
-## Raw Build Flags
-
-Use `raw_build_flags` for flags that are not simple preprocessor defines:
+Accepted `when` forms:
 
 ```toml
-[common]
-raw_build_flags = ["-flto=auto"]
-
-[devices.garage]
-raw_build_flags = ["-Wl,--gc-sections"]
+when = "relay_a"
+when = ["relay_a", "relay_b"]
+when = { any = ["relay_a", "relay_b"] }
+when = { all = ["relay_a", "relay_b"] }
+when = { majority = ["relay_a", "relay_b", "relay_c"] }
 ```
 
-The PlatformIO hook appends common raw flags first and device raw flags after.
-For flags that must replace PlatformIO defaults, keep using `build_unflags` in
-`platformio.ini` and then add the desired flag through `build_flags` or
-`raw_build_flags`.
+Use `when` instead of manually pairing target lists with a separate mode field.
 
-## Supported lsh-core Defines
+## Public Tooling
 
-These are the user-facing defines currently intended for TOML define tables or
-PlatformIO `build_flags`.
+The generator includes adoption helpers that do not change runtime behavior:
 
-For AVR static profiles, the recommended default priority is runtime speed
-first, SRAM second and flash third. Put `CONFIG_MSG_PACK = true` and the three
-`CONFIG_USE_FAST_* = true` flags in `[common.defines]` unless a specific
-installation needs JSON compatibility, lower flash use or slower portable I/O.
+- `--print-json-schema` prints the editor schema also committed as
+  `docs/lsh_devices.schema.json`.
+- `--print-project-json-schema` prints the same schema specialized with the
+  device, actuator, group and scene names from one TOML file.
+- `--write-vscode-schema [PATH]` writes that project-specific schema. Without a
+  path, it uses `.vscode/lsh_devices.schema.json` beside the TOML file, matching
+  the scaffold's `#:schema` directive.
+- `--init-config PATH` writes a guided starter profile. Use `--preset`,
+  `--device-key`, `--device-name`, `--relays`, `--buttons`, `--indicators` and
+  `--force` to tune the generated file.
+- `--doctor` prints non-fatal advice, such as automatic IDs without a committed
+  lockfile or raw defines that have semantic schema v2 fields.
+- `--format-config` rewrites TOML into deterministic table order. It preserves
+  the `#:schema` editor directive; the canonical output is otherwise
+  comment-free.
+- `--check-format` fails when TOML formatting is stale.
+- `python3 tools/migrate_lsh_config.py old.toml --output lsh_devices.toml`
+  performs a one-shot conversion from old TOML to schema v2. The main generator
+  itself does not accept legacy profiles.
 
-| Define                                            | Default                        | Meaning                                                                                                                   |
-| ------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `CONFIG_MSG_PACK`                                 | undefined                      | Use framed MessagePack instead of newline-delimited JSON. Recommended when runtime speed and SRAM matter more than flash. |
-| `CONFIG_USE_FAST_CLICKABLES`                      | undefined                      | Use direct port reads for clickables when supported. Recommended for AVR static profiles.                                 |
-| `CONFIG_USE_FAST_ACTUATORS`                       | undefined                      | Use direct port writes for actuators when supported. Recommended for AVR static profiles.                                 |
-| `CONFIG_USE_FAST_INDICATORS`                      | undefined                      | Use direct port writes for indicators when supported. Recommended for AVR static profiles.                                |
-| `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`                | `100U`                         | Minimum actuator switch interval.                                                                                         |
-| `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`               | `20U`                          | Button debounce time.                                                                                                     |
-| `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`               | `1U`                           | Minimum elapsed time between local input scan passes.                                                                     |
-| `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`             | `400U`                         | Default long-click threshold.                                                                                             |
-| `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS`       | `1000U`                        | Default super-long-click threshold.                                                                                       |
-| `CONFIG_LCNB_TIMEOUT_MS`                          | `1000U`                        | Network-click ACK timeout.                                                                                                |
-| `CONFIG_PING_INTERVAL_MS`                         | `10000U`                       | Bridge ping interval.                                                                                                     |
-| `CONFIG_CONNECTION_TIMEOUT_MS`                    | ping interval + `200U`         | Link liveness timeout.                                                                                                    |
-| `CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS`            | `250U`                         | BOOT retry interval while bridge is not ready.                                                                            |
-| `CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS`            | `1500U`                        | Timeout while waiting for bridge state request.                                                                           |
-| `CONFIG_DEBUG_SERIAL_BAUD`                        | `115200U`                      | Debug UART speed in debug builds.                                                                                         |
-| `CONFIG_COM_SERIAL_BAUD`                          | `250000U`                      | Controller-to-bridge UART speed.                                                                                          |
-| `CONFIG_COM_SERIAL_TIMEOUT_MS`                    | `5U`                           | Compatibility default for MsgPack idle timeout.                                                                           |
-| `CONFIG_COM_SERIAL_MSGPACK_FRAME_IDLE_TIMEOUT_MS` | `CONFIG_COM_SERIAL_TIMEOUT_MS` | Timeout used to discard one incomplete MsgPack frame.                                                                     |
-| `CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP`      | `4U`                           | Max fully dispatched bridge payloads per loop iteration.                                                                  |
-| `CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP`         | mode-dependent                 | Max raw UART bytes drained per loop iteration.                                                                            |
-| `CONFIG_COM_SERIAL_FLUSH_AFTER_SEND`              | debug: `1`, release: `0`       | Force `Serial.flush()` after bridge sends.                                                                                |
-| `CONFIG_DELAY_AFTER_RECEIVE_MS`                   | `50U`                          | Quiet window after received bridge state changes.                                                                         |
-| `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`          | `50U`                          | Pending network-click timeout polling interval.                                                                           |
-| `CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS`     | `1000U`                        | Auto-off scan interval.                                                                                                   |
-| `CONFIG_LSH_BENCH`                                | undefined                      | Enable developer loop benchmark.                                                                                          |
-| `CONFIG_BENCH_ITERATIONS`                         | `1000000U`                     | Benchmark loop iteration count.                                                                                           |
-| `LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS`           | auto                           | Force aggressive constexpr constructors when supported.                                                                   |
-| `LSH_DISABLE_AGGRESSIVE_CONSTEXPR_CTORS`          | undefined                      | Disable aggressive constexpr constructors.                                                                                |
-| `LSH_ETL_PROFILE_OVERRIDE_HEADER`                 | undefined                      | Include a consumer-provided ETL profile override header. Prefer `platformio.ini` for quoted include values.               |
-
-Static resource macros such as `LSH_STATIC_CONFIG_ACTUATORS`,
-`LSH_STATIC_CONFIG_LONG_CLICK_ACTUATOR_LINKS`, `CONFIG_MAX_ACTUATORS` and
-`CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES` are generated or derived internally.
-Do not write them by hand in TOML.
-
-Network-click support is inferred from click actions. If at least one enabled
-long or super-long action has `network = true`, the generated profile sizes and
-enables the active network-click pool. If no action uses the bridge, the runtime
-path is compiled out.
-
-Compact actuator switch-time storage is automatic. It is enabled only when the
-profile has auto-off actuators and `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS` is
-explicitly `0`; otherwise each actuator keeps the timestamp required to preserve
-debounce and auto-off semantics exactly.
-
-PlatformIO-only flags such as `NDEBUG`, `LSH_DEBUG`, `SERIAL_RX_BUFFER_SIZE`,
-`SERIAL_TX_BUFFER_SIZE`, compiler optimization flags and linker flags can stay
-in `platformio.ini`. They may also be placed in `raw_build_flags` when appending
-is enough.
+Use the generic schema when documenting the public format. Use the
+project-specific schema in consumer repositories, because it gives autocomplete
+for the names that matter while still allowing new resources to be added before
+the schema is refreshed.
 
 ## Validation
 
 The generator fails before compilation when it finds:
 
 - malformed TOML;
-- missing required tables or fields;
+- unsupported schema v2 fields, which catches typos early;
 - invalid C++ identifiers or preprocessor macro names;
 - duplicate names or IDs;
-- IDs, counts or timing overrides outside generated field widths;
+- more than 255 actuators, buttons or indicators in one profile;
+- IDs or timing overrides outside generated field widths;
 - unknown actuator references;
 - duplicated targets in one action;
-- disabled actions with active targets/options;
+- disabled actions that still contain active options;
+- scenes that assign the same actuator to conflicting operations;
+- pulse actuators combined with `auto_off`;
+- interlock declarations that reference unknown actuators or themselves;
 - enabled long clicks with no local target and no network action;
+- super-long selective actions that target protected actuators;
+- super-long thresholds that are not greater than long-click thresholds;
 - indicators with no targets;
 - removed internal defines such as `LSH_NETWORK_CLICKS` or `LSH_COMPACT_ACTUATOR_SWITCH_TIMES`;
 - unsafe C++ pin or serial expressions;
 - generated paths that escape the output directory.
 
-This keeps configuration mistakes close to the TOML and avoids runtime defensive
-lookup tables on AVR.
-
-## Migration From Older Hand-Written Profiles
-
-Older consumers used one C++ file per device and selected it with
-`build_src_filter` plus an `LSH_BUILD_*` define. New consumers should move that
-information into TOML:
-
-- actuator constructors become `[[devices.<key>.actuators]]`
-- clickable constructors become `[[devices.<key>.clickables]]`
-- indicator constructors become `[[devices.<key>.indicators]]`
-- manual local target lists become action `targets`
-- per-device build defines move to `[devices.<key>.defines]`
-- shared lsh-core defines move to `[common.defines]`
-
-After the migration, remove legacy `src/configs/*.cpp` files from the build and
-let `platformio_lsh_static_config.py` inject the selected `LSH_BUILD_*` macro.
-Keep compiler, linker, upload and board-specific PlatformIO settings in
-`platformio.ini`.
+This keeps configuration mistakes close to the TOML and avoids defensive
+runtime lookup tables on AVR.
 
 ## Generated Code Strategy
 
 The generated profile avoids SRAM tables for static facts:
 
 - resource capacities are preprocessor constants;
-- device name and serial objects are generated as C++ `constexpr` values; only
-  include selection and resource-count pass macros remain preprocessor based;
+- device name and serial objects are generated as C++ `constexpr` values;
 - IDs and reverse-ID lookups are compact branch/range accessors;
 - auto-off timers are branch-grouped by equal duration;
-- clickable objects store only dynamic FSM state; short/long/super-long flags
-  and timing thresholds are passed as constants by the generated scan path;
-- generated release setup avoids storing dense indexes in actuator, clickable
-  and indicator objects; debug/runtime-check builds keep those bytes for
-  validation;
-- click actions, network-click fallback routing, clickable scanning, indicator
-  refreshes and auto-off sweeps are emitted as topology-specialized code,
-  without runtime link dispatchers or mode accessors;
+- button objects store only dynamic FSM state;
+- generated actuator wrappers centralize pulse and interlock behavior, so local
+  clicks and bridge commands cannot drift semantically;
+- generated action paths pass actuator indexes as compile-time constants;
+- click actions, network fallback routing, scanning, indicator refreshes and
+  auto-off sweeps are emitted as topology-specialized code;
 - DEVICE_DETAILS JSON and serial-framed MsgPack payloads are pre-serialized at
   generation time and stored in flash on AVR targets;
-- network-click pools are sized exactly for the profile and are compiled out
-  when no `network = true` action exists.
+- network-click pools are sized exactly and compiled out when unused;
 - compact actuator switch-time storage is selected automatically when actuator
   debounce is disabled and only auto-off actuators need switch timestamps.
-
-Keyword policy:
-
-- generated constants that must size arrays or select code paths are emitted as
-  preprocessor constants and imported as internal `constexpr` values by
-  `src/internal/user_config_bridge.hpp`;
-- AVR payload byte arrays use `const ... PROGMEM`, because flash placement is the
-  relevant storage decision on this target;
-- generated lookup helpers and action bodies are emitted in one implementation
-  pass instead of being header-only `constexpr` functions. That keeps one copy
-  of the branch logic in the firmware and avoids turning implementation detail
-  into public inline code;
-- generated accessors are declared `[[nodiscard]]` and `noexcept` because they
-  are deterministic embedded helpers and their return values carry the whole
-  result;
-- generated device objects are not `constexpr`: constructing them participates
-  in setup-time hardware binding and, depending on the selected fast-I/O support,
-  may still need normal object construction before `setup()` finalization.
 
 Commit generated headers if the target build environment will not run the
 generator. Otherwise, treat `lsh_devices.toml` as the source of truth.

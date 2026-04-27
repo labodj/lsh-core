@@ -51,6 +51,7 @@ def render_u8_sum_declaration(
     terms: Sequence[str],
     *,
     indent: str = "        ",
+    outer_indent_width: int = 0,
 ) -> list[str]:
     """Render a clang-format-stable uint8_t sum declaration."""
     if not terms:
@@ -59,11 +60,14 @@ def render_u8_sum_declaration(
     one_line = f"{indent}const uint8_t {variable_name} = {joined_terms};"
     if (
         len(terms) <= MAX_INLINE_SUM_TERMS
-        and len(one_line) <= CLANG_FORMAT_COLUMN_LIMIT
+        and len(one_line) <= CLANG_FORMAT_COLUMN_LIMIT - outer_indent_width
     ):
         return [one_line]
 
-    return [f"{indent}const uint8_t {variable_name} =", f"{indent}    {joined_terms};"]
+    return [
+        f"{indent}const uint8_t {variable_name} =",
+        f"{indent}    {joined_terms};",
+    ]
 
 
 def render_switch_case_with_body(

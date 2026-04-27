@@ -9,6 +9,10 @@ from .action_bodies import (
     render_switch_case_with_body,
     render_u8_sum_declaration,
 )
+from .action_calls import (
+    render_generated_actuator_action_helpers,
+    render_set_state_call,
+)
 from .click_actions import (
     render_direct_long_clicks,
     render_direct_short_clicks,
@@ -25,7 +29,7 @@ from .click_actions import (
 )
 from .click_scan import render_scan_clickables
 from .cpp import append_section, u8, u32
-from .topology import actuator_name_at
+from .topology import actuator_name_at, indicator_object_name
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -62,11 +66,11 @@ def render_apply_packed_state_byte(
         end = min(start + 8, len(device.actuators))
         cached_time = (end - start) > 1
         calls = [
-            (
-                f"{actuator_name_at(device, actuator_index)}"
-                f".setStateStatic<{u8(actuator_index)}>("
-                f"(packedByte & {u8(1 << (actuator_index - start))}) != 0U"
-                f"{', actionNow' if cached_time else ''})"
+            render_set_state_call(
+                device,
+                actuator_index,
+                f"(packedByte & {u8(1 << (actuator_index - start))}) != 0U",
+                cached_time=cached_time,
             )
             for actuator_index in range(start, end)
         ]
@@ -98,16 +102,16 @@ def render_set_actuator_state_by_id(device: DeviceConfig) -> list[str]:
 
     lines.extend(["    switch (actuatorId)", "    {"])
     for actuator_index, actuator in enumerate(device.actuators):
+        set_call = render_set_state_call(
+            device,
+            actuator_index,
+            "state",
+            cached_time=False,
+        )
         render_switch_case_with_body(
             lines,
             actuator.actuator_id,
-            [
-                (
-                    "        return "
-                    f"{actuator_name_at(device, actuator_index)}"
-                    f".setStateStatic<{u8(actuator_index)}>(state);"
-                ),
-            ],
+            [f"        return {set_call};"],
         )
     lines.extend(["    default:", "        return false;", "    }", "}"])
     return lines
@@ -220,6 +224,60 @@ def render_check_auto_off_timers(device: DeviceConfig) -> list[str]:
     return lines
 
 
+def render_check_pulse_timers(device: DeviceConfig) -> list[str]:
+    """Render the generated pulse countdown sweep for momentary actuators."""
+    entries = [
+        (actuator_index, actuator)
+        for actuator_index, actuator in enumerate(device.actuators)
+        if actuator.pulse_ms is not None
+    ]
+    lines = ["auto checkPulseTimers(uint16_t elapsed_ms) noexcept -> bool", "{"]
+    if not entries:
+        lines.extend(["    static_cast<void>(elapsed_ms);", "    return false;", "}"])
+        return lines
+
+    lines.extend(
+        [
+            "    if (activePulseActuators == 0U)",
+            "    {",
+            "        return false;",
+            "    }",
+            "",
+            "    bool anyActuatorChangedState = false;",
+        ]
+    )
+    for pulse_index, (actuator_index, _actuator) in enumerate(entries):
+        off_call = render_set_state_call(
+            device,
+            actuator_index,
+            "false",
+            cached_time=False,
+        )
+        lines.extend(
+            [
+                f"    if (pulseRemaining_ms[{u8(pulse_index)}] != 0U)",
+                "    {",
+                f"        if (pulseRemaining_ms[{u8(pulse_index)}] <= elapsed_ms)",
+                "        {",
+                f"            pulseRemaining_ms[{u8(pulse_index)}] = 0U;",
+                "            --activePulseActuators;",
+                f"            anyActuatorChangedState |= {off_call};",
+                "        }",
+                "        else",
+                "        {",
+                (
+                    f"            pulseRemaining_ms[{u8(pulse_index)}] = "
+                    "static_cast<uint16_t>("
+                    f"pulseRemaining_ms[{u8(pulse_index)}] - elapsed_ms);"
+                ),
+                "        }",
+                "    }",
+            ]
+        )
+    lines.extend(["    return anyActuatorChangedState;", "}"])
+    return lines
+
+
 def render_indicator_refresh_lines(
     device: DeviceConfig,
     indicator_index: int,
@@ -228,31 +286,32 @@ def render_indicator_refresh_lines(
 ) -> list[str]:
     """Render a direct generated indicator refresh expression."""
     indicator = device.indicators[indicator_index]
+    indicator_name = indicator_object_name(indicator_index, indicator)
     if not links:
-        return [f"    {indicator.name}.applyComputedState(false);"]
+        return [f"    {indicator_name}.applyComputedState(false);"]
 
     if mode == "ANY":
         expression = " || ".join(
             f"{actuator_name_at(device, actuator_index)}.getState()"
             for actuator_index in links
         )
-        return [f"    {indicator.name}.applyComputedState({expression});"]
+        return [f"    {indicator_name}.applyComputedState({expression});"]
 
     if mode == "ALL":
         expression = " && ".join(
             f"{actuator_name_at(device, actuator_index)}.getState()"
             for actuator_index in links
         )
-        return [f"    {indicator.name}.applyComputedState({expression});"]
+        return [f"    {indicator_name}.applyComputedState({expression});"]
 
     terms = [
         f"static_cast<uint8_t>({actuator_name_at(device, actuator_index)}.getState())"
         for actuator_index in links
     ]
-    variable_name = f"{indicator.name}ActuatorsOn"
+    variable_name = f"{indicator_name}ActuatorsOn"
     lines = render_u8_sum_declaration(variable_name, terms, indent="    ")
     lines.append(
-        f"    {indicator.name}.applyComputedState("
+        f"    {indicator_name}.applyComputedState("
         f"static_cast<uint8_t>({variable_name} << 1U) > {u8(len(links))});"
     )
     return lines
@@ -287,6 +346,7 @@ def render_generated_action_accessors(
     """Render all direct generated action helpers used by hot runtime paths."""
     lines: list[str] = []
     for section in (
+        render_generated_actuator_action_helpers(device),
         render_direct_short_clicks(device, profile),
         render_direct_long_clicks(device, profile),
         render_turn_off_all_actuators(device),
@@ -301,6 +361,7 @@ def render_generated_action_accessors(
         render_is_clickable_configuration_valid(device, profile),
         render_set_actuator_state_by_id(device),
         render_scan_clickables(device, profile),
+        render_check_pulse_timers(device),
         render_check_auto_off_timers(device),
         render_apply_packed_state_byte(device),
         render_compute_indicator_state(device, profile),

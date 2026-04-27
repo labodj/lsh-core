@@ -3,12 +3,17 @@
 .piolibdeps/
 .build_cache/
 .static-analysis-temp/
+/lsh-core-*.tar.gz
 
 .clang_complete
 .gcc-flags.json
 compile_commands.json
 
-.vscode/
+# Keep editor noise out, but allow the generated lsh-core TOML schema to be
+# committed by consumer projects that want autocomplete immediately on checkout.
+**/.vscode/*
+!**/.vscode/
+!**/.vscode/lsh_devices.schema.json
 .idea/
 
 docs/html/
@@ -26,3 +31,8 @@ __pycache__/
 # The all-options TOML example is validated by generating into a temporary
 # directory in CI. Ignore local output if a developer runs it in place.
 examples/all-options-toml/generated/
+
+# The AVR board matrix example is intentionally generated during PlatformIO
+# builds; committing its generated headers would add noise without documenting a
+# richer profile than the TOML already shows.
+examples/avr-board-matrix/include/

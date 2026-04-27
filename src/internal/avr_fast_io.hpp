@@ -48,6 +48,8 @@ struct FastInputPinBinding
 {
     uint8_t mask = 0U;                          //!< Final bit mask for the pin inside the AVR port.
     volatile const uint8_t *pinPort = nullptr;  //!< Final AVR input register used to sample the pin state.
+    volatile uint8_t *outputPort = nullptr;     //!< Final AVR output register used to disable the input pull-up.
+    volatile uint8_t *modePort = nullptr;       //!< Final AVR DDR register used to force INPUT mode.
 };
 
 /**
@@ -301,7 +303,7 @@ inline constexpr StaticPinDescriptor kMegaPinDescriptors[] = {
  */
 [[nodiscard]] inline auto makeFastInputPinBinding(uint8_t pin) noexcept -> FastInputPinBinding
 {
-    return FastInputPinBinding{readPinBitMask(pin), inputRegisterForPin(pin)};
+    return FastInputPinBinding{readPinBitMask(pin), inputRegisterForPin(pin), outputRegisterForPin(pin), modeRegisterForPin(pin)};
 }
 
 /**
@@ -383,7 +385,8 @@ template <uint8_t Pin> [[nodiscard]] inline auto makeFastInputPinBinding(::lsh::
 {
     // Materialize the constexpr descriptor into the same compact binding used
     // by the runtime path so peripherals keep one direct-register hot path.
-    return FastInputPinBinding{readPinBitMask(::lsh::core::PinTag<Pin>{}), inputRegisterForPin(::lsh::core::PinTag<Pin>{})};
+    return FastInputPinBinding{readPinBitMask(::lsh::core::PinTag<Pin>{}), inputRegisterForPin(::lsh::core::PinTag<Pin>{}),
+                               outputRegisterForPin(::lsh::core::PinTag<Pin>{}), modeRegisterForPin(::lsh::core::PinTag<Pin>{})};
 }
 
 /**

@@ -20,6 +20,7 @@
 #define LSH_STATIC_CONFIG_SUPER_LONG_CLICK_ACTUATOR_LINKS 2
 #define LSH_STATIC_CONFIG_INDICATOR_ACTUATOR_LINKS 1
 #define LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS 6
+#define LSH_STATIC_CONFIG_PULSE_ACTUATORS 0
 #define LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS 0
 #define LSH_STATIC_CONFIG_DISABLE_NETWORK_CLICKS 1
 
@@ -116,28 +117,28 @@ template <uint16_t PayloadSize> auto writeGeneratedPayload(const uint8_t (&paylo
     return writeGeneratedPayloadLoop(payload);
 }
 
-LSH_ACTUATOR(rel0, CONTROLLINO_R0);
-LSH_ACTUATOR(rel1, CONTROLLINO_R1);
-LSH_ACTUATOR(rel2, CONTROLLINO_R2);
-LSH_ACTUATOR(rel3, CONTROLLINO_R3);
-LSH_ACTUATOR(rel4, CONTROLLINO_R4);
-LSH_ACTUATOR(rel5, CONTROLLINO_R5);
-LSH_ACTUATOR(rel6, CONTROLLINO_R6);
-LSH_ACTUATOR(rel7, CONTROLLINO_R7);
-LSH_ACTUATOR(rel9, CONTROLLINO_R9);
+LSH_ACTUATOR(actuator0_rel0, CONTROLLINO_R0);
+LSH_ACTUATOR(actuator1_rel1, CONTROLLINO_R1);
+LSH_ACTUATOR(actuator2_rel2, CONTROLLINO_R2);
+LSH_ACTUATOR(actuator3_rel3, CONTROLLINO_R3);
+LSH_ACTUATOR(actuator4_rel4, CONTROLLINO_R4);
+LSH_ACTUATOR(actuator5_rel5, CONTROLLINO_R5);
+LSH_ACTUATOR(actuator6_rel6, CONTROLLINO_R6);
+LSH_ACTUATOR(actuator7_rel7, CONTROLLINO_R7);
+LSH_ACTUATOR(actuator8_rel9, CONTROLLINO_R9);
 
-LSH_BUTTON(btn0, CONTROLLINO_A0);
-LSH_BUTTON(btn1, CONTROLLINO_A1);
-LSH_BUTTON(btn2, CONTROLLINO_A2);
-LSH_BUTTON(btn3, CONTROLLINO_A3);
-LSH_BUTTON(btn4, CONTROLLINO_A4);
-LSH_BUTTON(btn5, CONTROLLINO_A5);
-LSH_BUTTON(btn6, CONTROLLINO_A6);
-LSH_BUTTON(btn7, CONTROLLINO_A7);
-LSH_BUTTON(btn9, CONTROLLINO_A9);
-LSH_BUTTON(btn10, CONTROLLINO_IN0);
+LSH_BUTTON(button0_btn0, CONTROLLINO_A0);
+LSH_BUTTON(button1_btn1, CONTROLLINO_A1);
+LSH_BUTTON(button2_btn2, CONTROLLINO_A2);
+LSH_BUTTON(button3_btn3, CONTROLLINO_A3);
+LSH_BUTTON(button4_btn4, CONTROLLINO_A4);
+LSH_BUTTON(button5_btn5, CONTROLLINO_A5);
+LSH_BUTTON(button6_btn6, CONTROLLINO_A6);
+LSH_BUTTON(button7_btn7, CONTROLLINO_A7);
+LSH_BUTTON(button8_btn9, CONTROLLINO_A9);
+LSH_BUTTON(button9_btn10, CONTROLLINO_IN0);
 
-LSH_INDICATOR(light9, CONTROLLINO_D9);
+LSH_INDICATOR(indicator0_light9, CONTROLLINO_D9);
 }  // namespace
 
 namespace lsh::core::static_config
@@ -241,49 +242,284 @@ auto writeDetailsPayload() noexcept -> bool
 #endif
 }
 
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionToggle(uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionSet(bool state) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionSet(bool state, uint32_t actionNow) noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionToggle() noexcept -> bool;
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionToggle(uint32_t actionNow) noexcept -> bool;
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionSet(bool state) noexcept -> bool
+{
+    return actuator0_rel0.setStateStatic<0U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator0_rel0.setStateStatic<0U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionToggle() noexcept -> bool
+{
+    return actuator0_rel0.toggleStateStatic<0U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator0_rel0ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator0_rel0ActionSet(!actuator0_rel0.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionSet(bool state) noexcept -> bool
+{
+    return actuator1_rel1.setStateStatic<1U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator1_rel1.setStateStatic<1U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionToggle() noexcept -> bool
+{
+    return actuator1_rel1.toggleStateStatic<1U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator1_rel1ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator1_rel1ActionSet(!actuator1_rel1.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionSet(bool state) noexcept -> bool
+{
+    return actuator2_rel2.setStateStatic<2U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator2_rel2.setStateStatic<2U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionToggle() noexcept -> bool
+{
+    return actuator2_rel2.toggleStateStatic<2U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator2_rel2ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator2_rel2ActionSet(!actuator2_rel2.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionSet(bool state) noexcept -> bool
+{
+    return actuator3_rel3.setStateStatic<3U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator3_rel3.setStateStatic<3U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionToggle() noexcept -> bool
+{
+    return actuator3_rel3.toggleStateStatic<3U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator3_rel3ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator3_rel3ActionSet(!actuator3_rel3.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionSet(bool state) noexcept -> bool
+{
+    return actuator4_rel4.setStateStatic<4U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator4_rel4.setStateStatic<4U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionToggle() noexcept -> bool
+{
+    return actuator4_rel4.toggleStateStatic<4U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator4_rel4ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator4_rel4ActionSet(!actuator4_rel4.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionSet(bool state) noexcept -> bool
+{
+    return actuator5_rel5.setStateStatic<5U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator5_rel5.setStateStatic<5U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionToggle() noexcept -> bool
+{
+    return actuator5_rel5.toggleStateStatic<5U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator5_rel5ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator5_rel5ActionSet(!actuator5_rel5.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionSet(bool state) noexcept -> bool
+{
+    return actuator6_rel6.setStateStatic<6U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator6_rel6.setStateStatic<6U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionToggle() noexcept -> bool
+{
+    return actuator6_rel6.toggleStateStatic<6U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator6_rel6ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator6_rel6ActionSet(!actuator6_rel6.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionSet(bool state) noexcept -> bool
+{
+    return actuator7_rel7.setStateStatic<7U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator7_rel7.setStateStatic<7U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionToggle() noexcept -> bool
+{
+    return actuator7_rel7.toggleStateStatic<7U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator7_rel7ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator7_rel7ActionSet(!actuator7_rel7.getState(), actionNow);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionSet(bool state) noexcept -> bool
+{
+    return actuator8_rel9.setStateStatic<8U>(state);
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionSet(bool state, uint32_t actionNow) noexcept -> bool
+{
+    bool anyActuatorChangedState = false;
+    anyActuatorChangedState |= actuator8_rel9.setStateStatic<8U>(state, actionNow);
+    return anyActuatorChangedState;
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionToggle() noexcept -> bool
+{
+    return actuator8_rel9.toggleStateStatic<8U>();
+}
+
+[[nodiscard]] __attribute__((always_inline)) inline auto actuator8_rel9ActionToggle(uint32_t actionNow) noexcept -> bool
+{
+    return actuator8_rel9ActionSet(!actuator8_rel9.getState(), actionNow);
+}
+
 auto runShortClick(uint8_t clickableIndex) noexcept -> bool
 {
     switch (clickableIndex)
     {
     case 0U:
     {
-        return rel0.toggleStateStatic<0U>();
+        return actuator0_rel0ActionToggle();
     }
     case 1U:
     {
-        return rel1.toggleStateStatic<1U>();
+        return actuator1_rel1ActionToggle();
     }
     case 2U:
     {
-        return rel2.toggleStateStatic<2U>();
+        return actuator2_rel2ActionToggle();
     }
     case 3U:
     {
-        return rel3.toggleStateStatic<3U>();
+        return actuator3_rel3ActionToggle();
     }
     case 4U:
     {
-        return rel4.toggleStateStatic<4U>();
+        return actuator4_rel4ActionToggle();
     }
     case 5U:
     {
-        return rel5.toggleStateStatic<5U>();
+        return actuator5_rel5ActionToggle();
     }
     case 6U:
     {
-        return rel6.toggleStateStatic<6U>();
+        return actuator6_rel6ActionToggle();
     }
     case 7U:
     {
-        return rel7.toggleStateStatic<7U>();
+        return actuator7_rel7ActionToggle();
     }
     case 8U:
     {
-        return rel9.toggleStateStatic<8U>();
+        return actuator8_rel9ActionToggle();
     }
     case 9U:
     {
-        return rel0.toggleStateStatic<0U>();
+        return actuator0_rel0ActionToggle();
     }
     default:
         return false;
@@ -296,7 +532,7 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     {
     case 1U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel1.getState()) + static_cast<uint8_t>(rel2.getState());
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator1_rel1.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
@@ -304,13 +540,13 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel1.setStateStatic<1U>(stateToSet, actionNow);
-        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator1_rel1ActionSet(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator2_rel2ActionSet(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 2U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
@@ -318,13 +554,13 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel2.setStateStatic<2U>(stateToSet, actionNow);
-        anyActuatorChangedState |= rel1.setStateStatic<1U>(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator2_rel2ActionSet(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator1_rel1ActionSet(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 4U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel4.getState()) + static_cast<uint8_t>(rel5.getState());
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator4_rel4.getState()) + static_cast<uint8_t>(actuator5_rel5.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
@@ -332,13 +568,13 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel4.setStateStatic<4U>(stateToSet, actionNow);
-        anyActuatorChangedState |= rel5.setStateStatic<5U>(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator4_rel4ActionSet(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator5_rel5ActionSet(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 5U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel5.getState()) + static_cast<uint8_t>(rel4.getState());
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator5_rel5.getState()) + static_cast<uint8_t>(actuator4_rel4.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
@@ -346,8 +582,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel5.setStateStatic<5U>(stateToSet, actionNow);
-        anyActuatorChangedState |= rel4.setStateStatic<4U>(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator5_rel5ActionSet(stateToSet, actionNow);
+        anyActuatorChangedState |= actuator4_rel4ActionSet(stateToSet, actionNow);
         return anyActuatorChangedState;
     }
     case 6U:
@@ -358,16 +594,16 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel6.setStateStatic<6U>(false, actionNow);
-        anyActuatorChangedState |= rel4.setStateStatic<4U>(false, actionNow);
-        anyActuatorChangedState |= rel5.setStateStatic<5U>(false, actionNow);
+        anyActuatorChangedState |= actuator6_rel6ActionSet(false, actionNow);
+        anyActuatorChangedState |= actuator4_rel4ActionSet(false, actionNow);
+        anyActuatorChangedState |= actuator5_rel5ActionSet(false, actionNow);
         return anyActuatorChangedState;
     }
     case 7U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel7.getState());
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator7_rel7.getState());
         const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 1U);
-        return rel7.setStateStatic<7U>(stateToSet);
+        return actuator7_rel7ActionSet(stateToSet);
     }
     default:
         return false;
@@ -382,15 +618,15 @@ auto turnOffAllActuators() noexcept -> bool
     constexpr uint32_t actionNow = 0U;
 #endif
     bool anyActuatorChangedState = false;
-    anyActuatorChangedState |= rel0.setStateStatic<0U>(false, actionNow);
-    anyActuatorChangedState |= rel1.setStateStatic<1U>(false, actionNow);
-    anyActuatorChangedState |= rel2.setStateStatic<2U>(false, actionNow);
-    anyActuatorChangedState |= rel3.setStateStatic<3U>(false, actionNow);
-    anyActuatorChangedState |= rel4.setStateStatic<4U>(false, actionNow);
-    anyActuatorChangedState |= rel5.setStateStatic<5U>(false, actionNow);
-    anyActuatorChangedState |= rel6.setStateStatic<6U>(false, actionNow);
-    anyActuatorChangedState |= rel7.setStateStatic<7U>(false, actionNow);
-    anyActuatorChangedState |= rel9.setStateStatic<8U>(false, actionNow);
+    anyActuatorChangedState |= actuator0_rel0ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator1_rel1ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator2_rel2ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator3_rel3ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator4_rel4ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator5_rel5ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator6_rel6ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator7_rel7ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator8_rel9ActionSet(false, actionNow);
     return anyActuatorChangedState;
 }
 
@@ -402,15 +638,15 @@ auto turnOffUnprotectedActuators() noexcept -> bool
     constexpr uint32_t actionNow = 0U;
 #endif
     bool anyActuatorChangedState = false;
-    anyActuatorChangedState |= rel0.setStateStatic<0U>(false, actionNow);
-    anyActuatorChangedState |= rel1.setStateStatic<1U>(false, actionNow);
-    anyActuatorChangedState |= rel2.setStateStatic<2U>(false, actionNow);
-    anyActuatorChangedState |= rel3.setStateStatic<3U>(false, actionNow);
-    anyActuatorChangedState |= rel4.setStateStatic<4U>(false, actionNow);
-    anyActuatorChangedState |= rel5.setStateStatic<5U>(false, actionNow);
-    anyActuatorChangedState |= rel6.setStateStatic<6U>(false, actionNow);
-    anyActuatorChangedState |= rel7.setStateStatic<7U>(false, actionNow);
-    anyActuatorChangedState |= rel9.setStateStatic<8U>(false, actionNow);
+    anyActuatorChangedState |= actuator0_rel0ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator1_rel1ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator2_rel2ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator3_rel3ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator4_rel4ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator5_rel5ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator6_rel6ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator7_rel7ActionSet(false, actionNow);
+    anyActuatorChangedState |= actuator8_rel9ActionSet(false, actionNow);
     return anyActuatorChangedState;
 }
 
@@ -426,8 +662,8 @@ auto runSuperLongClick(uint8_t clickableIndex) noexcept -> bool
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel1.setStateStatic<1U>(false, actionNow);
-        anyActuatorChangedState |= rel2.setStateStatic<2U>(false, actionNow);
+        anyActuatorChangedState |= actuator1_rel1ActionSet(false, actionNow);
+        anyActuatorChangedState |= actuator2_rel2ActionSet(false, actionNow);
         return anyActuatorChangedState;
     }
     case 9U:
@@ -497,39 +733,39 @@ auto setActuatorStateById(uint8_t actuatorId, bool state) noexcept -> bool
     {
     case 1U:
     {
-        return rel0.setStateStatic<0U>(state);
+        return actuator0_rel0ActionSet(state);
     }
     case 2U:
     {
-        return rel1.setStateStatic<1U>(state);
+        return actuator1_rel1ActionSet(state);
     }
     case 3U:
     {
-        return rel2.setStateStatic<2U>(state);
+        return actuator2_rel2ActionSet(state);
     }
     case 4U:
     {
-        return rel3.setStateStatic<3U>(state);
+        return actuator3_rel3ActionSet(state);
     }
     case 5U:
     {
-        return rel4.setStateStatic<4U>(state);
+        return actuator4_rel4ActionSet(state);
     }
     case 6U:
     {
-        return rel5.setStateStatic<5U>(state);
+        return actuator5_rel5ActionSet(state);
     }
     case 7U:
     {
-        return rel6.setStateStatic<6U>(state);
+        return actuator6_rel6ActionSet(state);
     }
     case 8U:
     {
-        return rel7.setStateStatic<7U>(state);
+        return actuator7_rel7ActionSet(state);
     }
     case 10U:
     {
-        return rel9.setStateStatic<8U>(state);
+        return actuator8_rel9ActionSet(state);
     }
     default:
         return false;
@@ -543,15 +779,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     uint8_t scanResultFlags = 0U;
 
     {
-        const auto btn0ClickResult = btn0.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
-        switch (btn0ClickResult)
+        const auto button0_btn0ClickResult =
+            button0_btn0.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (button0_btn0ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 1U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel0.toggleStateStatic<0U>())
+            if (actuator0_rel0ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -564,15 +801,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn1ClickResult = btn1.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
-        switch (btn1ClickResult)
+        const auto button1_btn1ClickResult =
+            button1_btn1.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (button1_btn1ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 2U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel1.toggleStateStatic<1U>())
+            if (actuator1_rel1ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -583,18 +821,19 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 2U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel1.getState()) + static_cast<uint8_t>(rel2.getState());
+            const uint8_t actuatorsLongOn =
+                static_cast<uint8_t>(actuator1_rel1.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
             const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel1.setStateStatic<1U>(stateToSet, actionNow))
+            if (actuator1_rel1ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            if (actuator2_rel2ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -607,15 +846,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn2ClickResult = btn2.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
-        switch (btn2ClickResult)
+        const auto button2_btn2ClickResult =
+            button2_btn2.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (button2_btn2ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 3U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel2.toggleStateStatic<2U>())
+            if (actuator2_rel2ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -626,18 +866,19 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 3U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel2.getState()) + static_cast<uint8_t>(rel1.getState());
+            const uint8_t actuatorsLongOn =
+                static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
             const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel2.setStateStatic<2U>(stateToSet, actionNow))
+            if (actuator2_rel2ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel1.setStateStatic<1U>(stateToSet, actionNow))
+            if (actuator1_rel1ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -650,15 +891,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn3ClickResult = btn3.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
-        switch (btn3ClickResult)
+        const auto button3_btn3ClickResult =
+            button3_btn3.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (button3_btn3ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 4U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel3.toggleStateStatic<3U>())
+            if (actuator3_rel3ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -671,15 +913,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn4ClickResult = btn4.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
-        switch (btn4ClickResult)
+        const auto button4_btn4ClickResult =
+            button4_btn4.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (button4_btn4ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 5U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel4.toggleStateStatic<4U>())
+            if (actuator4_rel4ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -690,18 +933,19 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 5U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel4.getState()) + static_cast<uint8_t>(rel5.getState());
+            const uint8_t actuatorsLongOn =
+                static_cast<uint8_t>(actuator4_rel4.getState()) + static_cast<uint8_t>(actuator5_rel5.getState());
             const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel4.setStateStatic<4U>(stateToSet, actionNow))
+            if (actuator4_rel4ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel5.setStateStatic<5U>(stateToSet, actionNow))
+            if (actuator5_rel5ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -714,15 +958,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn5ClickResult = btn5.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
-        switch (btn5ClickResult)
+        const auto button5_btn5ClickResult =
+            button5_btn5.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (button5_btn5ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 6U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel5.toggleStateStatic<5U>())
+            if (actuator5_rel5ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -733,18 +978,19 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 6U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel5.getState()) + static_cast<uint8_t>(rel4.getState());
+            const uint8_t actuatorsLongOn =
+                static_cast<uint8_t>(actuator5_rel5.getState()) + static_cast<uint8_t>(actuator4_rel4.getState());
             const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel5.setStateStatic<5U>(stateToSet, actionNow))
+            if (actuator5_rel5ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel4.setStateStatic<4U>(stateToSet, actionNow))
+            if (actuator4_rel4ActionSet(stateToSet, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -757,15 +1003,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn6ClickResult = btn6.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
-        switch (btn6ClickResult)
+        const auto button6_btn6ClickResult =
+            button6_btn6.clickDetection<constants::clickDetection::makeFlags(true, true, false), 400U, 1000U>(elapsed_ms);
+        switch (button6_btn6ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 7U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel6.toggleStateStatic<6U>())
+            if (actuator6_rel6ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -781,15 +1028,15 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel6.setStateStatic<6U>(false, actionNow))
+            if (actuator6_rel6ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel4.setStateStatic<4U>(false, actionNow))
+            if (actuator4_rel4ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel5.setStateStatic<5U>(false, actionNow))
+            if (actuator5_rel5ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -802,15 +1049,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn7ClickResult = btn7.clickDetection<constants::clickDetection::makeFlags(true, true, true), 900U, 1000U>(elapsed_ms);
-        switch (btn7ClickResult)
+        const auto button7_btn7ClickResult =
+            button7_btn7.clickDetection<constants::clickDetection::makeFlags(true, true, true), 900U, 1000U>(elapsed_ms);
+        switch (button7_btn7ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 8U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel7.toggleStateStatic<7U>())
+            if (actuator7_rel7ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -821,9 +1069,9 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 8U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            const uint8_t actuatorsLongOn = static_cast<uint8_t>(rel7.getState());
+            const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator7_rel7.getState());
             const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 1U);
-            if (rel7.setStateStatic<7U>(stateToSet))
+            if (actuator7_rel7ActionSet(stateToSet))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -839,11 +1087,11 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel1.setStateStatic<1U>(false, actionNow))
+            if (actuator1_rel1ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel2.setStateStatic<2U>(false, actionNow))
+            if (actuator2_rel2ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -856,15 +1104,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn9ClickResult = btn9.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
-        switch (btn9ClickResult)
+        const auto button8_btn9ClickResult =
+            button8_btn9.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+        switch (button8_btn9ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 10U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel9.toggleStateStatic<8U>())
+            if (actuator8_rel9ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -877,16 +1126,16 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     }
 
     {
-        const auto btn10ClickResult =
-            btn10.clickDetection<constants::clickDetection::makeFlags(true, false, true), 400U, 1000U>(elapsed_ms);
-        switch (btn10ClickResult)
+        const auto button9_btn10ClickResult =
+            button9_btn10.clickDetection<constants::clickDetection::makeFlags(true, false, true), 400U, 1000U>(elapsed_ms);
+        switch (button9_btn10ClickResult)
         {
         case ClickResult::SHORT_CLICK:
         case ClickResult::SHORT_CLICK_QUICK:
         {
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 11U, FPSTR(dStr::SPACE), FPSTR(dStr::SHORT), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
-            if (rel0.toggleStateStatic<0U>())
+            if (actuator0_rel0ActionToggle())
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -902,39 +1151,39 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
 #else
             constexpr uint32_t actionNow = 0U;
 #endif
-            if (rel0.setStateStatic<0U>(false, actionNow))
+            if (actuator0_rel0ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel1.setStateStatic<1U>(false, actionNow))
+            if (actuator1_rel1ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel2.setStateStatic<2U>(false, actionNow))
+            if (actuator2_rel2ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel3.setStateStatic<3U>(false, actionNow))
+            if (actuator3_rel3ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel4.setStateStatic<4U>(false, actionNow))
+            if (actuator4_rel4ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel5.setStateStatic<5U>(false, actionNow))
+            if (actuator5_rel5ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel6.setStateStatic<6U>(false, actionNow))
+            if (actuator6_rel6ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel7.setStateStatic<7U>(false, actionNow))
+            if (actuator7_rel7ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
-            if (rel9.setStateStatic<8U>(false, actionNow))
+            if (actuator8_rel9ActionSet(false, actionNow))
             {
                 scanResultFlags |= CLICK_SCAN_STATE_CHANGED;
             }
@@ -949,38 +1198,44 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
     return scanResultFlags;
 }
 
+auto checkPulseTimers(uint16_t elapsed_ms) noexcept -> bool
+{
+    static_cast<void>(elapsed_ms);
+    return false;
+}
+
 auto checkAutoOffTimers(uint32_t now_ms) noexcept -> bool
 {
     bool anyActuatorChangedState = false;
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(0U, 0U, rel0, now_ms, 600000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(0U, 0U, actuator0_rel0, now_ms, 600000UL);
 #else
-    anyActuatorChangedState |= rel0.checkAutoOffTimerForIndex(0U, now_ms, 600000UL);
+    anyActuatorChangedState |= actuator0_rel0.checkAutoOffTimerForIndex(0U, now_ms, 600000UL);
 #endif
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(1U, 1U, rel1, now_ms, 3600000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(1U, 1U, actuator1_rel1, now_ms, 3600000UL);
 #else
-    anyActuatorChangedState |= rel1.checkAutoOffTimerForIndex(1U, now_ms, 3600000UL);
+    anyActuatorChangedState |= actuator1_rel1.checkAutoOffTimerForIndex(1U, now_ms, 3600000UL);
 #endif
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(2U, 2U, rel2, now_ms, 3600000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(2U, 2U, actuator2_rel2, now_ms, 3600000UL);
 #else
-    anyActuatorChangedState |= rel2.checkAutoOffTimerForIndex(2U, now_ms, 3600000UL);
+    anyActuatorChangedState |= actuator2_rel2.checkAutoOffTimerForIndex(2U, now_ms, 3600000UL);
 #endif
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(3U, 3U, rel3, now_ms, 900000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(3U, 3U, actuator3_rel3, now_ms, 900000UL);
 #else
-    anyActuatorChangedState |= rel3.checkAutoOffTimerForIndex(3U, now_ms, 900000UL);
+    anyActuatorChangedState |= actuator3_rel3.checkAutoOffTimerForIndex(3U, now_ms, 900000UL);
 #endif
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(4U, 7U, rel7, now_ms, 3600000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(4U, 7U, actuator7_rel7, now_ms, 3600000UL);
 #else
-    anyActuatorChangedState |= rel7.checkAutoOffTimerForIndex(7U, now_ms, 3600000UL);
+    anyActuatorChangedState |= actuator7_rel7.checkAutoOffTimerForIndex(7U, now_ms, 3600000UL);
 #endif
 #if CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES
-    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(5U, 8U, rel9, now_ms, 1800000UL);
+    anyActuatorChangedState |= Actuators::checkCompactAutoOffTimer(5U, 8U, actuator8_rel9, now_ms, 1800000UL);
 #else
-    anyActuatorChangedState |= rel9.checkAutoOffTimerForIndex(8U, now_ms, 1800000UL);
+    anyActuatorChangedState |= actuator8_rel9.checkAutoOffTimerForIndex(8U, now_ms, 1800000UL);
 #endif
     return anyActuatorChangedState;
 }
@@ -997,19 +1252,19 @@ auto applyPackedActuatorStateByte(uint8_t byteIndex, uint8_t packedByte) noexcep
         constexpr uint32_t actionNow = 0U;
 #endif
         bool anyActuatorChangedState = false;
-        anyActuatorChangedState |= rel0.setStateStatic<0U>((packedByte & 1U) != 0U, actionNow);
-        anyActuatorChangedState |= rel1.setStateStatic<1U>((packedByte & 2U) != 0U, actionNow);
-        anyActuatorChangedState |= rel2.setStateStatic<2U>((packedByte & 4U) != 0U, actionNow);
-        anyActuatorChangedState |= rel3.setStateStatic<3U>((packedByte & 8U) != 0U, actionNow);
-        anyActuatorChangedState |= rel4.setStateStatic<4U>((packedByte & 16U) != 0U, actionNow);
-        anyActuatorChangedState |= rel5.setStateStatic<5U>((packedByte & 32U) != 0U, actionNow);
-        anyActuatorChangedState |= rel6.setStateStatic<6U>((packedByte & 64U) != 0U, actionNow);
-        anyActuatorChangedState |= rel7.setStateStatic<7U>((packedByte & 128U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator0_rel0ActionSet((packedByte & 1U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator1_rel1ActionSet((packedByte & 2U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator2_rel2ActionSet((packedByte & 4U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator3_rel3ActionSet((packedByte & 8U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator4_rel4ActionSet((packedByte & 16U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator5_rel5ActionSet((packedByte & 32U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator6_rel6ActionSet((packedByte & 64U) != 0U, actionNow);
+        anyActuatorChangedState |= actuator7_rel7ActionSet((packedByte & 128U) != 0U, actionNow);
         return anyActuatorChangedState;
     }
     case 1U:
     {
-        return rel9.setStateStatic<8U>((packedByte & 1U) != 0U);
+        return actuator8_rel9ActionSet((packedByte & 1U) != 0U);
     }
     default:
         return false;
@@ -1022,7 +1277,7 @@ auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool
     {
     case 0U:
     {
-        return rel9.getState();
+        return actuator8_rel9.getState();
     }
     default:
         return false;
@@ -1031,7 +1286,7 @@ auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool
 
 void refreshIndicators() noexcept
 {
-    light9.applyComputedState(rel9.getState());
+    indicator0_light9.applyComputedState(actuator8_rel9.getState());
 }
 }  // namespace lsh::core::static_config
 
@@ -1045,86 +1300,86 @@ void Configurator::configure()
     Actuators::packedActuatorStates[1U] = 0U;
 
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel0.setIndex(0U);
-    Actuators::actuators[0U] = &rel0;
+    actuator0_rel0.setIndex(0U);
+    Actuators::actuators[0U] = &actuator0_rel0;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel1.setIndex(1U);
-    Actuators::actuators[1U] = &rel1;
+    actuator1_rel1.setIndex(1U);
+    Actuators::actuators[1U] = &actuator1_rel1;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel2.setIndex(2U);
-    Actuators::actuators[2U] = &rel2;
+    actuator2_rel2.setIndex(2U);
+    Actuators::actuators[2U] = &actuator2_rel2;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel3.setIndex(3U);
-    Actuators::actuators[3U] = &rel3;
+    actuator3_rel3.setIndex(3U);
+    Actuators::actuators[3U] = &actuator3_rel3;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel4.setIndex(4U);
-    Actuators::actuators[4U] = &rel4;
+    actuator4_rel4.setIndex(4U);
+    Actuators::actuators[4U] = &actuator4_rel4;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel5.setIndex(5U);
-    Actuators::actuators[5U] = &rel5;
+    actuator5_rel5.setIndex(5U);
+    Actuators::actuators[5U] = &actuator5_rel5;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel6.setIndex(6U);
-    Actuators::actuators[6U] = &rel6;
+    actuator6_rel6.setIndex(6U);
+    Actuators::actuators[6U] = &actuator6_rel6;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel7.setIndex(7U);
-    Actuators::actuators[7U] = &rel7;
+    actuator7_rel7.setIndex(7U);
+    Actuators::actuators[7U] = &actuator7_rel7;
 #endif
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    rel9.setIndex(8U);
-    Actuators::actuators[8U] = &rel9;
-#endif
-
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn0.setIndex(0U);
-    Clickables::clickables[0U] = &btn0;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn1.setIndex(1U);
-    Clickables::clickables[1U] = &btn1;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn2.setIndex(2U);
-    Clickables::clickables[2U] = &btn2;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn3.setIndex(3U);
-    Clickables::clickables[3U] = &btn3;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn4.setIndex(4U);
-    Clickables::clickables[4U] = &btn4;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn5.setIndex(5U);
-    Clickables::clickables[5U] = &btn5;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn6.setIndex(6U);
-    Clickables::clickables[6U] = &btn6;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn7.setIndex(7U);
-    Clickables::clickables[7U] = &btn7;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn9.setIndex(8U);
-    Clickables::clickables[8U] = &btn9;
-#endif
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    btn10.setIndex(9U);
-    Clickables::clickables[9U] = &btn10;
+    actuator8_rel9.setIndex(8U);
+    Actuators::actuators[8U] = &actuator8_rel9;
 #endif
 
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    light9.setIndex(0U);
-    Indicators::indicators[0U] = &light9;
+    button0_btn0.setIndex(0U);
+    Clickables::clickables[0U] = &button0_btn0;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button1_btn1.setIndex(1U);
+    Clickables::clickables[1U] = &button1_btn1;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button2_btn2.setIndex(2U);
+    Clickables::clickables[2U] = &button2_btn2;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button3_btn3.setIndex(3U);
+    Clickables::clickables[3U] = &button3_btn3;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button4_btn4.setIndex(4U);
+    Clickables::clickables[4U] = &button4_btn4;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button5_btn5.setIndex(5U);
+    Clickables::clickables[5U] = &button5_btn5;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button6_btn6.setIndex(6U);
+    Clickables::clickables[6U] = &button6_btn6;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button7_btn7.setIndex(7U);
+    Clickables::clickables[7U] = &button7_btn7;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button8_btn9.setIndex(8U);
+    Clickables::clickables[8U] = &button8_btn9;
+#endif
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    button9_btn10.setIndex(9U);
+    Clickables::clickables[9U] = &button9_btn10;
+#endif
+
+#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
+    indicator0_light9.setIndex(0U);
+    Indicators::indicators[0U] = &indicator0_light9;
 #endif
 }
 

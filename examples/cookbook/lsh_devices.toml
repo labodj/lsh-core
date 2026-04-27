@@ -1,0 +1,98 @@
+#:schema ./.vscode/lsh_devices.schema.json
+
+schema_version = 2
+preset = "controllino-maxi/fast-msgpack"
+
+[generator]
+output_dir = "include"
+config_dir = "lsh_configs"
+
+[timing]
+long_click = "800ms"
+super_long_click = "1600ms"
+
+[devices.kitchen]
+name = "kitchen"
+
+[devices.kitchen.actuators.ceiling]
+pin = "R0"
+
+[devices.kitchen.actuators.worktop]
+pin = "R1"
+auto_off = "45m"
+
+[devices.kitchen.actuators.ambient]
+pin = "R2"
+default = true
+
+[devices.kitchen.actuators.door_strike]
+pin = "R3"
+pulse = "300ms"
+
+[devices.kitchen.actuators.blind_up]
+pin = "R4"
+interlock = "blind_down"
+
+[devices.kitchen.actuators.blind_down]
+pin = "R5"
+interlock = "blind_up"
+
+[devices.kitchen.actuators.service]
+pin = "R6"
+protected = true
+
+[devices.kitchen.groups.main_lights]
+targets = ["ceiling", "worktop", "ambient"]
+
+[devices.kitchen.groups.blind_motor]
+targets = ["blind_up", "blind_down"]
+
+[devices.kitchen.scenes.cooking]
+off = "ambient"
+on = ["ceiling", "worktop"]
+
+[devices.kitchen.scenes.shutdown]
+off = ["main_lights", "blind_motor"]
+
+[devices.kitchen.buttons.door]
+pin = "A0"
+short = "ceiling"
+long = { after = "900ms", action = "off", group = "main_lights" }
+super_long = { action = "all_off" }
+
+[devices.kitchen.buttons.worktop]
+pin = "A1"
+short = { group = "main_lights" }
+long = { scene = "cooking" }
+super_long = { scene = "shutdown" }
+
+[devices.kitchen.buttons.strike]
+pin = "A2"
+short = "door_strike"
+long = { network = true, fallback = "do_nothing" }
+
+[devices.kitchen.buttons.blind_up]
+pin = "A3"
+short = "blind_up"
+long = { action = "off", group = "blind_motor" }
+
+[devices.kitchen.buttons.blind_down]
+pin = "A4"
+short = "blind_down"
+long = { action = "off", group = "blind_motor" }
+
+[devices.kitchen.indicators.ceiling_led]
+pin = "D0"
+when = "ceiling"
+
+[devices.kitchen.indicators.any_light_led]
+pin = "D1"
+
+[devices.kitchen.indicators.any_light_led.when]
+any = ["ceiling", "worktop", "ambient"]
+
+[devices.kitchen.indicators.cooking_led]
+pin = "D2"
+
+[devices.kitchen.indicators.cooking_led.when]
+all = ["ceiling", "worktop"]

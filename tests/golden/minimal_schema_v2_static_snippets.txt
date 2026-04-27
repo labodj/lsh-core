@@ -1,0 +1,7 @@
+#define LSH_STATIC_CONFIG_CLICKABLES 1
+#define LSH_STATIC_CONFIG_ACTUATORS 1
+#define LSH_STATIC_CONFIG_INDICATORS 0
+LSH_ACTUATOR(actuator0_relay, 6);
+return actuator0_relayActionToggle();
+button0_button.clickDetection<constants::clickDetection::makeFlags(true, false, false), 400U, 1000U>(elapsed_ms);
+if (actuator0_relayActionToggle())

@@ -51,8 +51,11 @@ private:
      */
     explicit Indicator(lsh::core::avr::FastOutputPinBinding binding) noexcept : pinMask(binding.mask), pinPort(binding.pinPort)
     {
+        // Indicators default to OFF. Prime the output latch before enabling
+        // OUTPUT so setup cannot briefly expose an inherited HIGH level.
         const uint8_t oldSREG = SREG;
         cli();
+        *this->pinPort &= ~this->pinMask;
         *binding.modePort |= this->pinMask;
         SREG = oldSREG;
     }
@@ -70,7 +73,8 @@ public:
      */
     explicit LSH_OPTIONAL_CONSTEXPR_CTOR Indicator(uint8_t pin) noexcept : pinNumber(pin)
     {
-        pinMode(pin, OUTPUT);  // PinMode to Output
+        digitalWrite(pin, LOW);
+        pinMode(pin, OUTPUT);
     }
 
     /**

@@ -1,6 +1,7 @@
 {
+  "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
   "name": "lsh-core",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Deterministic C++ framework for Arduino/Controllino controllers in the LSH ecosystem.",
   "keywords": [
     "arduino",
@@ -25,6 +26,7 @@
     }
   ],
   "license": "Apache-2.0",
+  "homepage": "https://labodj.github.io/lsh-core/",
   "frameworks": "arduino",
   "platforms": "atmelavr",
   "dependencies": {
@@ -35,14 +37,29 @@
     "libLDFMode": "deep+"
   },
   "export": {
-    "exclude": [
-      ".claude/*",
-      ".github/*",
-      ".gitnexus/*",
-      "docs/*",
-      "examples/*",
-      "tools/*",
-      "vendor/*"
+    "include": [
+      "CITATION.cff",
+      "LICENSE",
+      "NOTICE",
+      "README.md",
+      "docs/cookbook.md",
+      "docs/lsh_devices.schema.json",
+      "docs/static-toml-config.md",
+      "examples/avr-board-matrix/README.md",
+      "examples/avr-board-matrix/lsh_devices.lock.toml",
+      "examples/avr-board-matrix/lsh_devices.toml",
+      "examples/avr-board-matrix/platformio.ini",
+      "examples/avr-board-matrix/src/*",
+      "examples/cookbook/README.md",
+      "examples/cookbook/lsh_devices.toml",
+      "include/*",
+      "library.json",
+      "src/*",
+      "tools/__init__.py",
+      "tools/generate_lsh_static_config.py",
+      "tools/lsh_static_config/*",
+      "tools/migrate_lsh_config.py",
+      "tools/platformio_lsh_static_config.py"
     ]
   }
 }

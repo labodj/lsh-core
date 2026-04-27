@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+import os
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
@@ -12,6 +14,9 @@ if TYPE_CHECKING:
 
 
 CppDefine = str | tuple[str, str]
+MIN_INCLUDE_OPERAND_LENGTH = 3
+GENERATED_HEADER_DEPENDENCY_DEPTH = 2
+INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
 
 
 class PlatformIOEnv(Protocol):
@@ -72,6 +77,108 @@ def _get_option(name: str, default: str | None = None) -> str | None:
     return value
 
 
+def _include_operand_path(include_operand: str) -> Path | None:
+    """Extract the path-like part from a C++ include operand.
+
+    lsh-core intentionally lets a profile choose the board support header at
+    compile time. PlatformIO's dependency finder can miss that generated include
+    when the user routes config headers through custom paths, so this hook adds a
+    direct include directory for matching installed libdeps when possible.
+    """
+    if len(include_operand) < MIN_INCLUDE_OPERAND_LENGTH:
+        return None
+    if include_operand[0] == "<" and include_operand[-1] == ">":
+        return Path(include_operand[1:-1])
+    if include_operand[0] == '"' and include_operand[-1] == '"':
+        return Path(include_operand[1:-1])
+    return None
+
+
+def _matching_header_locations(header: Path, root: Path) -> list[Path]:
+    """Return installed headers whose suffix matches the requested include path."""
+    if not header.parts or not root.is_dir():
+        return []
+
+    locations: list[Path] = []
+    suffix_length = len(header.parts)
+    for candidate in sorted(root.rglob(header.name)):
+        if not candidate.is_file() or candidate.parts[-suffix_length:] != header.parts:
+            continue
+        locations.append(candidate)
+    return locations
+
+
+def _include_root_for_header(header: Path, location: Path) -> str:
+    """Return the include directory that makes `header` visible at `location`."""
+    return str(location.parents[len(header.parts) - 1])
+
+
+def _header_includes(location: Path) -> list[Path]:
+    """Read simple include directives from one generated hardware header."""
+    includes: list[Path] = []
+    try:
+        lines = location.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return includes
+    for line in lines:
+        match = INCLUDE_DIRECTIVE_RE.match(line)
+        if match is not None:
+            includes.append(Path(match.group(1)))
+    return includes
+
+
+def _platformio_header_search_roots() -> list[Path]:
+    """Return PlatformIO package roots worth scanning for generated includes."""
+    roots = [Path(env.subst("$PROJECT_LIBDEPS_DIR")) / env.subst("$PIOENV")]
+
+    package_dirs = [
+        Path(candidate)
+        for candidate in (
+            env.subst("$PROJECT_PACKAGES_DIR"),
+            os.environ.get("PLATFORMIO_PACKAGES_DIR", ""),
+            str(Path.home() / ".platformio" / "packages"),
+        )
+        if candidate and "$" not in candidate
+    ]
+    seen_roots = set(roots)
+    for package_dir in package_dirs:
+        if not package_dir.is_dir():
+            continue
+        for framework_libraries in sorted(package_dir.glob("framework-*/libraries")):
+            if framework_libraries not in seen_roots:
+                roots.append(framework_libraries)
+                seen_roots.add(framework_libraries)
+    return roots
+
+
+def _generated_cpp_paths() -> list[str]:
+    """Return generated and hardware-lib include paths needed by this profile."""
+    paths = [str(project.settings.output_dir)]
+    header = _include_operand_path(device.hardware_include)
+    if header is None:
+        return paths
+
+    seen_paths = set(paths)
+    pending = [header]
+    seen_headers: set[Path] = set()
+    search_roots = _platformio_header_search_roots()
+    for _ in range(GENERATED_HEADER_DEPENDENCY_DEPTH):
+        next_pending: list[Path] = []
+        for pending_header in pending:
+            if pending_header in seen_headers:
+                continue
+            seen_headers.add(pending_header)
+            for root in search_roots:
+                for location in _matching_header_locations(pending_header, root):
+                    include_root = _include_root_for_header(pending_header, location)
+                    if include_root not in seen_paths:
+                        paths.append(include_root)
+                        seen_paths.add(include_root)
+                    next_pending.extend(_header_includes(location))
+        pending = next_pending
+    return paths
+
+
 project_dir = Path(env.subst("$PROJECT_DIR")).resolve()
 config_option = _get_option("custom_lsh_config", "lsh_devices.toml")
 if config_option is None:
@@ -93,7 +200,11 @@ device = project.devices[device_key]
 lsh_static_config.generate(project, [device_key], check=False)
 
 cpp_defines: list[CppDefine] = []
+build_flags = lsh_static_config.raw_build_flags(project, device)
 for define in lsh_static_config.merged_defines(project, device):
+    if lsh_static_config.define_needs_escaped_build_flag(define):
+        build_flags.append(lsh_static_config.render_escaped_build_flag_define(define))
+        continue
     if define.value is None:
         cpp_defines.append(define.name)
     else:
@@ -101,8 +212,8 @@ for define in lsh_static_config.merged_defines(project, device):
 
 env.Append(
     CPPDEFINES=cpp_defines,
-    CPPPATH=[str(project.settings.output_dir)],
-    BUILD_FLAGS=lsh_static_config.raw_build_flags(project, device),
+    CPPPATH=_generated_cpp_paths(),
+    BUILD_FLAGS=build_flags,
 )
 
 sys.stdout.write(

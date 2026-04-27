@@ -1,0 +1,1357 @@
+{
+  "$id": "https://labodj.github.io/lsh-core/lsh_devices.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "advanced": {
+      "additionalProperties": false,
+      "properties": {
+        "build_flags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defines": {
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "controller": {
+      "additionalProperties": false,
+      "properties": {
+        "bridge_serial": {
+          "type": "string"
+        },
+        "controllino_pin_aliases": {
+          "type": "boolean"
+        },
+        "debug_serial": {
+          "type": "string"
+        },
+        "disable_eth": {
+          "type": "boolean"
+        },
+        "disable_rtc": {
+          "type": "boolean"
+        },
+        "hardware_include": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "devices": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "actuators": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "auto_off": {
+                  "oneOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "auto_off_ms": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "default": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "maximum": 255,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "interlock": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                },
+                "pin": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "protected": {
+                  "type": "boolean"
+                },
+                "pulse": {
+                  "oneOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "pulse_ms": {
+                  "maximum": 65535,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": ["pin"],
+              "type": "object"
+            },
+            "properties": {},
+            "type": "object"
+          },
+          "advanced": {
+            "additionalProperties": false,
+            "properties": {
+              "build_flags": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "defines": {
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "bridge_serial": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "build_macro": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "buttons": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "maximum": 255,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "long": {
+                  "oneOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      ]
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "enum": ["toggle", "on", "off", "all_off"]
+                        },
+                        "after": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "fallback": {
+                          "enum": ["local", "do_nothing", "none"]
+                        },
+                        "group": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "groups": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "network": {
+                          "type": "boolean"
+                        },
+                        "scene": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "target": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "targets": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "time": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "time_ms": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "pin": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "short": {
+                  "oneOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      ]
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "enum": ["toggle", "on", "off", "all_off"]
+                        },
+                        "after": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "fallback": {
+                          "enum": ["local", "do_nothing", "none"]
+                        },
+                        "group": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "groups": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "network": {
+                          "type": "boolean"
+                        },
+                        "scene": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "target": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "targets": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "time": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "time_ms": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                },
+                "super_long": {
+                  "oneOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      ]
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "enum": ["toggle", "on", "off", "all_off"]
+                        },
+                        "after": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "fallback": {
+                          "enum": ["local", "do_nothing", "none"]
+                        },
+                        "group": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "groups": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "network": {
+                          "type": "boolean"
+                        },
+                        "scene": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "target": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "targets": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "time": {
+                          "oneOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "time_ms": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": ["pin"],
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "config_include": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "controllino_pin_aliases": {
+            "type": "boolean"
+          },
+          "debug_serial": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "disable_eth": {
+            "type": "boolean"
+          },
+          "disable_rtc": {
+            "type": "boolean"
+          },
+          "features": {
+            "additionalProperties": false,
+            "properties": {
+              "aggressive_constexpr_ctors": {
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "auto"
+                  }
+                ]
+              },
+              "bench": {
+                "type": "boolean"
+              },
+              "bench_iterations": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "codec": {
+                "enum": ["json", "msgpack"]
+              },
+              "etl_profile_override_header": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "const": false
+                  }
+                ]
+              },
+              "fast_actuators": {
+                "type": "boolean"
+              },
+              "fast_buttons": {
+                "type": "boolean"
+              },
+              "fast_indicators": {
+                "type": "boolean"
+              },
+              "fast_io": {
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "groups": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "target": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "targets": {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "hardware_include": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "indicators": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "pin": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "when": {
+                  "oneOf": [
+                    {
+                      "oneOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        }
+                      ]
+                    },
+                    {
+                      "additionalProperties": false,
+                      "maxProperties": 1,
+                      "minProperties": 1,
+                      "properties": {
+                        "all": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "any": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        },
+                        "majority": {
+                          "oneOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          ]
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": ["pin", "when"],
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scenes": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "off": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                },
+                "on": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                },
+                "toggle": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "serial": {
+            "additionalProperties": false,
+            "properties": {
+              "bridge_baud": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "debug_baud": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "flush_after_send": {
+                "type": "boolean"
+              },
+              "max_rx_bytes_per_loop": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_rx_payloads_per_loop": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "msgpack_frame_idle_timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "rx_buffer_size": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "tx_buffer_size": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "static_config_include": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "timing": {
+            "additionalProperties": false,
+            "properties": {
+              "actuator_debounce": {
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "auto_off_check_interval": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "bridge_boot_retry": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "bridge_state_timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "button_debounce": {
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "connection_timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "long_click": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "network_click_check_interval": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "network_click_timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "ping_interval": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "post_receive_delay": {
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "scan_interval": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "super_long_click": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "minProperties": 1,
+      "type": "object"
+    },
+    "features": {
+      "additionalProperties": false,
+      "properties": {
+        "aggressive_constexpr_ctors": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "const": "auto"
+            }
+          ]
+        },
+        "bench": {
+          "type": "boolean"
+        },
+        "bench_iterations": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "codec": {
+          "enum": ["json", "msgpack"]
+        },
+        "etl_profile_override_header": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false
+            }
+          ]
+        },
+        "fast_actuators": {
+          "type": "boolean"
+        },
+        "fast_buttons": {
+          "type": "boolean"
+        },
+        "fast_indicators": {
+          "type": "boolean"
+        },
+        "fast_io": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "generator": {
+      "additionalProperties": false,
+      "properties": {
+        "config_dir": {
+          "default": "lsh_configs",
+          "type": "string"
+        },
+        "id_lock_file": {
+          "default": "lsh_devices.lock.toml",
+          "type": "string"
+        },
+        "output_dir": {
+          "default": "include",
+          "type": "string"
+        },
+        "static_config_router_header": {
+          "default": "lsh_static_config_router.hpp",
+          "type": "string"
+        },
+        "user_config_header": {
+          "default": "lsh_user_config.hpp",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "preset": {
+      "enum": [
+        "arduino-generic/json",
+        "arduino-generic/msgpack",
+        "controllino-maxi/fast-json",
+        "controllino-maxi/fast-msgpack"
+      ]
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "serial": {
+      "additionalProperties": false,
+      "properties": {
+        "bridge_baud": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "debug_baud": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "flush_after_send": {
+          "type": "boolean"
+        },
+        "max_rx_bytes_per_loop": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_rx_payloads_per_loop": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "msgpack_frame_idle_timeout": {
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "rx_buffer_size": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout": {
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "tx_buffer_size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "actuator_debounce": {
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "auto_off_check_interval": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "bridge_boot_retry": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "bridge_state_timeout": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "button_debounce": {
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "connection_timeout": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "long_click": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "network_click_check_interval": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "network_click_timeout": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "ping_interval": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "post_receive_delay": {
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "scan_interval": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "super_long_click": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": ["schema_version", "devices"],
+  "title": "lsh-core static device configuration",
+  "type": "object"
+}
