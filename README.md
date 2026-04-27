@@ -242,7 +242,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    platform = atmelavr
    framework = arduino
    board = controllino_maxi
-   lib_deps = labodj/lsh-core @ ^3.0.5
+   lib_deps = labodj/lsh-core @ ^3.0.6
    build_unflags = -std=gnu++11 -std=c++11
    build_flags =
        -I include
@@ -253,7 +253,7 @@ This is why the bridge and orchestration layers are treated as additive rather t
    a local checkout:
 
    ```ini
-   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.5
+   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.6
    ; or, inside this repository's bundled examples:
    ; lib_deps = lsh-core=symlink://../..
    ```
@@ -943,5 +943,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers should prefer:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^3.0.5
+lib_deps = labodj/lsh-core @ ^3.0.6
 ```

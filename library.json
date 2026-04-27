@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
   "name": "lsh-core",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "description": "Deterministic C++ framework for Arduino/Controllino controllers in the LSH ecosystem.",
   "keywords": [
     "arduino",
