@@ -129,7 +129,9 @@
                   "type": "integer"
                 }
               },
-              "required": ["pin"],
+              "required": [
+                "pin"
+              ],
               "type": "object"
             },
             "properties": {},
@@ -206,7 +208,12 @@
                       "additionalProperties": false,
                       "properties": {
                         "action": {
-                          "enum": ["toggle", "on", "off", "all_off"]
+                          "enum": [
+                            "toggle",
+                            "on",
+                            "off",
+                            "all_off"
+                          ]
                         },
                         "after": {
                           "oneOf": [
@@ -224,7 +231,11 @@
                           "type": "boolean"
                         },
                         "fallback": {
-                          "enum": ["local", "do_nothing", "none"]
+                          "enum": [
+                            "local",
+                            "do_nothing",
+                            "none"
+                          ]
                         },
                         "group": {
                           "minLength": 1,
@@ -326,7 +337,12 @@
                       "additionalProperties": false,
                       "properties": {
                         "action": {
-                          "enum": ["toggle", "on", "off", "all_off"]
+                          "enum": [
+                            "toggle",
+                            "on",
+                            "off",
+                            "all_off"
+                          ]
                         },
                         "after": {
                           "oneOf": [
@@ -344,7 +360,11 @@
                           "type": "boolean"
                         },
                         "fallback": {
-                          "enum": ["local", "do_nothing", "none"]
+                          "enum": [
+                            "local",
+                            "do_nothing",
+                            "none"
+                          ]
                         },
                         "group": {
                           "minLength": 1,
@@ -442,7 +462,12 @@
                       "additionalProperties": false,
                       "properties": {
                         "action": {
-                          "enum": ["toggle", "on", "off", "all_off"]
+                          "enum": [
+                            "toggle",
+                            "on",
+                            "off",
+                            "all_off"
+                          ]
                         },
                         "after": {
                           "oneOf": [
@@ -460,7 +485,11 @@
                           "type": "boolean"
                         },
                         "fallback": {
-                          "enum": ["local", "do_nothing", "none"]
+                          "enum": [
+                            "local",
+                            "do_nothing",
+                            "none"
+                          ]
                         },
                         "group": {
                           "minLength": 1,
@@ -533,7 +562,9 @@
                   ]
                 }
               },
-              "required": ["pin"],
+              "required": [
+                "pin"
+              ],
               "type": "object"
             },
             "type": "object"
@@ -576,7 +607,10 @@
                 "type": "integer"
               },
               "codec": {
-                "enum": ["json", "msgpack"]
+                "enum": [
+                  "json",
+                  "msgpack"
+                ]
               },
               "etl_profile_override_header": {
                 "oneOf": [
@@ -747,7 +781,10 @@
                   ]
                 }
               },
-              "required": ["pin", "when"],
+              "required": [
+                "pin",
+                "when"
+              ],
               "type": "object"
             },
             "type": "object"
@@ -1067,7 +1104,10 @@
           "type": "integer"
         },
         "codec": {
-          "enum": ["json", "msgpack"]
+          "enum": [
+            "json",
+            "msgpack"
+          ]
         },
         "etl_profile_override_header": {
           "oneOf": [
@@ -1351,7 +1391,10 @@
       "type": "object"
     }
   },
-  "required": ["schema_version", "devices"],
+  "required": [
+    "schema_version",
+    "devices"
+  ],
   "title": "lsh-core static device configuration",
   "type": "object"
 }
