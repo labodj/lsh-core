@@ -32,7 +32,7 @@ jobs:
         run: python3 -m pip install --upgrade pip uv
 
       - name: Cache uv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
@@ -132,7 +132,7 @@ jobs:
           cache: "pip"
 
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.platformio/.cache
@@ -171,7 +171,7 @@ jobs:
           cache: "pip"
 
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.platformio/.cache
@@ -205,7 +205,7 @@ jobs:
           cache: "pip"
 
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.platformio/.cache
