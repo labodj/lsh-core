@@ -79,20 +79,37 @@ jobs:
       - name: Validate static TOML generation
         run: |
           set -eu
+          schema_tmp=$(mktemp)
+          tmpdir=$(mktemp -d)
+          matrix_tmp=$(mktemp -d)
+          trap 'rm -f "$schema_tmp"; rm -rf "$tmpdir" "$matrix_tmp"' EXIT
+
+          uv run python tools/generate_lsh_static_config.py --print-json-schema > "$schema_tmp"
+          diff -u docs/lsh_devices.schema.json "$schema_tmp"
+
           uv run python tools/generate_lsh_static_config.py \
             examples/multi-device-project/lsh_devices.toml \
             --check
+          uv run python tools/generate_lsh_static_config.py \
+            examples/multi-device-project/lsh_devices.toml \
+            --doctor
 
-          tmpdir=$(mktemp -d)
-          trap 'rm -rf "$tmpdir"' EXIT
           cp examples/all-options-toml/lsh_devices.toml "$tmpdir/lsh_devices.toml"
+          cp examples/all-options-toml/lsh_devices.lock.toml "$tmpdir/lsh_devices.lock.toml"
           uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml"
           uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml" --check
+          uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml" --doctor
           uv run python tools/generate_lsh_static_config.py "$tmpdir/lsh_devices.toml" --list-devices
           uv run python tools/generate_lsh_static_config.py \
             "$tmpdir/lsh_devices.toml" \
             --print-platformio-defines maximal_panel \
             >/dev/null
+
+          cp examples/avr-board-matrix/lsh_devices.toml "$matrix_tmp/lsh_devices.toml"
+          cp examples/avr-board-matrix/lsh_devices.lock.toml "$matrix_tmp/lsh_devices.lock.toml"
+          uv run python tools/generate_lsh_static_config.py "$matrix_tmp/lsh_devices.toml"
+          uv run python tools/generate_lsh_static_config.py "$matrix_tmp/lsh_devices.toml" --check
+          uv run python tools/generate_lsh_static_config.py "$matrix_tmp/lsh_devices.toml" --doctor
 
   build-public-example:
     runs-on: ubuntu-latest
@@ -130,8 +147,113 @@ jobs:
       - name: Build public example
         run: platformio run -d examples/multi-device-project -e "${{ matrix.env }}"
 
+      - name: Static analyze public example
+        run: platformio check -d examples/multi-device-project -e "${{ matrix.env }}"
+
+  build-avr-board-matrix:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ["mega2560_fast_release", "uno_release", "nano_release"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-platformio-avr-matrix-${{ hashFiles('examples/avr-board-matrix/platformio.ini', 'library.json') }}
+          restore-keys: ${{ runner.os }}-platformio-avr-matrix-
+
+      - name: Install PlatformIO
+        run: python3 -m pip install --upgrade pip "platformio==6.1.19"
+
+      - name: Build AVR board matrix
+        run: platformio run -d examples/avr-board-matrix -e "${{ matrix.env }}"
+
+      - name: Static analyze AVR board matrix
+        run: platformio check -d examples/avr-board-matrix -e "${{ matrix.env }}" --fail-on-defect low
+
+  package-registry-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-platformio-package-smoke-${{ hashFiles('library.json') }}
+          restore-keys: ${{ runner.os }}-platformio-package-smoke-
+
+      - name: Install PlatformIO
+        run: python3 -m pip install --upgrade pip "platformio==6.1.19"
+
+      - name: Pack library and build a registry-style consumer
+        run: |
+          set -eu
+          package_path=$(mktemp --suffix=.tar.gz)
+          smoke_dir=$(mktemp -d)
+          trap 'rm -f "$package_path"; rm -rf "$smoke_dir"' EXIT
+
+          platformio pkg pack --output "$package_path"
+          tar -tzf "$package_path" | grep -F "tools/platformio_lsh_static_config.py"
+          tar -tzf "$package_path" | grep -F "docs/lsh_devices.schema.json"
+          ! tar -tzf "$package_path" | grep -E '(^|/)(\.venv|\.pio|__pycache__|vendor|\.github)(/|$)'
+
+          mkdir -p "$smoke_dir/src"
+          cp examples/avr-board-matrix/src/main.cpp "$smoke_dir/src/main.cpp"
+          cp examples/avr-board-matrix/lsh_devices.toml "$smoke_dir/lsh_devices.toml"
+          cp examples/avr-board-matrix/lsh_devices.lock.toml "$smoke_dir/lsh_devices.lock.toml"
+          cat >"$smoke_dir/platformio.ini" <<EOF
+          [env:uno_release]
+          platform = atmelavr
+          framework = arduino
+          board = uno
+          lib_deps = file://$package_path
+          extra_scripts = pre:.pio/libdeps/uno_release/lsh-core/tools/platformio_lsh_static_config.py
+          custom_lsh_config = lsh_devices.toml
+          custom_lsh_device = atmega328p_basic
+          build_unflags = -std=gnu++11 -std=c++11
+          build_flags =
+              -I include
+              -std=gnu++17
+              -D NDEBUG
+          EOF
+
+          platformio run -d "$smoke_dir" -e uno_release
+          test -f "$smoke_dir/include/lsh_user_config.hpp"
+
   release:
-    needs: [static-checks, build-public-example]
+    needs: [static-checks, build-public-example, build-avr-board-matrix, package-registry-smoke]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
