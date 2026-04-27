@@ -150,9 +150,12 @@ def render_pulse_set_lines(
     pulse_ms = actuator.pulse_ms if actuator.pulse_ms is not None else 0
     return [
         (
-            f"    static_assert({u16(pulse_ms)} >= "
-            "constants::timings::ACTUATOR_DEBOUNCE_TIME_MS, "
-            '"Pulse duration must be greater than or equal to actuator debounce.");'
+            "    static_assert("
+            f"{u16(pulse_ms)} >= constants::timings::ACTUATOR_DEBOUNCE_TIME_MS,"
+        ),
+        (
+            '                  "Pulse duration must be greater than or equal to '
+            'actuator debounce.");'
         ),
         "    if (state)",
         "    {",

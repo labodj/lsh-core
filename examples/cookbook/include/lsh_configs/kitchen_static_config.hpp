@@ -312,7 +312,8 @@ static uint8_t activePulseActuators = 0U;
 [[nodiscard]] inline auto actuator3_door_strikeActionSet(bool state, uint32_t actionNow) noexcept -> bool
 {
     bool anyActuatorChangedState = false;
-    static_assert(300U >= constants::timings::ACTUATOR_DEBOUNCE_TIME_MS, "Pulse duration must be greater than or equal to actuator debounce.");
+    static_assert(300U >= constants::timings::ACTUATOR_DEBOUNCE_TIME_MS,
+                  "Pulse duration must be greater than or equal to actuator debounce.");
     if (state)
     {
         const bool actuatorWasOn = actuator3_door_strike.getState();
@@ -1118,7 +1119,8 @@ auto computeIndicatorState(uint8_t indicatorIndex) noexcept -> bool
 void refreshIndicators() noexcept
 {
     indicator0_ceiling_led.applyComputedState(actuator0_ceiling.getState());
-    indicator1_any_light_led.applyComputedState(actuator0_ceiling.getState() || actuator1_worktop.getState() || actuator2_ambient.getState());
+    const bool indicator1_any_light_ledState = actuator0_ceiling.getState() || actuator1_worktop.getState() || actuator2_ambient.getState();
+    indicator1_any_light_led.applyComputedState(indicator1_any_light_ledState);
     indicator2_cooking_led.applyComputedState(actuator0_ceiling.getState() && actuator1_worktop.getState());
 }
 }  // namespace lsh::core::static_config

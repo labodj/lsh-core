@@ -28,6 +28,7 @@ from .click_actions import (
     render_turn_off_unprotected_actuators,
 )
 from .click_scan import render_scan_clickables
+from .constants import CLANG_FORMAT_COLUMN_LIMIT
 from .cpp import append_section, u8, u32
 from .topology import actuator_name_at, indicator_object_name
 
@@ -35,6 +36,65 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from .models import DeviceConfig, StaticProfileData
+
+
+def _indicator_state_terms(device: DeviceConfig, links: Sequence[int]) -> list[str]:
+    """Return direct getState() terms for one generated indicator expression."""
+    return [
+        f"{actuator_name_at(device, actuator_index)}.getState()"
+        for actuator_index in links
+    ]
+
+
+def _render_chained_bool_assignment(
+    variable_name: str,
+    terms: Sequence[str],
+    operator: str,
+    *,
+    indent: str,
+) -> list[str]:
+    """Render a clang-format-stable short-circuit bool chain."""
+    first_term, *remaining_terms = terms
+    lines = [f"{indent}bool {variable_name} = {first_term};"]
+    lines.extend(
+        f"{indent}{variable_name} = {variable_name} {operator} {term};"
+        for term in remaining_terms
+    )
+    return lines
+
+
+def _render_indicator_apply_from_terms(
+    indicator_name: str,
+    terms: Sequence[str],
+    operator: str,
+) -> list[str]:
+    """Render applyComputedState() without creating clang-format churn."""
+    expression = f" {operator} ".join(terms)
+    direct_line = f"    {indicator_name}.applyComputedState({expression});"
+    if len(direct_line) <= CLANG_FORMAT_COLUMN_LIMIT:
+        return [direct_line]
+
+    variable_name = f"{indicator_name}State"
+    variable_line = f"    const bool {variable_name} = {expression};"
+    if len(variable_line) <= CLANG_FORMAT_COLUMN_LIMIT:
+        return [
+            variable_line,
+            f"    {indicator_name}.applyComputedState({variable_name});",
+        ]
+
+    lines = ["    {"]
+    lines.extend(
+        _render_chained_bool_assignment(
+            "indicatorState", terms, operator, indent="        "
+        )
+    )
+    lines.extend(
+        [
+            f"        {indicator_name}.applyComputedState(indicatorState);",
+            "    }",
+        ]
+    )
+    return lines
 
 
 def render_apply_packed_state_byte(
@@ -127,18 +187,28 @@ def render_indicator_case_body(
         return ["        return false;"]
 
     if mode == "ANY":
-        expression = " || ".join(
-            f"{actuator_name_at(device, actuator_index)}.getState()"
-            for actuator_index in links
+        terms = _indicator_state_terms(device, links)
+        expression = " || ".join(terms)
+        line = f"        return {expression};"
+        if len(line) <= CLANG_FORMAT_COLUMN_LIMIT:
+            return [line]
+        lines = _render_chained_bool_assignment(
+            "indicatorState", terms, "||", indent="        "
         )
-        return [f"        return {expression};"]
+        lines.append("        return indicatorState;")
+        return lines
 
     if mode == "ALL":
-        expression = " && ".join(
-            f"{actuator_name_at(device, actuator_index)}.getState()"
-            for actuator_index in links
+        terms = _indicator_state_terms(device, links)
+        expression = " && ".join(terms)
+        line = f"        return {expression};"
+        if len(line) <= CLANG_FORMAT_COLUMN_LIMIT:
+            return [line]
+        lines = _render_chained_bool_assignment(
+            "indicatorState", terms, "&&", indent="        "
         )
-        return [f"        return {expression};"]
+        lines.append("        return indicatorState;")
+        return lines
 
     terms = [
         f"static_cast<uint8_t>({actuator_name_at(device, actuator_index)}.getState())"
@@ -290,19 +360,13 @@ def render_indicator_refresh_lines(
     if not links:
         return [f"    {indicator_name}.applyComputedState(false);"]
 
-    if mode == "ANY":
-        expression = " || ".join(
-            f"{actuator_name_at(device, actuator_index)}.getState()"
-            for actuator_index in links
+    if mode in {"ANY", "ALL"}:
+        terms = _indicator_state_terms(device, links)
+        return _render_indicator_apply_from_terms(
+            indicator_name,
+            terms,
+            "||" if mode == "ANY" else "&&",
         )
-        return [f"    {indicator_name}.applyComputedState({expression});"]
-
-    if mode == "ALL":
-        expression = " && ".join(
-            f"{actuator_name_at(device, actuator_index)}.getState()"
-            for actuator_index in links
-        )
-        return [f"    {indicator_name}.applyComputedState({expression});"]
 
     terms = [
         f"static_cast<uint8_t>({actuator_name_at(device, actuator_index)}.getState())"
