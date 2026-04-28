@@ -1,8 +1,5 @@
 name: CI & Release
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 on:
   push:
     branches: ["main"]
@@ -225,8 +222,62 @@ jobs:
           trap 'rm -f "$package_path"; rm -rf "$smoke_dir"' EXIT
 
           platformio pkg pack --output "$package_path"
+          python3 - "$package_path" <<'PY'
+          import posixpath
+          import re
+          import sys
+          import tarfile
+          from urllib.parse import unquote, urlsplit
+
+          package_path = sys.argv[1]
+          inline_link = re.compile(r"!?\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+          reference_link = re.compile(r"^\s*\[[^\]]+\]:\s*(\S+)", re.MULTILINE)
+
+          def is_external(url: str) -> bool:
+              parsed = urlsplit(url)
+              return bool(parsed.scheme) or url.startswith("#")
+
+          def markdown_links(markdown: str):
+              yield from (match.group(1) for match in inline_link.finditer(markdown))
+              yield from (match.group(1) for match in reference_link.finditer(markdown))
+
+          with tarfile.open(package_path, "r:gz") as package:
+              members = {
+                  member.name.rstrip("/")
+                  for member in package.getmembers()
+                  if member.isfile()
+              }
+              markdown_members = sorted(name for name in members if name.endswith(".md"))
+
+              errors = []
+              for name in markdown_members:
+                  content = package.extractfile(name).read().decode("utf-8")
+                  for raw_url in markdown_links(content):
+                      url = raw_url.strip("<>")
+                      if is_external(url):
+                          continue
+                      parsed = urlsplit(url)
+                      if not parsed.path:
+                          continue
+                      if name == "README.md":
+                          errors.append(f"{name}: registry README uses relative link {raw_url}")
+                          continue
+
+                      target = unquote(parsed.path)
+                      resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
+                      if resolved == ".":
+                          resolved = ""
+                      resolved = resolved.rstrip("/")
+                      if resolved not in members and not any(member.startswith(resolved + "/") for member in members):
+                          errors.append(f"{name}: relative link {raw_url} resolves outside package ({resolved})")
+
+              if errors:
+                  raise SystemExit("\n".join(errors))
+          PY
           tar -tzf "$package_path" | grep -F "tools/platformio_lsh_static_config.py"
           tar -tzf "$package_path" | grep -F "docs/lsh_devices.schema.json"
+          tar -tzf "$package_path" | grep -F "examples/multi-device-project/platformio.ini"
+          tar -tzf "$package_path" | grep -F "examples/all-options-toml/lsh_devices.toml"
           ! tar -tzf "$package_path" | grep -E '(^|/)(\.venv|\.pio|__pycache__|vendor|\.github)(/|$)'
 
           mkdir -p "$smoke_dir/src"
@@ -275,7 +326,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: lsh-core ${{ github.ref_name }}
           generate_release_notes: true

@@ -244,20 +244,18 @@ This is why the bridge and orchestration layers are treated as additive rather t
    platform = atmelavr
    framework = arduino
    board = controllino_maxi
-   lib_deps = labodj/lsh-core @ ^3.0.7
+   lib_deps = labodj/lsh-core @ ^3.0.8
    build_unflags = -std=gnu++11 -std=c++11
    build_flags =
        -I include
        -std=gnu++17
    ```
 
-   During unreleased development you can still depend on the Git repository or
-   a local checkout:
+   The bundled examples in this repository use a local checkout during
+   maintainer development:
 
    ```ini
-   lib_deps = https://github.com/labodj/lsh-core.git#v3.0.7
-   ; or, inside this repository's bundled examples:
-   ; lib_deps = lsh-core=symlink://../..
+   lib_deps = lsh-core=symlink://../..
    ```
 
 3. Add the generator hook and select a device profile:
@@ -945,5 +943,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers should prefer:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^3.0.7
+lib_deps = labodj/lsh-core @ ^3.0.8
 ```
