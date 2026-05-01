@@ -76,7 +76,7 @@ Install from the PlatformIO Registry:
 platform = atmelavr
 framework = arduino
 board = controllino_maxi
-lib_deps = labodj/lsh-core @ ^3.0.9
+lib_deps = labodj/lsh-core @ ^3.0.10
 build_unflags = -std=gnu++11 -std=c++11
 build_flags =
     -I include
@@ -252,5 +252,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers can pin the Registry package:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^3.0.9
+lib_deps = labodj/lsh-core @ ^3.0.10
 ```
