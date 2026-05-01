@@ -96,8 +96,8 @@ TOML, writes the generated headers, adds the selected `LSH_BUILD_*` macro and co
 the matching static profile.
 
 For a complete layout, copy the shape of
-[examples/multi-device-project](./examples/multi-device-project) instead of starting
-from an empty project.
+[examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project)
+instead of starting from an empty project.
 
 ## Configuration Model
 
@@ -133,8 +133,11 @@ Generated headers are implementation detail. Edit `lsh_devices.toml`, regenerate
 build. When IDs are auto-assigned, commit `lsh_devices.lock.toml` beside the TOML
 profile so public bridge-facing IDs stay stable over time.
 
-Read [docs/static-toml-config.md](./docs/static-toml-config.md) for the schema reference
-and [docs/cookbook.md](./docs/cookbook.md) for copyable patterns.
+Read
+[docs/static-toml-config.md](https://github.com/labodj/lsh-core/blob/main/docs/static-toml-config.md)
+for the schema reference and
+[docs/cookbook.md](https://github.com/labodj/lsh-core/blob/main/docs/cookbook.md) for
+copyable patterns.
 
 ## Board Support
 
@@ -171,10 +174,10 @@ For the full panel-level layout, power topology and serviceability notes, read t
 ## Runtime Shape
 
 ```text
-+-------------+       serial        +------------+       MQTT       +----------------+
-| lsh-core    | <-----------------> | lsh-bridge | <-------------> | coordinator    |
-| controller  |                     | ESP32      |                 | or Node-RED    |
-+-------------+                     +------------+                 +----------------+
++------------+    serial    +------------+    MQTT    +--------------+
+| lsh-core   | <----------> | lsh-bridge | <--------> | coordinator  |
+| controller |              | ESP32      |            | or Node-RED  |
++------------+              +------------+            +--------------+
 ```
 
 Important invariants:
@@ -205,10 +208,14 @@ is available.
 
 ## Documentation
 
-- [DOCS.md](./DOCS.md): repository documentation map
-- [docs/static-toml-config.md](./docs/static-toml-config.md): schema v2 reference
-- [docs/cookbook.md](./docs/cookbook.md): configuration recipes
-- [docs/feature-flags.md](./docs/feature-flags.md): compile-time tuning knobs
+- [DOCS.md](https://github.com/labodj/lsh-core/blob/main/DOCS.md): repository
+  documentation map
+- [docs/static-toml-config.md](https://github.com/labodj/lsh-core/blob/main/docs/static-toml-config.md):
+  schema v2 reference
+- [docs/cookbook.md](https://github.com/labodj/lsh-core/blob/main/docs/cookbook.md):
+  configuration recipes
+- [docs/feature-flags.md](https://github.com/labodj/lsh-core/blob/main/docs/feature-flags.md):
+  compile-time tuning knobs
 - [Doxygen API reference](https://labodj.github.io/lsh-core/): class and method
   documentation for the latest tagged release
 
