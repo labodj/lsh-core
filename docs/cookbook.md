@@ -1,9 +1,8 @@
 # lsh-core Configuration Cookbook
 
-This cookbook collects production-shaped `lsh_devices.toml` recipes for schema
-v2. Each recipe is declarative and generator-friendly: the TOML remains easy to
-read, while the emitted C++ stays static and specialized for the selected
-device.
+This cookbook collects production-shaped `lsh_devices.toml` recipes for schema v2. Each
+recipe is declarative and generator-friendly: the TOML remains easy to read, while the
+emitted C++ stays static and specialized for the selected device.
 
 For a complete file that combines several recipes, see
 [`examples/cookbook/lsh_devices.toml`](../examples/cookbook/lsh_devices.toml).
@@ -71,9 +70,9 @@ pin = "R1"
 auto_off = "45m"
 ```
 
-Use `auto_off` for normal latched outputs that may be left on accidentally. The
-relay still behaves like a normal ON/OFF actuator; the generated runtime only
-adds the guard timer.
+Use `auto_off` for normal latched outputs that may be left on accidentally. The relay
+still behaves like a normal ON/OFF actuator; the generated runtime only adds the guard
+timer.
 
 ## Momentary Pulse Output
 
@@ -87,8 +86,8 @@ pin = "A1"
 short = "door_strike"
 ```
 
-Use `pulse` for strikes, bells and inputs that must receive a short ON impulse.
-Any generated ON path starts or restarts the pulse. OFF cancels it.
+Use `pulse` for strikes, bells and inputs that must receive a short ON impulse. Any
+generated ON path starts or restarts the pulse. OFF cancels it.
 
 ## Local Groups
 
@@ -117,8 +116,8 @@ pin = "A3"
 short = { scene = "cooking" }
 ```
 
-Scene steps always run in this order: `off`, then `on`, then `toggle`. That
-ordering keeps mixed scenes deterministic.
+Scene steps always run in this order: `off`, then `on`, then `toggle`. That ordering
+keeps mixed scenes deterministic.
 
 ## Selective Super-Long Off
 
@@ -128,8 +127,8 @@ pin = "A4"
 super_long = { action = "off", group = "main_lights" }
 ```
 
-Use this when a panel should shut down a known set of outputs but must not touch
-the whole device.
+Use this when a panel should shut down a known set of outputs but must not touch the
+whole device.
 
 ## Global Super-Long Off With Protected Relays
 
@@ -144,8 +143,8 @@ short = "ceiling"
 super_long = { action = "all_off" }
 ```
 
-`all_off` switches off every unprotected actuator. Mark service outputs,
-technical relays or always-on circuits as `protected = true`.
+`all_off` switches off every unprotected actuator. Mark service outputs, technical
+relays or always-on circuits as `protected = true`.
 
 ## Network Click Without Local Fallback
 
@@ -155,9 +154,9 @@ pin = "A5"
 long = { network = true, fallback = "do_nothing" }
 ```
 
-This sends the click to `lsh-bridge` / Node-RED and does nothing locally if the
-network path fails. If a button must still act locally when the network is down,
-combine `network = true`, `fallback = "local"` and local targets.
+This sends the click through the bridge path and does nothing locally if the network
+path fails. If a button must still act locally when the network is down, combine
+`network = true`, `fallback = "local"` and local targets.
 
 ## Motor Direction Interlock
 
@@ -171,9 +170,8 @@ pin = "R5"
 interlock = "blind_up"
 ```
 
-When one interlocked actuator turns ON, the generated setter turns its peer OFF
-first. The rule is applied consistently to local clicks, scenes and bridge
-commands.
+When one interlocked actuator turns ON, the generated setter turns its peer OFF first.
+The rule is applied consistently to local clicks, scenes and bridge commands.
 
 ## Indicator Modes
 
@@ -191,8 +189,8 @@ pin = "D3"
 when = { majority = ["ceiling", "worktop", "ambient"] }
 ```
 
-Indicators are computed directly from generated actuator references. Use the
-mode that matches the panel label instead of adding external logic.
+Indicators are computed directly from generated actuator references. Use the mode that
+matches the panel label instead of adding external logic.
 
 ## Generic Arduino AVR Board
 
@@ -219,9 +217,8 @@ pin = "2"
 short = "relay"
 ```
 
-Start generic boards with numeric Arduino pins and `fast_io = false`. Once the
-profile builds and passes static analysis, enable faster codecs or direct-port
-I/O deliberately.
+Start generic boards with numeric Arduino pins and `fast_io = false`. Once the profile
+builds and passes static analysis, enable faster codecs or direct-port I/O deliberately.
 
 ## Release Checklist
 
@@ -235,6 +232,5 @@ python3 tools/generate_lsh_static_config.py lsh_devices.toml
 python3 tools/generate_lsh_static_config.py lsh_devices.toml --check --check-format
 ```
 
-Commit `lsh_devices.toml`, `lsh_devices.lock.toml` when IDs are auto-assigned,
-and the local schema if you want editor autocomplete to work immediately after
-checkout.
+Commit `lsh_devices.toml`, `lsh_devices.lock.toml` when IDs are auto-assigned, and the
+local schema if you want editor autocomplete to work immediately after checkout.
