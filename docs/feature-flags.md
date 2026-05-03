@@ -1,8 +1,8 @@
 # Feature Flags and Compile-Time Tuning
 
 `lsh-core` is designed for small controllers, so some choices are fixed at compile time.
-For normal projects, start with semantic TOML fields and only drop down to raw
-`CONFIG_*` defines when a profile needs a knob that the schema does not expose yet.
+For typical projects, start with semantic TOML fields and only fall back to raw
+`CONFIG_*` defines when a profile needs a setting that the schema does not expose yet.
 
 For schema v2, prefer this shape:
 
@@ -20,7 +20,7 @@ bridge_baud = 500000
 max_rx_bytes_per_loop = 64
 ```
 
-Use the expert escape hatch only when needed:
+Use the advanced override only when needed:
 
 ```toml
 [advanced.defines]
@@ -56,7 +56,7 @@ frames matter more than throughput.
 
 These flags replace Arduino helper calls with direct port access where the selected AVR
 board supports it. They are good defaults for Controllino and ATmega2560-style profiles
-where the button scan path is hot.
+where the button scan path is performance-sensitive.
 
 ### `CONFIG_USE_FAST_CLICKABLES`
 
@@ -88,7 +88,7 @@ where the button scan path is hot.
 | `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS` | `1000U` | Default super-long-click threshold.                         |
 | `CONFIG_LCNB_TIMEOUT_MS`                    | `1000U` | Network-click ACK timeout before fallback is applied.       |
 
-`CONFIG_CLICKABLE_SCAN_INTERVAL_MS` is a scan policy knob, not a hard real-time
+`CONFIG_CLICKABLE_SCAN_INTERVAL_MS` is a scan policy setting, not a hard real-time
 guarantee. If the controller is busy, elapsed time is still passed through the button
 state machine so debounce and click timing stay coherent.
 
@@ -134,9 +134,9 @@ hardware tests confirm that local button latency stays acceptable.
 ## ETL Profile Override
 
 `lsh-core` ships with a default [`etl_profile.h`](../include/etl_profile.h) for the
-common Arduino/PlatformIO case. It sets only the library policy knobs that are part of
-the current project assumptions while ETL still auto-detects compiler and language
-support through `etl/profiles/auto.h`.
+common Arduino/PlatformIO case. It sets only the library policy settings that are part
+of the current project assumptions while ETL continues to auto-detect compiler and
+language support through `etl/profiles/auto.h`.
 
 If a target needs a different ETL setup, use a small project-owned override:
 

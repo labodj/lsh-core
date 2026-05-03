@@ -1,8 +1,8 @@
 # lsh-core Cookbook Example
 
 This directory contains one complete `lsh_devices.toml` profile used by the official
-cookbook. It is intentionally generator-focused: the file is meant to show real schema
-v2 patterns that can be copied into a consumer project.
+cookbook. It is intentionally generator-focused: the file is meant to show practical
+schema v2 patterns that can be copied into a consumer project.
 
 Validate it from the repository root:
 

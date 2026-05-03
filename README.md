@@ -6,14 +6,14 @@
 [![API Documentation](https://img.shields.io/badge/API%20Reference-Doxygen-blue.svg)](https://labodj.github.io/lsh-core/)
 [![License](https://img.shields.io/github/license/labodj/lsh-core.svg)](https://github.com/labodj/lsh-core/blob/main/LICENSE)
 
-`lsh-core` is the controller-side firmware library for the **Labo Smart Home**
-ecosystem. It runs on an Arduino-compatible controller, owns the physical inputs and
-outputs, handles local behavior for buttons, relays and indicators, and talks to an
-ESP32 `lsh-bridge` over serial.
+`lsh-core` is the controller-side firmware library for the **Labo Smart Home** stack. It
+runs on an Arduino-compatible controller, owns the physical inputs and outputs, handles
+local behavior for buttons, relays and indicators, and talks to an ESP32 `lsh-bridge`
+over serial.
 
-The best documented path is a Controllino-style AVR controller paired with `lsh-bridge`,
-MQTT and the LSH coordinator. You can still study or reuse the library on its own, but
-the public adoption path assumes the full stack.
+The path documented in most detail is a Controllino-style AVR controller paired with
+`lsh-bridge`, MQTT and the LSH coordinator. You can still inspect or reuse the library
+on its own, but the public documentation uses that full stack as the reference path.
 
 Since `v3.0.0`, configuration is TOML-first. You describe devices, buttons, relays, pins
 and click behavior in `lsh_devices.toml`; the generator emits the optimized C++ profile
@@ -34,7 +34,7 @@ before diving into firmware details.
 - it applies local fallback when a network-assisted click cannot complete
 
 The bridge, MQTT broker and coordinator add visibility and distributed behavior. The
-physical panel still keeps a useful local behavior when those layers are unavailable.
+physical panel does not depend on those layers for its local loop.
 
 ## What You Need
 
@@ -42,18 +42,18 @@ For the documented controller path:
 
 - PlatformIO
 - Python 3.11 or newer for the TOML generator
-- an Arduino-compatible AVR target; Controllino Maxi is the best documented one
+- an Arduino-compatible AVR target; Controllino Maxi is documented in the most detail
 - an ESP32 running `lsh-bridge` if you want MQTT/Homie integration
 - an MQTT broker plus the LSH coordinator or Node-RED logic layer for distributed
   behavior
 
-The library is optimized for static device topology. If a project needs devices to
-appear and disappear at runtime, this is not the right abstraction without additional
-work.
+The library is optimized for static device topology. If your project needs devices to
+appear and disappear at runtime, plan for additional runtime orchestration outside
+`lsh-core`.
 
 ## First Build
 
-The fastest working reference is the bundled multi-device example:
+The practical starting reference is the bundled multi-device example:
 
 ```bash
 platformio run -d examples/multi-device-project -e J1_release
@@ -61,8 +61,7 @@ platformio run -d examples/multi-device-project -e J2_release
 ```
 
 Use `J1_release` first when you want a lean controller/bridge path without network-click
-behavior. Use `J2_release` when you want the richer profile with network-click support
-enabled.
+behavior. Use `J2_release` when you want network-click support enabled.
 
 For the stack-level bring-up sequence around this example, use the
 [`labo-smart-home` getting started guide](https://github.com/labodj/labo-smart-home/blob/main/GETTING_STARTED.md).
@@ -95,7 +94,7 @@ Then write `lsh_devices.toml` and build. PlatformIO runs the generator, validate
 TOML, writes the generated headers, adds the selected `LSH_BUILD_*` macro and compiles
 the matching static profile.
 
-For a complete layout, copy the shape of
+For a complete layout, reuse the structure of
 [examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project)
 instead of starting from an empty project.
 
@@ -129,7 +128,7 @@ pin = "D0"
 when = "ceiling"
 ```
 
-Generated headers are implementation detail. Edit `lsh_devices.toml`, regenerate and
+Generated headers are an implementation detail. Edit `lsh_devices.toml`, regenerate and
 build. When IDs are auto-assigned, commit `lsh_devices.lock.toml` beside the TOML
 profile so public bridge-facing IDs stay stable over time.
 
@@ -141,8 +140,8 @@ copyable patterns.
 
 ## Board Support
 
-Controllino is the best documented hardware path, not a hard dependency. The public
-compatibility matrix also keeps generic Arduino AVR targets in CI.
+Controllino is the hardware path documented in most detail, but it is not required. The
+public compatibility matrix also keeps generic Arduino AVR targets in CI.
 
 | Board / family          | PlatformIO board   | Example environment                      | Recommended profile                 |
 | ----------------------- | ------------------ | ---------------------------------------- | ----------------------------------- |
@@ -161,7 +160,8 @@ The public Controllino path assumes a straightforward field model:
 
 - wall buttons connect controller input pins to the controller supply voltage
 - indicator outputs normally drive low-voltage LEDs or illuminated button panels
-- relay outputs switch the real loads within the limits of the board and installation
+- relay outputs switch the attached loads within the limits of the board and
+  installation
 - the controller-to-bridge link uses a hardware serial port
 
 On Controllino Maxi, the bridge link usually uses `Serial2`. A Controllino uses 5 V
@@ -231,7 +231,7 @@ platformio run -e kitchen_release
 platformio run -e kitchen_debug --target upload
 ```
 
-From this repository checkout, use the example paths shown in
+From a checkout of this repository, use the example paths shown in
 [First Build](#first-build).
 
 ## PlatformIO Registry Releases

@@ -1,8 +1,8 @@
 # lsh-core Configuration Cookbook
 
-This cookbook collects production-shaped `lsh_devices.toml` recipes for schema v2. Each
-recipe is declarative and generator-friendly: the TOML remains easy to read, while the
-emitted C++ stays static and specialized for the selected device.
+This cookbook collects deployment-oriented `lsh_devices.toml` recipes for schema v2.
+Each recipe is declarative and generator-friendly: the TOML remains easy to read, while
+the emitted C++ stays static and specialized for the selected device.
 
 For a complete file that combines several recipes, see
 [`examples/cookbook/lsh_devices.toml`](../examples/cookbook/lsh_devices.toml).
@@ -59,7 +59,7 @@ pin = "D0"
 when = "ceiling"
 ```
 
-This is the smallest useful local loop: a short press toggles the relay and the
+This is the smallest practical local loop: a short press toggles the relay and the
 indicator mirrors it.
 
 ## Auto-Off Guard
@@ -70,9 +70,9 @@ pin = "R1"
 auto_off = "45m"
 ```
 
-Use `auto_off` for normal latched outputs that may be left on accidentally. The relay
-still behaves like a normal ON/OFF actuator; the generated runtime only adds the guard
-timer.
+Use `auto_off` for regular latched outputs that may be left on accidentally. The relay
+still behaves like an ordinary ON/OFF actuator; the generated runtime only adds the
+guard timer.
 
 ## Momentary Pulse Output
 
@@ -101,7 +101,7 @@ short = { group = "main_lights" }
 long = { action = "off", group = "main_lights" }
 ```
 
-Groups are TOML aliases only. The generator expands them into direct actuator
+Groups are configuration-only aliases. The generator expands them into direct actuator
 operations, so they improve readability without adding runtime lookup tables.
 
 ## Scenes
@@ -155,7 +155,7 @@ long = { network = true, fallback = "do_nothing" }
 ```
 
 This sends the click through the bridge path and does nothing locally if the network
-path fails. If a button must still act locally when the network is down, combine
+path fails. If a button needs to keep acting locally when the network is down, combine
 `network = true`, `fallback = "local"` and local targets.
 
 ## Motor Direction Interlock
@@ -222,7 +222,7 @@ builds and passes static analysis, enable faster codecs or direct-port I/O delib
 
 ## Release Checklist
 
-Before flashing a real controller profile:
+Before flashing a controller profile:
 
 ```bash
 python3 tools/generate_lsh_static_config.py lsh_devices.toml --doctor

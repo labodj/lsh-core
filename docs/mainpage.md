@@ -2,13 +2,13 @@
 
 # LSH-Core
 
-`lsh-core` is the deterministic firmware engine for the Labo Smart Home ecosystem. It
-runs on the controller-side MCU, owns the physical topology, and executes the local
-logic for buttons, actuators, indicators, fallback behavior and the serial protocol
-spoken with `lsh-bridge`.
+`lsh-core` is the deterministic firmware engine for the Labo Smart Home stack. It runs
+on the controller-side MCU, owns the physical topology, and executes the local logic for
+buttons, actuators, indicators, fallback behavior and the serial protocol spoken with
+`lsh-bridge`.
 
-If you are new to the public LSH stack, start with the landing repository before diving
-into the firmware API surface:
+If you are new to the public LSH stack, start with the top-level repository before
+diving into the firmware API surface:
 
 - [Labo Smart Home](https://github.com/labodj/labo-smart-home)
 
@@ -25,7 +25,7 @@ This Doxygen site combines three complementary sources:
   `vendor/lsh-protocol/shared/lsh_protocol.md`
 
 Use the API reference when you need class- and method-level details, and use the README
-/ protocol pages when you need the system contract around the library.
+and protocol pages when you need the system contract around the library.
 
 ## Runtime Invariants
 
@@ -35,7 +35,7 @@ The firmware is intentionally strict about a few invariants:
 - Generated `LSH_STATIC_CONFIG_*` values define the exact runtime cardinality for
   actuators, buttons, indicators, network-click slots and auto-off entries. The C++ API
   still calls physical inputs `Clickable` objects because the same finite-state machine
-  can model any pressable input.
+  can model any button-like input.
 - `Configurator::configure()` is generated from TOML and directly assigns dense object
   indexes and manager-array slots. The generated path replaces hand-written registration
   code.
@@ -53,12 +53,13 @@ The firmware is intentionally strict about a few invariants:
 - Serial transport depends on the selected codec: JSON uses newline-delimited frames,
   while MsgPack uses a framed delimiter-and-escape transport on top of the pure payload
   bytes.
-- The protocol assumes a trusted environment. Authentication, encryption, and
-  hostile-peer hardening are intentionally out of scope.
+- The protocol assumes a trusted environment. Authentication, encryption and
+  hostile-peer hardening belong in the surrounding deployment rather than the payload
+  contract.
 
 ## Navigation
 
-- Start with `README.md` for the adoption story and first project shape.
+- Start with `README.md` for the first-use path and project shape.
 - Use `DOCS.md` as the repository documentation map.
 - Read `docs/static-toml-config.md` for the schema v2 reference.
 - Read `docs/cookbook.md` for copyable configuration recipes.
@@ -90,5 +91,5 @@ direct-port I/O even when they cost more flash than the equivalent JSON or Ardui
 helper path.
 
 That optimization target matters when reviewing or extending the code. Prefer changes
-that preserve RAM predictability, keep hot paths branch-light, and do not relax the
-boot/resync contract between `lsh-core` and `lsh-bridge`.
+that preserve RAM predictability, keep performance-sensitive paths branch-light, and do
+not relax the boot/resync contract between `lsh-core` and `lsh-bridge`.

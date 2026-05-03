@@ -1,7 +1,7 @@
 # lsh-core AVR board matrix
 
-This example is intentionally small. It exists to prove that `lsh-core` is not a
-Controllino-only library and to keep representative Arduino AVR targets in CI.
+This example is intentionally small. It shows that `lsh-core` is not limited to
+Controllino boards and keeps representative Arduino AVR targets in CI.
 
 The tested matrix is:
 

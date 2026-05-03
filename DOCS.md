@@ -3,8 +3,8 @@
 This page is the navigation hub for `lsh-core`.
 
 Use it when you know the kind of answer you need, but not which document or example to
-open first. The README stays focused on the adoption story; this page keeps the detailed
-paths together.
+open first. The README stays focused on the first-use path; this page keeps the detailed
+references together.
 
 ## Start Here
 
@@ -17,7 +17,7 @@ paths together.
   [docs/feature-flags.md](./docs/feature-flags.md).
 - **I want hardware context**: read the
   [hardware integration section](./README.md#hardware-integration), then the stack-level
-  hardware overview.
+  hardware overview listed below.
 - **I want API details**: use the
   [Doxygen API reference](https://labodj.github.io/lsh-core/).
 - **I want the whole LSH stack first**: start from
@@ -37,9 +37,9 @@ paths together.
 For a first working controller, keep the path narrow:
 
 1. Build [examples/multi-device-project](./examples/multi-device-project).
-2. Copy that project shape into your own PlatformIO project.
+2. Reuse that project structure in your own PlatformIO project.
 3. Edit `lsh_devices.toml`; do not edit generated headers by hand.
-4. Keep the public preset, topic assumptions and codec close to the example.
+4. Keep the preset, serial settings and codec close to the example.
 5. Add network-click behavior only after local buttons, relays and state publishing are
    healthy.
 

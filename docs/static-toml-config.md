@@ -4,7 +4,7 @@
 controllers, relays, buttons, indicators and click behavior in one declarative file; the
 generator validates it and emits optimized C++ for the selected firmware profile.
 
-Generated headers are implementation detail. Edit `lsh_devices.toml`, regenerate, and
+Generated headers are an implementation detail. Edit `lsh_devices.toml`, regenerate, and
 build. Commit `lsh_devices.lock.toml` with the TOML profile whenever IDs are
 auto-assigned, because it preserves the public wire IDs across future edits.
 
@@ -22,7 +22,7 @@ reference actuators by name, Controllino presets accept short pin names such as 
 The generated C++ is intentionally machine-oriented: it contains dense indexes,
 specialized switch/range lookups, static payload bytes, direct click action bodies and
 exact resource counts tailored to one device. This split keeps the configuration easy to
-read while still giving the AVR firmware compile-time topology.
+read while still giving AVR firmware a compile-time topology.
 
 ## Quick Start
 
@@ -52,7 +52,7 @@ python3 .pio/libdeps/kitchen_release/lsh-core/tools/generate_lsh_static_config.p
 ```
 
 The command also writes `.vscode/lsh_devices.schema.json`, a project-specific
-autocomplete schema that knows the actuator, group and scene names in your TOML.
+autocomplete schema that lists the actuator, group and scene names in your TOML.
 
 A compact hand-written profile looks like this:
 
@@ -96,7 +96,7 @@ build_src_filter = +<*> -<configs/>
 
 The hook validates the TOML, writes generated headers, adds the selected `LSH_BUILD_*`
 macro, appends the generated include path, and applies the merged semantic options,
-expert defines and raw build flags.
+advanced defines and raw build flags.
 
 For a local checkout or submodule, keep the same TOML but point the hook at that
 checkout instead, for example
@@ -143,8 +143,8 @@ renaming resources.
 
 ## Presets
 
-`preset` is the fastest adoption path. It selects safe defaults that can still be
-overridden later.
+`preset` is the recommended starting point. It selects conservative defaults that can
+still be overridden later.
 
 | Preset                          | Board defaults                                 | Codec   | Fast I/O |
 | ------------------------------- | ---------------------------------------------- | ------- | -------- |
@@ -155,7 +155,7 @@ overridden later.
 
 ## AVR Board Matrix
 
-Controllino is a supported board family, not a hard dependency. For non-Controllino
+Controllino is a supported board family, but it is not required. For non-Controllino
 hardware, use the generic presets and keep the first profile conservative:
 
 ```toml
@@ -183,8 +183,8 @@ The Controllino Maxi path is covered separately by `examples/multi-device-projec
 because that profile intentionally uses Controllino-specific headers, aliases and
 optional board helpers.
 
-Boards outside this matrix can still work when they provide the normal Arduino AVR API
-and enough flash/RAM, but treat them as best effort until they build and pass static
+Boards outside this matrix can still work when they provide the standard Arduino AVR API
+and enough flash/RAM, but treat them as unverified until they build and pass static
 analysis in your own CI.
 
 Controllino pin aliases expand as follows:
@@ -280,21 +280,21 @@ scanner templates for actions that do not define their own `after` / `time` valu
 
 Serial transport tuning.
 
-| Field                        | Meaning                                            |
-| ---------------------------- | -------------------------------------------------- |
-| `debug_baud`                 | Debug UART baud rate.                              |
-| `bridge_baud`                | Controller-to-bridge UART baud rate.               |
-| `timeout`                    | Compatibility serial timeout.                      |
-| `msgpack_frame_idle_timeout` | Timeout used to discard incomplete MsgPack frames. |
-| `max_rx_payloads_per_loop`   | Max complete bridge payloads dispatched per loop.  |
-| `max_rx_bytes_per_loop`      | Max raw UART bytes drained per loop.               |
-| `flush_after_send`           | Force serial flush after sends.                    |
-| `rx_buffer_size`             | Emits `-D SERIAL_RX_BUFFER_SIZE=<value>`.          |
-| `tx_buffer_size`             | Emits `-D SERIAL_TX_BUFFER_SIZE=<value>`.          |
+| Field                        | Meaning                                               |
+| ---------------------------- | ----------------------------------------------------- |
+| `debug_baud`                 | Debug UART baud rate.                                 |
+| `bridge_baud`                | Controller-to-bridge UART baud rate.                  |
+| `timeout`                    | Compatibility serial timeout.                         |
+| `msgpack_frame_idle_timeout` | Timeout used to discard incomplete MsgPack frames.    |
+| `max_rx_payloads_per_loop`   | Maximum complete bridge payloads dispatched per loop. |
+| `max_rx_bytes_per_loop`      | Maximum raw UART bytes drained per loop.              |
+| `flush_after_send`           | Force serial flush after sends.                       |
+| `rx_buffer_size`             | Emits `-D SERIAL_RX_BUFFER_SIZE=<value>`.             |
+| `tx_buffer_size`             | Emits `-D SERIAL_TX_BUFFER_SIZE=<value>`.             |
 
 ### `[advanced]`
 
-Expert-only escape hatch. Keep normal profiles on semantic fields.
+Advanced overrides. Most profiles should stay on semantic fields.
 
 ```toml
 [advanced]
@@ -323,19 +323,19 @@ Common device fields:
 | Field                     | Meaning                                                    |
 | ------------------------- | ---------------------------------------------------------- |
 | `name`                    | Runtime device name sent on the wire. Defaults to the key. |
-| `build_macro`             | Expert override for the generated `LSH_BUILD_*` macro.     |
+| `build_macro`             | Advanced override for the generated `LSH_BUILD_*` macro.   |
 | `hardware_include`        | Device-specific board header.                              |
 | `debug_serial`            | Device-specific debug serial object.                       |
 | `bridge_serial`           | Device-specific bridge serial object.                      |
-| `config_include`          | Expert generated constants header path.                    |
-| `static_config_include`   | Expert generated static profile header path.               |
+| `config_include`          | Advanced generated constants header path.                  |
+| `static_config_include`   | Advanced generated static profile header path.             |
 | `disable_rtc`             | Device override for Controllino RTC disable.               |
 | `disable_eth`             | Device override for Controllino Ethernet disable.          |
 | `controllino_pin_aliases` | Device override for pin alias expansion.                   |
 
 ## Actuators
 
-Actuators are named subtables:
+Actuators are named TOML tables:
 
 ```toml
 [devices.kitchen.actuators.ceiling]
@@ -362,8 +362,8 @@ IDs remain stable even when resources are reordered or inserted.
 `pulse` is for hardware that must receive a short ON pulse, such as a strike, bell or
 garage input. Any generated ON command, including serial commands from the bridge,
 starts or restarts the pulse countdown. OFF cancels a pending pulse and switches the
-output off. Use `auto_off` instead when the relay is a normal latched output that should
-stay ON but have a guard timer.
+output off. Use `auto_off` instead when the relay is a regular latched output that
+should stay ON but have a guard timer.
 
 `interlock` is resolved at generation time. The emitted setter turns listed actuators
 OFF before turning the selected actuator ON, and the same rule is used by local clicks,
@@ -371,7 +371,7 @@ scenes, packed bridge state and direct serial commands.
 
 ## Groups and Scenes
 
-Groups are local aliases for actuator lists. They are only TOML conveniences; the
+Groups are local aliases for actuator lists. They are configuration conveniences; the
 generated code receives the expanded actuator indexes directly.
 
 ```toml
@@ -416,13 +416,13 @@ long = { after = "900ms", action = "off", target = "ceiling" }
 super_long = { action = "all_off" }
 ```
 
-| Field        | Required   | Meaning                                |
-| ------------ | ---------- | -------------------------------------- |
-| `id`         | no         | Public wire ID. Omit to auto-assign.   |
-| `pin`        | yes        | Arduino pin expression or board alias. |
-| `short`      | normal use | Short-click behavior.                  |
-| `long`       | no         | Long-click behavior.                   |
-| `super_long` | no         | Super-long-click behavior.             |
+| Field        | Required  | Meaning                                |
+| ------------ | --------- | -------------------------------------- |
+| `id`         | no        | Public wire ID. Omit to auto-assign.   |
+| `pin`        | yes       | Arduino pin expression or board alias. |
+| `short`      | usual use | Short-click behavior.                  |
+| `long`       | no        | Long-click behavior.                   |
+| `super_long` | no        | Super-long-click behavior.             |
 
 Target shorthands:
 
@@ -479,7 +479,7 @@ network-click runtime for that device.
 
 ## Indicators
 
-Indicators are named subtables:
+Indicators are named TOML tables:
 
 ```toml
 [devices.kitchen.indicators.ceiling_led]
@@ -501,7 +501,7 @@ Use `when` instead of manually pairing target lists with a separate mode field.
 
 ## Generator Helpers
 
-The generator includes adoption helpers that do not change runtime behavior:
+The generator includes project helpers that do not change runtime behavior:
 
 - `--print-json-schema` prints the editor schema also committed as
   `docs/lsh_devices.schema.json`.

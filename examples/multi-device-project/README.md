@@ -1,7 +1,7 @@
 # lsh-core multi-device PlatformIO example
 
-This example is the quickest way to see how a real `lsh-core` consumer is laid out with
-the public schema v2 TOML configuration.
+This example is a practical way to see how a typical `lsh-core` consumer is laid out
+with the public schema v2 TOML configuration.
 
 The important files are:
 
@@ -14,7 +14,7 @@ The important files are:
 - `include/lsh_configs/*_config.hpp`: generated per-device compile-time options
 - `include/lsh_configs/*_static_config.hpp`: generated static topology and behavior
   implementation
-- `src/main.cpp`: normal Arduino entry point calling `lsh::core::setup()` and
+- `src/main.cpp`: standard Arduino entry point calling `lsh::core::setup()` and
   `lsh::core::loop()`
 
 Do not edit the generated headers by hand. Edit `lsh_devices.toml` and rebuild. When IDs
