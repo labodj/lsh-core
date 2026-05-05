@@ -1,6 +1,7 @@
 .pio/
 .pioenvs/
 .piolibdeps/
+node_modules/
 .build_cache/
 .static-analysis-temp/
 /lsh-core-*.tar.gz

@@ -1,0 +1,25 @@
+{
+  "name": "lsh-core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write README.md DOCS.md docs/mainpage.md docs/cookbook.md docs/static-toml-config.md docs/feature-flags.md examples/multi-device-project/README.md examples/avr-board-matrix/README.md examples/all-options-toml/README.md examples/cookbook/README.md .github/workflows/ci.yml .markdownlint-cli2.yaml .prettierrc.json package.json && uv run ruff format tools tests && npm run format:cpp",
+    "format:check": "prettier --check README.md DOCS.md docs/mainpage.md docs/cookbook.md docs/static-toml-config.md docs/feature-flags.md examples/multi-device-project/README.md examples/avr-board-matrix/README.md examples/all-options-toml/README.md examples/cookbook/README.md .github/workflows/ci.yml .markdownlint-cli2.yaml .prettierrc.json package.json",
+    "lint:md": "markdownlint-cli2 README.md DOCS.md docs/mainpage.md docs/cookbook.md docs/static-toml-config.md docs/feature-flags.md examples/multi-device-project/README.md examples/avr-board-matrix/README.md examples/all-options-toml/README.md examples/cookbook/README.md",
+    "lint:md:fix": "markdownlint-cli2 --fix README.md DOCS.md docs/mainpage.md docs/cookbook.md docs/static-toml-config.md docs/feature-flags.md examples/multi-device-project/README.md examples/avr-board-matrix/README.md examples/all-options-toml/README.md examples/cookbook/README.md",
+    "format:py:check": "uv run ruff format --check tools tests",
+    "format:cpp": "uv run python tools/check_cpp_format.py --write",
+    "format:cpp:check": "uv run python tools/check_cpp_format.py",
+    "lint:py": "uv run ruff check tools tests",
+    "lint:py:fix": "uv run ruff check --fix tools tests",
+    "typecheck": "uv run mypy && uv run pyrefly check",
+    "test:py": "uv run pytest",
+    "check:py": "npm run format:py:check && npm run lint:py && npm run typecheck && npm run test:py",
+    "check": "npm run format:check && npm run lint:md && npm run check:py && npm run format:cpp:check",
+    "fix": "npm run format && npm run lint:md:fix && npm run lint:py:fix"
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.8.3"
+  }
+}
