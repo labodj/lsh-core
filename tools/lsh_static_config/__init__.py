@@ -42,6 +42,11 @@ from .platformio import (
     resolve_device_key,
 )
 from .scaffold import ScaffoldOptions, render_scaffold, write_scaffold
+from .stack_export import (
+    build_stack_config,
+    render_stack_config_json,
+    render_stack_report,
+)
 
 __all__ = [
     "ActuatorConfig",
@@ -55,6 +60,7 @@ __all__ = [
     "ProjectConfig",
     "ScaffoldOptions",
     "StaticProfileData",
+    "build_stack_config",
     "default_vscode_schema_path",
     "define_needs_escaped_build_flag",
     "diagnose_project",
@@ -73,6 +79,8 @@ __all__ = [
     "render_diagnostics",
     "render_escaped_build_flag_define",
     "render_scaffold",
+    "render_stack_config_json",
+    "render_stack_report",
     "render_static_config",
     "render_user_config",
     "resolve_device_key",

@@ -415,6 +415,8 @@ def _timing_schema(duration: object, positive_duration: object) -> JsonObject:
             "long_click": positive_duration,
             "super_long_click": positive_duration,
             "network_click_timeout": positive_duration,
+            "network_click_ack_timeout": positive_duration,
+            "network_click_confirm_retry_timeout": positive_duration,
             "ping_interval": positive_duration,
             "connection_timeout": positive_duration,
             "bridge_boot_retry": positive_duration,

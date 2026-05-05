@@ -1002,7 +1002,31 @@
                   }
                 ]
               },
+              "network_click_ack_timeout": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
               "network_click_check_interval": {
+                "oneOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "network_click_confirm_retry_timeout": {
                 "oneOf": [
                   {
                     "minimum": 1,
@@ -1315,7 +1339,31 @@
             }
           ]
         },
+        "network_click_ack_timeout": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
         "network_click_check_interval": {
+          "oneOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "network_click_confirm_retry_timeout": {
           "oneOf": [
             {
               "minimum": 1,

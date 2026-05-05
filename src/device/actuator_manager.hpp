@@ -52,9 +52,8 @@ extern etl::array<Actuator *, CONFIG_MAX_ACTUATORS> actuators;
  */
 extern PackedActuatorStateBytes packedActuatorStates;
 
-[[nodiscard]] auto getId(uint8_t actuatorIndex) -> uint8_t;        // Returns the static actuator ID for one dense runtime index
-[[nodiscard]] auto getActuator(uint8_t actuatorId) -> Actuator *;  // Returns a single actuator, or nullptr if the ID is unknown
-[[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;        // Returns a single actuator index, or UINT8_MAX if the ID is unknown
+[[nodiscard]] auto getId(uint8_t actuatorIndex) -> uint8_t;  // Returns the static actuator ID for one dense runtime index
+[[nodiscard]] auto getIndex(uint8_t actuatorId) -> uint8_t;  // Returns a single actuator index, or UINT8_MAX if the ID is unknown
 [[nodiscard]] auto tryGetIndex(uint8_t actuatorId, uint8_t &actuatorIndex)
     -> bool;                                                    // Returns true and writes the actuator index when the ID exists
 [[nodiscard]] auto actuatorExists(uint8_t actuatorId) -> bool;  // Returns true if actuator exists

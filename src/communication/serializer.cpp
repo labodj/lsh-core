@@ -58,6 +58,23 @@ template <size_t PayloadLength> struct LiteralByteWriter<PayloadLength, PayloadL
     }
 };
 
+template <size_t Index, size_t PayloadLength> struct StaticPayloadByteWriter
+{
+    [[nodiscard]] static auto write(const etl::array<uint8_t, PayloadLength> &payload) -> bool
+    {
+        return writeSerialByte(payload[Index]) && StaticPayloadByteWriter<Index + 1U, PayloadLength>::write(payload);
+    }
+};
+
+template <size_t PayloadLength> struct StaticPayloadByteWriter<PayloadLength, PayloadLength>
+{
+    [[nodiscard]] static auto write(const etl::array<uint8_t, PayloadLength> &payload) -> bool
+    {
+        static_cast<void>(payload);
+        return true;
+    }
+};
+
 template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Size]) -> bool
 {
     static_assert(Size > 0U, "String literal must include a null terminator.");
@@ -77,6 +94,11 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     return true;
 }
 
+template <size_t PayloadLength> [[nodiscard]] auto writeStaticPayloadBytes(const etl::array<uint8_t, PayloadLength> &payload) -> bool
+{
+    return StaticPayloadByteWriter<0U, PayloadLength>::write(payload);
+}
+
 [[nodiscard]] auto finishSuccessfulPayload() -> bool
 {
     if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
@@ -94,11 +116,9 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     switch (payloadType)
     {
     case StaticType::BOOT:
-        return writeSerialByte(0xC0U) && writeSerialByte(0x81U) && writeSerialByte(0xA1U) && writeSerialByte(0x70U) &&
-               writeSerialByte(0x04U) && writeSerialByte(0xC0U);
+        return writeStaticPayloadBytes(constants::payloads::MSGPACK_SERIAL_BOOT_BYTES);
     case StaticType::PING_:
-        return writeSerialByte(0xC0U) && writeSerialByte(0x81U) && writeSerialByte(0xA1U) && writeSerialByte(0x70U) &&
-               writeSerialByte(0x05U) && writeSerialByte(0xC0U);
+        return writeStaticPayloadBytes(constants::payloads::MSGPACK_SERIAL_PING_BYTES);
     default:
         return false;
     }
@@ -106,9 +126,9 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     switch (payloadType)
     {
     case StaticType::BOOT:
-        return writeLiteral("{\"p\":4}\n");
+        return writeStaticPayloadBytes(constants::payloads::JSON_SERIAL_BOOT_BYTES);
     case StaticType::PING_:
-        return writeLiteral("{\"p\":5}\n");
+        return writeStaticPayloadBytes(constants::payloads::JSON_SERIAL_PING_BYTES);
     default:
         return false;
     }

@@ -49,6 +49,11 @@ TIMING_DEFINE_MAP = {
     "long_click": ("CONFIG_CLICKABLE_LONG_CLICK_TIME_MS", False),
     "super_long_click": ("CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS", False),
     "network_click_timeout": ("CONFIG_LCNB_TIMEOUT_MS", False),
+    "network_click_ack_timeout": ("CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS", False),
+    "network_click_confirm_retry_timeout": (
+        "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS",
+        False,
+    ),
     "ping_interval": ("CONFIG_PING_INTERVAL_MS", False),
     "connection_timeout": ("CONFIG_CONNECTION_TIMEOUT_MS", False),
     "bridge_boot_retry": ("CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS", False),

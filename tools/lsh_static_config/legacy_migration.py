@@ -35,6 +35,10 @@ DEFINE_TIMING = {
     "CONFIG_CLICKABLE_LONG_CLICK_TIME_MS": "long_click",
     "CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS": "super_long_click",
     "CONFIG_LCNB_TIMEOUT_MS": "network_click_timeout",
+    "CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS": "network_click_ack_timeout",
+    "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS": (
+        "network_click_confirm_retry_timeout"
+    ),
     "CONFIG_PING_INTERVAL_MS": "ping_interval",
     "CONFIG_CONNECTION_TIMEOUT_MS": "connection_timeout",
     "CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS": "bridge_boot_retry",

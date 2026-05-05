@@ -79,14 +79,16 @@ where the button scan path is performance-sensitive.
 
 ## Timing
 
-| Define                                      | Default | Meaning                                                     |
-| ------------------------------------------- | ------- | ----------------------------------------------------------- |
-| `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`          | `100U`  | Minimum interval between two switches of the same actuator. |
-| `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`         | `20U`   | Button debounce threshold.                                  |
-| `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`         | `1U`    | Minimum elapsed time between input scan passes.             |
-| `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`       | `400U`  | Default long-click threshold.                               |
-| `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS` | `1000U` | Default super-long-click threshold.                         |
-| `CONFIG_LCNB_TIMEOUT_MS`                    | `1000U` | Network-click ACK timeout before fallback is applied.       |
+| Define                                          | Default                  | Meaning                                                     |
+| ----------------------------------------------- | ------------------------ | ----------------------------------------------------------- |
+| `CONFIG_ACTUATOR_DEBOUNCE_TIME_MS`              | `100U`                   | Minimum interval between two switches of the same actuator. |
+| `CONFIG_CLICKABLE_DEBOUNCE_TIME_MS`             | `20U`                    | Button debounce threshold.                                  |
+| `CONFIG_CLICKABLE_SCAN_INTERVAL_MS`             | `1U`                     | Minimum elapsed time between input scan passes.             |
+| `CONFIG_CLICKABLE_LONG_CLICK_TIME_MS`           | `400U`                   | Default long-click threshold.                               |
+| `CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS`     | `1000U`                  | Default super-long-click threshold.                         |
+| `CONFIG_LCNB_TIMEOUT_MS`                        | `1000U`                  | Compatibility default for network-click timeout settings.   |
+| `CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS`           | `CONFIG_LCNB_TIMEOUT_MS` | ACK timeout before fallback is applied.                     |
+| `CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS` | `CONFIG_LCNB_TIMEOUT_MS` | Retry budget for `NETWORK_CLICK_CONFIRM` after ACK is seen. |
 
 `CONFIG_CLICKABLE_SCAN_INTERVAL_MS` is a scan policy setting, not a hard real-time
 guarantee. If the controller is busy, elapsed time is still passed through the button

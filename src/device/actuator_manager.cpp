@@ -75,28 +75,6 @@ auto getId(uint8_t actuatorIndex) -> uint8_t
 }
 
 /**
- * @brief Get a single actuator.
- *
- * @param actuatorId actuator UUID.
- * @return Actuator* A single actuator when the ID exists.
- * @return nullptr When the ID is unknown.
- */
-auto getActuator(uint8_t actuatorId) -> Actuator *
-{
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    uint8_t actuatorIndex = UINT8_MAX;
-    if (!tryGetIndex(actuatorId, actuatorIndex))
-    {
-        return nullptr;
-    }
-    return actuators[actuatorIndex];
-#else
-    static_cast<void>(actuatorId);
-    return nullptr;
-#endif
-}
-
-/**
  * @brief Get a single actuator index (in device vector of actuators).
  *
  * @param actuatorId actuator UUID.

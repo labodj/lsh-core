@@ -110,6 +110,8 @@ python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --check
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --list-devices
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --device kitchen
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-platformio-defines kitchen
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-stack-config
+python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-stack-report
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --doctor
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --format-config
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --check-format
@@ -120,6 +122,35 @@ python3 tools/generate_lsh_static_config.py --init-config path/to/lsh_devices.to
 ```
 
 Python 3.11+ is required by the project tooling.
+
+## Stack Export
+
+`--print-stack-config` emits a single JSON document derived from the same normalized
+TOML model used for firmware generation. It is intended to remove drift between the
+controller profile, one `lsh-bridge` build per controller, the coordinator config, and
+the Node-RED wrapper.
+
+The export includes:
+
+- per-device `lsh-bridge` PlatformIO build flags for capacities, topic names, selected
+  serial codec, derived reference MQTT codec, mirrored serial timing and LSH QoS policy;
+- a controller contract with stable button and actuator names mapped to runtime ids, so
+  stack-level tools can accept readable names instead of numeric ids;
+- a coordinator-ready `systemConfig` device list, runtime options and exact MQTT
+  subscription map;
+- a Node-RED-friendly `systemConfigJson` string for the `lsh-logic` editor;
+- unmapped network-click placeholders, because the core TOML knows which buttons use the
+  network path but cannot infer coordinator-side actor targets;
+- footprint facts such as packed state bytes, network-click slots, auto-off/pulse counts
+  and interlock edge counts.
+
+`--print-stack-report` renders the same facts as human-readable bring-up notes. Use it
+in CI logs or while tuning a profile before copying the generated build flags into the
+bridge PlatformIO environment.
+
+Deployment-level choices such as MQTT JSON vs MsgPack, Node-RED context exports and
+network-click actor targets belong in the public `labo-smart-home` stack composer, not
+in `lsh_devices.toml`. This file stays focused on the controller firmware profile.
 
 ## Editor Autocomplete
 
@@ -257,21 +288,23 @@ Semantic feature switches. These are preferred over raw `CONFIG_*` defines.
 
 Durations accept integers in milliseconds or strings ending in `ms`, `s`, `m` or `h`.
 
-| Field                          | Meaning                                                       |
-| ------------------------------ | ------------------------------------------------------------- |
-| `actuator_debounce`            | Minimum interval between actuator switches. `0ms` is allowed. |
-| `button_debounce`              | Button debounce threshold.                                    |
-| `scan_interval`                | Minimum elapsed time between input scan passes.               |
-| `long_click`                   | Default long-click threshold.                                 |
-| `super_long_click`             | Default super-long-click threshold.                           |
-| `network_click_timeout`        | Network-click ACK timeout.                                    |
-| `ping_interval`                | Bridge ping interval.                                         |
-| `connection_timeout`           | Bridge liveness timeout.                                      |
-| `bridge_boot_retry`            | BOOT retry interval.                                          |
-| `bridge_state_timeout`         | Timeout while waiting for bridge state request.               |
-| `post_receive_delay`           | Quiet window after bridge-side state changes.                 |
-| `network_click_check_interval` | Pending network-click polling interval.                       |
-| `auto_off_check_interval`      | Auto-off scan interval.                                       |
+| Field                                 | Meaning                                                       |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `actuator_debounce`                   | Minimum interval between actuator switches. `0ms` is allowed. |
+| `button_debounce`                     | Button debounce threshold.                                    |
+| `scan_interval`                       | Minimum elapsed time between input scan passes.               |
+| `long_click`                          | Default long-click threshold.                                 |
+| `super_long_click`                    | Default super-long-click threshold.                           |
+| `network_click_timeout`               | Compatibility default for network-click timeouts.             |
+| `network_click_ack_timeout`           | ACK timeout before local fallback is applied.                 |
+| `network_click_confirm_retry_timeout` | Retry budget for `NETWORK_CLICK_CONFIRM` after ACK.           |
+| `ping_interval`                       | Bridge ping interval.                                         |
+| `connection_timeout`                  | Bridge liveness timeout.                                      |
+| `bridge_boot_retry`                   | BOOT retry interval.                                          |
+| `bridge_state_timeout`                | Timeout while waiting for bridge state request.               |
+| `post_receive_delay`                  | Quiet window after bridge-side state changes.                 |
+| `network_click_check_interval`        | Pending network-click polling interval.                       |
+| `auto_off_check_interval`             | Auto-off scan interval.                                       |
 
 `long_click` and `super_long_click` are also propagated into generated static button
 scanner templates for actions that do not define their own `after` / `time` value.

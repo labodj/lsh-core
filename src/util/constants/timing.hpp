@@ -112,6 +112,28 @@ static_assert(CONFIG_LCNB_TIMEOUT_MS <= UINT16_MAX, "CONFIG_LCNB_TIMEOUT_MS must
 static constexpr const uint16_t LCNB_TIMEOUT_MS = CONFIG_LCNB_TIMEOUT_MS;  //!< Long clicked network clickable (button) timeout
 #endif  // CONFIG_LCNB_TIMEOUT_MS
 
+#ifndef CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS
+static constexpr const uint16_t NETWORK_CLICK_ACK_TIMEOUT_MS =
+    LCNB_TIMEOUT_MS;  //!< Timeout while waiting for a bridge ACK before local fallback.
+#else
+static_assert(CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS > 0, "CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS must be greater than zero.");
+static_assert(CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS <= UINT16_MAX, "CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS must fit in uint16_t.");
+static constexpr const uint16_t NETWORK_CLICK_ACK_TIMEOUT_MS =
+    CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS;  //!< Timeout while waiting for a bridge ACK before local fallback.
+#endif  // CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS
+
+#ifndef CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS
+static constexpr const uint16_t NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS =
+    LCNB_TIMEOUT_MS;  //!< Retry budget for NETWORK_CLICK_CONFIRM after ACK.
+#else
+static_assert(CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS > 0,
+              "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS must be greater than zero.");
+static_assert(CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS <= UINT16_MAX,
+              "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS must fit in uint16_t.");
+static constexpr const uint16_t NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS =
+    CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS;  //!< Retry budget for NETWORK_CLICK_CONFIRM after ACK.
+#endif  // CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS
+
 #ifdef CONFIG_LSH_BENCH
 #ifndef CONFIG_BENCH_ITERATIONS
 static constexpr const uint32_t BENCH_ITERATIONS = 1000000U;  //!< Default Benchmark loop count

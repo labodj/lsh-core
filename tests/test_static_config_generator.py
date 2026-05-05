@@ -170,6 +170,81 @@ def test_generates_sparse_static_profile_without_runtime_tables() -> None:
     )
 
 
+def test_stack_config_export_bridges_toml_to_runtime_consumers() -> None:
+    """The stack export carries bridge flags, coordinator config and footprint."""
+    clickables = """
+    [devices.panel.buttons.button]
+    id = 7
+    pin = "7"
+    short = "relay"
+    long = { network = true, fallback = "do_nothing" }
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            minimal_profile(
+                ProfileParts(
+                    device_fields="""
+                    [devices.panel.features]
+                    codec = "msgpack"
+
+                    [devices.panel.serial]
+                    bridge_baud = 115200
+                    """,
+                    clickables=clickables,
+                ),
+            ),
+        )
+        project = gen.parse_project(config_path)
+
+    stack = gen.build_stack_config(project, ["panel"])
+    bridge_flags = stack["bridge"]["devices"]["panel"]["platformioBuildFlags"]
+
+    assert stack["protocol"] == "msgpack"
+    assert "-DCONFIG_MAX_ACTUATORS=1U" in bridge_flags
+    assert "-DCONFIG_MAX_BUTTONS=1U" in bridge_flags
+    assert "-DCONFIG_ARDCOM_SERIAL_BAUD=115200U" in bridge_flags
+    assert "-DCONFIG_MSG_PACK_ARDUINO" in bridge_flags
+    assert "-DCONFIG_MSG_PACK_MQTT" in bridge_flags
+    assert "-DCONFIG_MQTT_QOS_EVENTS=2U" in bridge_flags
+    assert stack["coordinator"]["systemConfig"] == {"devices": [{"name": "Panel"}]}
+    assert stack["coordinator"]["options"]["subscriptionQos"] == {
+        "bridge": 2,
+        "conf": 2,
+        "events": 2,
+        "homieState": 1,
+        "state": 2,
+    }
+    assert stack["coordinator"]["subscriptions"]["LSH/Panel/events"] == {"qos": 2}
+    assert stack["controllers"]["panel"]["deviceName"] == "Panel"
+    assert stack["controllers"]["panel"]["actuators"] == [{"name": "relay", "id": 1}]
+    assert stack["controllers"]["panel"]["buttons"] == [{"name": "button", "id": 7}]
+    assert stack["coordinator"]["unmappedNetworkClicks"] == [
+        {
+            "device": "Panel",
+            "buttonId": 7,
+            "button": "button",
+            "clickType": "long",
+        },
+    ]
+    assert stack["footprint"]["panel"]["packedStateBytes"] == 1
+    assert stack["footprint"]["panel"]["networkClickSlots"] == 1
+
+
+def test_stack_report_is_human_readable() -> None:
+    """The stack report summarizes integration facts without parsing JSON."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(Path(tmpdir), minimal_profile())
+        project = gen.parse_project(config_path)
+
+    report = gen.render_stack_report(project, ["panel"])
+
+    assert "LSH stack export:" in report
+    assert "- panel (Panel): 1 actuators, 1 buttons, 0 indicators" in report
+    assert "bridge flags:" in report
+    assert "exact subscriptions: 5" in report
+
+
 def test_public_schema_v2_keeps_simple_profiles_readable() -> None:
     """Schema v2 exposes presets, named resources, pin aliases and action words."""
     explicit_wall_id = 9
@@ -193,6 +268,8 @@ def test_public_schema_v2_keeps_simple_profiles_readable() -> None:
     button_debounce = "8ms"
     long_click = "450ms"
     super_long_click = "1200ms"
+    network_click_ack_timeout = "700ms"
+    network_click_confirm_retry_timeout = "250ms"
 
     [serial]
     bridge_baud = 500000
@@ -251,6 +328,8 @@ def test_public_schema_v2_keeps_simple_profiles_readable() -> None:
     assert "CONFIG_USE_FAST_CLICKABLES" in defines
     assert "CONFIG_ACTUATOR_DEBOUNCE_TIME_MS=0" in defines
     assert "CONFIG_CLICKABLE_DEBOUNCE_TIME_MS=8" in defines
+    assert "CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS=700" in defines
+    assert "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS=250" in defines
     assert "CONFIG_COM_SERIAL_BAUD=500000" in defines
     assert "CONFIG_COM_SERIAL_FLUSH_AFTER_SEND=0" in defines
     assert "LSH_ENABLE_AGGRESSIVE_CONSTEXPR_CTORS" in defines

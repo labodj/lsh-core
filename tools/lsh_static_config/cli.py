@@ -16,6 +16,7 @@ from .parser import parse_project
 from .platformio import merged_defines, raw_build_flags, resolve_device_key
 from .presets import PRESETS
 from .scaffold import ScaffoldOptions, write_scaffold
+from .stack_export import render_stack_config_json, render_stack_report
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -123,6 +124,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--doctor",
         action="store_true",
         help="print non-fatal configuration advice and exit",
+    )
+    parser.add_argument(
+        "--print-stack-config",
+        action="store_true",
+        help="print bridge/coordinator/Node-RED stack config JSON and exit",
+    )
+    parser.add_argument(
+        "--print-stack-report",
+        action="store_true",
+        help="print a human-readable stack footprint and integration report",
     )
     parser.add_argument(
         "--format-config",
@@ -249,6 +260,12 @@ def _dispatch_project_command(
         sys.stdout.write(render_diagnostics(diagnose_project(project)))
         return 0
     selected = _selected_devices(project, args.device)
+    if args.print_stack_config:
+        sys.stdout.write(render_stack_config_json(project, selected))
+        return 0
+    if args.print_stack_report:
+        sys.stdout.write(render_stack_report(project, selected))
+        return 0
     return generate(project, selected, check=args.check)
 
 
