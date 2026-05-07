@@ -75,7 +75,7 @@ Install from the PlatformIO Registry:
 platform = atmelavr
 framework = arduino
 board = controllino_maxi
-lib_deps = labodj/lsh-core @ ^3.0.11
+lib_deps = labodj/lsh-core @ ^3.1.0
 build_unflags = -std=gnu++11 -std=c++11
 build_flags =
     -I include
@@ -97,6 +97,24 @@ the matching static profile.
 For a complete layout, reuse the structure of
 [examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project)
 instead of starting from an empty project.
+
+If you are building the full LSH stack, the easier path is to let the `labo-smart-home`
+stack composer generate the controller PlatformIO environments for you. Add the
+generated `platformio-core.ini` with PlatformIO `extra_configs`, then build the
+generated environment for the target controller:
+
+```ini
+[platformio]
+extra_configs = generated/platformio-core.ini
+```
+
+```bash
+platformio run -e core_kitchen
+```
+
+In the one-project workflow, `lsh_devices.toml` stays in your installation project and
+`lsh-core` stays a normal PlatformIO dependency. The generated environments avoid
+hand-maintained per-device blocks.
 
 ## Configuration Model
 
@@ -252,5 +270,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers can pin the Registry package:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^3.0.11
+lib_deps = labodj/lsh-core @ ^3.1.0
 ```
