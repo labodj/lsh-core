@@ -235,7 +235,7 @@ void loop()
     {
         static uint16_t networkClickCheckAge_ms = 0U;  //!< Saturated age since the last network-click timeout sweep.
         networkClickCheckAge_ms = timeUtils::addElapsedTimeSaturated(networkClickCheckAge_ms, loopElapsed_ms);
-        if (networkClickCheckAge_ms > NETWORK_CLICK_CHECK_INTERVAL_MS)  // Check network click timers every N ms
+        if (networkClickCheckAge_ms >= NETWORK_CLICK_CHECK_INTERVAL_MS)  // Check network click timers every N ms
         {
             networkClickCheckAge_ms = 0U;
             noteActuatorStateChanged(NetworkClicks::checkAllNetworkClicksTimers(false));
@@ -248,7 +248,7 @@ void loop()
 #if LSH_STATIC_CONFIG_AUTO_OFF_ACTUATORS > 0
     static uint16_t autoOffCheckAge_ms = 0U;  //!< Saturated age since the last generated auto-off timer sweep.
     autoOffCheckAge_ms = timeUtils::addElapsedTimeSaturated(autoOffCheckAge_ms, loopElapsed_ms);
-    if (autoOffCheckAge_ms > ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS)  // Check every second
+    if (autoOffCheckAge_ms >= ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS)  // Check every second
     {
         autoOffCheckAge_ms = 0U;
         noteActuatorStateChanged(lsh::core::static_config::checkAutoOffTimers(now));
@@ -279,7 +279,7 @@ void loop()
     // that protects the link from immediate reply collisions after an inbound frame.
     if (mustTransmitStateToBridge)
     {
-        if (BridgeSerial::receiveIdleAge_ms > DELAY_AFTER_RECEIVE_MS)
+        if (BridgeSerial::receiveIdleAge_ms >= DELAY_AFTER_RECEIVE_MS)
         {
             if (Serializer::serializeActuatorsState())
             {

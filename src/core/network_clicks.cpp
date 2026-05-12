@@ -228,7 +228,7 @@ template <uint8_t SlotIndex> auto checkAllNetworkClickTimerSlots(bool failover) 
 
         if (isNetworkClickAcked(entry))
         {
-            if (entry.age_ms > NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS)
+            if (entry.age_ms >= NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS)
             {
                 DPL("Dropping acknowledged network click after confirm retry timeout.");
                 eraseActiveNetworkClickAt(SlotIndex);
@@ -238,7 +238,7 @@ template <uint8_t SlotIndex> auto checkAllNetworkClickTimerSlots(bool failover) 
                 eraseActiveNetworkClickAt(SlotIndex);
             }
         }
-        else if (failover || entry.age_ms > NETWORK_CLICK_ACK_TIMEOUT_MS)
+        else if (failover || entry.age_ms >= NETWORK_CLICK_ACK_TIMEOUT_MS)
         {
             DPL(FPSTR(dStr::EXPIRED), FPSTR(dStr::SPACE), FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), FPSTR(dStr::INDEX),
                 FPSTR(dStr::COLON_SPACE), clickableIndex);
@@ -401,7 +401,7 @@ auto isNetworkClickExpired(uint8_t clickableIndex, constants::ClickType clickTyp
     }
 
     advanceActiveTimersTo(timeKeeper::getTime());
-    if (entry->age_ms > NETWORK_CLICK_ACK_TIMEOUT_MS)  // It's expired
+    if (entry->age_ms >= NETWORK_CLICK_ACK_TIMEOUT_MS)  // It's expired
     {
         eraseNetworkClick(clickableIndex, clickType);
         return true;
@@ -438,7 +438,7 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
     advanceActiveTimersTo(timeKeeper::getTime());
     if (isNetworkClickAcked(*entry))
     {
-        if (entry->age_ms > NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS)
+        if (entry->age_ms >= NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS)
         {
             eraseNetworkClick(clickableIndex, clickType);
             return false;
@@ -451,7 +451,7 @@ auto checkNetworkClickTimer(uint8_t clickableIndex, constants::ClickType clickTy
         return false;
     }
 
-    if (failover || entry->age_ms > NETWORK_CLICK_ACK_TIMEOUT_MS)  // expired
+    if (failover || entry->age_ms >= NETWORK_CLICK_ACK_TIMEOUT_MS)  // expired
     {
         localFallbackPerformed |= lsh::core::static_config::runNetworkClickFallback(clickableIndex, clickType);
         eraseNetworkClick(clickableIndex, clickType);
