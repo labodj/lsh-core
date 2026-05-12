@@ -26,6 +26,8 @@ pin = "7"
 short = "relay"
 """
 
+CONFIG_ERROR_STATUS = 2
+
 
 @dataclass(frozen=True)
 class ProfileParts:
@@ -91,6 +93,28 @@ def assert_config_error_contains(toml_text: str, expected: str) -> None:
         with pytest.raises(gen.ConfigError) as raised:
             gen.parse_project(config_path)
     assert expected in str(raised.value)
+
+
+def test_cli_rejects_duplicate_devices_after_selector_resolution(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Different selectors must not generate the same normalized device twice."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(Path(tmpdir), minimal_profile())
+
+        status = gen.main(
+            [
+                str(config_path),
+                "--device",
+                "panel",
+                "--device",
+                "Panel",
+                "--print-stack-config",
+            ],
+        )
+
+    assert status == CONFIG_ERROR_STATUS
+    assert "duplicates --device 'panel'" in capsys.readouterr().err
 
 
 def test_generates_sparse_static_profile_without_runtime_tables() -> None:
@@ -361,12 +385,10 @@ def test_groups_scenes_pulse_and_interlocks_are_static() -> None:
     [devices.panel.actuators.relay_a]
     id = 1
     pin = "6"
-    interlock = "relay_b"
 
     [devices.panel.actuators.relay_b]
     id = 2
     pin = "7"
-    interlock = "relay_a"
 
     [devices.panel.actuators.door_strike]
     id = 3
@@ -376,6 +398,9 @@ def test_groups_scenes_pulse_and_interlocks_are_static() -> None:
     extra_sections = """
     [devices.panel.groups.main_lights]
     targets = ["relay_a", "relay_b"]
+
+    [devices.panel.interlocks.relays]
+    actuators = ["relay_a", "relay_b"]
 
     [devices.panel.scenes.night]
     off = "main_lights"
@@ -435,6 +460,84 @@ def test_groups_scenes_pulse_and_interlocks_are_static() -> None:
     )
     assert "pulseRemaining_ms[0U] = 300U;" in static_header
     assert "actuator2_door_strikeActionSet(true, actionNow)" in static_header
+
+
+def test_direct_interlocks_must_be_explicitly_reciprocal() -> None:
+    """One-way interlocks are rejected unless the actuator marks them directed."""
+    assert_config_error_contains(
+        minimal_profile(
+            ProfileParts(
+                actuators="""
+                [devices.panel.actuators.relay_a]
+                id = 1
+                pin = "6"
+                interlock = "relay_b"
+
+                [devices.panel.actuators.relay_b]
+                id = 2
+                pin = "7"
+                """,
+            )
+        ),
+        "use [devices.panel.interlocks] for reciprocal groups or set "
+        "directed_interlock = true",
+    )
+
+
+def test_directed_interlock_allows_intentional_one_way_edges() -> None:
+    """Generated profiles keep an escape hatch for genuinely directed cutoffs."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            minimal_profile(
+                ProfileParts(
+                    actuators="""
+                    [devices.panel.actuators.relay_a]
+                    id = 1
+                    pin = "6"
+                    interlock = "relay_b"
+                    directed_interlock = true
+
+                    [devices.panel.actuators.relay_b]
+                    id = 2
+                    pin = "7"
+                    """,
+                    clickables="""
+                    [devices.panel.buttons.button]
+                    id = 1
+                    pin = "8"
+                    short = "relay_a"
+                    """,
+                )
+            ),
+        )
+        project = gen.parse_project(config_path)
+
+    device = project.devices["panel"]
+    assert device.actuators[0].interlock_targets == ["relay_b"]
+    assert device.actuators[0].directed_interlock is True
+
+
+def test_device_names_are_valid_mqtt_topic_segments() -> None:
+    """Generator rejects runtime names that would corrupt exported MQTT topics."""
+    for device_name in ("bad/name", "cucina_è"):
+        assert_config_error_contains(
+            f"""
+            schema_version = 2
+            preset = "arduino-generic/json"
+
+            [devices.panel]
+            name = "{device_name}"
+
+            [devices.panel.actuators.relay]
+            pin = "6"
+
+            [devices.panel.buttons.button]
+            pin = "7"
+            short = "relay"
+            """,
+            "must be a single ASCII MQTT topic segment",
+        )
 
 
 def test_include_operand_defines_are_escaped_for_platformio_build_flags() -> None:

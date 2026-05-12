@@ -107,17 +107,18 @@ protected = false
 [devices.maximal_panel.actuators.pump_a]
 id = 12
 pin = "R4"
-interlock = "pump_b"
 
 [devices.maximal_panel.actuators.pump_b]
 id = 13
 pin = "R5"
-interlock = "pump_a"
 
 [devices.maximal_panel.actuators.door_strike]
 id = 14
 pin = "R6"
 pulse = "300ms"
+
+[devices.maximal_panel.interlocks.pumps]
+actuators = ["pump_a", "pump_b"]
 
 [devices.maximal_panel.groups.living]
 targets = ["ceiling", "wall"]

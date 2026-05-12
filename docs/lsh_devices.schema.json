@@ -82,6 +82,9 @@
                 "default": {
                   "type": "boolean"
                 },
+                "directed_interlock": {
+                  "type": "boolean"
+                },
                 "id": {
                   "maximum": 255,
                   "minimum": 1,
@@ -789,8 +792,39 @@
             },
             "type": "object"
           },
+          "interlocks": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "actuators": {
+                  "oneOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "actuators"
+              ],
+              "type": "object"
+            },
+            "type": "object"
+          },
           "name": {
+            "maxLength": 255,
             "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
             "type": "string"
           },
           "scenes": {

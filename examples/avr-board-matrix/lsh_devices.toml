@@ -29,12 +29,10 @@ fast_io = true
 [devices.mega2560_fast.actuators.relay]
 id = 1
 pin = "4"
-interlock = "relay_b"
 
 [devices.mega2560_fast.actuators.relay_b]
 id = 2
 pin = "5"
-interlock = "relay"
 
 [devices.mega2560_fast.actuators.door_strike]
 id = 3
@@ -43,6 +41,9 @@ pulse = "300ms"
 
 [devices.mega2560_fast.groups.room]
 targets = ["relay", "relay_b"]
+
+[devices.mega2560_fast.interlocks.relays]
+actuators = ["relay", "relay_b"]
 
 [devices.mega2560_fast.scenes.entry]
 off = "room"

@@ -480,6 +480,9 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
             ),
             default_state=get_bool(table, "default_state", item_path, default=False),
             protected=get_bool(table, "protected", item_path, default=False),
+            directed_interlock=get_bool(
+                table, "directed_interlock", item_path, default=False
+            ),
         )
         if "auto_off" in table:
             actuator.auto_off_ms = parse_duration_ms(

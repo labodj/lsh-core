@@ -376,17 +376,18 @@ pin = "R0"
 auto_off = "30m"
 ```
 
-| Field         | Required | Meaning                                                               |
-| ------------- | -------- | --------------------------------------------------------------------- |
-| `id`          | no       | Public wire ID. Omit to auto-assign a deterministic ID.               |
-| `pin`         | yes      | Arduino pin expression or board alias.                                |
-| `default`     | no       | Start ON.                                                             |
-| `protected`   | no       | Exclude from global super-long OFF.                                   |
-| `auto_off`    | no       | Auto-off duration.                                                    |
-| `auto_off_ms` | no       | Auto-off duration in milliseconds.                                    |
-| `pulse`       | no       | Momentary output duration, for example `300ms`.                       |
-| `pulse_ms`    | no       | Momentary output duration in milliseconds.                            |
-| `interlock`   | no       | Actuator or list of actuators to switch OFF before this one turns ON. |
+| Field                | Required | Meaning                                                               |
+| -------------------- | -------- | --------------------------------------------------------------------- |
+| `id`                 | no       | Public wire ID. Omit to auto-assign a deterministic ID.               |
+| `pin`                | yes      | Arduino pin expression or board alias.                                |
+| `default`            | no       | Start ON.                                                             |
+| `protected`          | no       | Exclude from global super-long OFF.                                   |
+| `auto_off`           | no       | Auto-off duration.                                                    |
+| `auto_off_ms`        | no       | Auto-off duration in milliseconds.                                    |
+| `pulse`              | no       | Momentary output duration, for example `300ms`.                       |
+| `pulse_ms`           | no       | Momentary output duration in milliseconds.                            |
+| `interlock`          | no       | Actuator or list of actuators to switch OFF before this one turns ON. |
+| `directed_interlock` | no       | Allow an intentionally one-way `interlock` edge.                      |
 
 When `id` is omitted, the generator writes `lsh_devices.lock.toml` and reuses that
 locked value on future runs. Commit the lockfile with the TOML profile so public wire
@@ -398,9 +399,18 @@ starts or restarts the pulse countdown. OFF cancels a pending pulse and switches
 output off. Use `auto_off` instead when the relay is a regular latched output that
 should stay ON but have a guard timer.
 
-`interlock` is resolved at generation time. The emitted setter turns listed actuators
-OFF before turning the selected actuator ON, and the same rule is used by local clicks,
-scenes, packed bridge state and direct serial commands.
+`interlock` is resolved at generation time. Direct actuator-level declarations must be
+reciprocal unless `directed_interlock = true` is set, so accidental one-way motor
+interlocks fail before compilation. Prefer interlock groups for the common case:
+
+```toml
+[devices.kitchen.interlocks.blind]
+actuators = ["blind_up", "blind_down"]
+```
+
+The emitted setter turns listed peers OFF before turning the selected actuator ON, and
+the same rule is used by local clicks, scenes, packed bridge state and direct serial
+commands.
 
 ## Groups and Scenes
 
@@ -574,7 +584,9 @@ The generator fails before compilation when it finds:
 - disabled actions that still contain active options;
 - scenes that assign the same actuator to conflicting operations;
 - pulse actuators combined with `auto_off`;
-- interlock declarations that reference unknown actuators or themselves;
+- interlock declarations that reference unknown actuators, themselves or an unmarked
+  asymmetric peer;
+- runtime device names that are not valid ASCII MQTT topic segments;
 - enabled long clicks with no local target and no network action;
 - super-long selective actions that target protected actuators;
 - super-long thresholds that are not greater than long-click thresholds;

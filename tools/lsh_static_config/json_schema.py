@@ -246,6 +246,7 @@ def _project_device_schema(device: TomlTable) -> JsonObject:
         ),
         resource_names={
             "actuators": actuator_names,
+            "interlocks": _resource_names(device.get("interlocks"), tables_only=True),
             "groups": group_names,
             "scenes": scene_names,
             "buttons": _resource_names(device.get("buttons"), tables_only=True),
@@ -295,7 +296,12 @@ def _device_schema(
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "name": {"type": "string", "minLength": 1},
+            "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": r"^[A-Za-z0-9_-]+$",
+            },
             "build_macro": {"type": "string", "pattern": r"^[A-Za-z_][A-Za-z0-9_]*$"},
             "hardware_include": {"type": "string", "minLength": 1},
             "debug_serial": {"type": "string", "minLength": 1},
@@ -323,6 +329,10 @@ def _device_schema(
             "groups": _named_resource_map(
                 names.get("groups"),
                 _group_schema(actuator_value),
+            ),
+            "interlocks": _named_resource_map(
+                names.get("interlocks"),
+                _interlock_schema(actuator_value),
             ),
             "scenes": _named_resource_map(
                 names.get("scenes"),
@@ -488,6 +498,7 @@ def _actuator_schema(positive_duration: object, target_value: JsonObject) -> Jso
             "pulse": positive_duration,
             "pulse_ms": {"type": "integer", "minimum": 1, "maximum": 65535},
             "interlock": target_value,
+            "directed_interlock": {"type": "boolean"},
         },
     }
 
@@ -506,6 +517,18 @@ def _group_schema(target_value: JsonObject) -> JsonObject:
                 },
             },
         ]
+    }
+
+
+def _interlock_schema(target_value: JsonObject) -> JsonObject:
+    """Return the reciprocal interlock-group schema."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["actuators"],
+        "properties": {
+            "actuators": target_value,
+        },
     }
 
 

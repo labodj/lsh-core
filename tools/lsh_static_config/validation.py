@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, TypeVar
 
 from .constants import DEFAULT_LONG_CLICK_MS, DEFAULT_SUPER_LONG_CLICK_MS, UINT8_MAX
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 TConfig = TypeVar("TConfig")
 GENERATED_TOP_LEVEL_HEADER_COUNT = 2
+MQTT_DEVICE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def validate_unique(
@@ -118,6 +120,7 @@ def validate_action_steps(
 def _validate_actuator_options(device: DeviceConfig) -> None:
     """Validate advanced actuator features after all actuator names are known."""
     actuator_names = {actuator.name for actuator in device.actuators}
+    actuators_by_name = {actuator.name: actuator for actuator in device.actuators}
     for actuator in device.actuators:
         if actuator.pulse_ms is not None and actuator.auto_off_ms is not None:
             fail(
@@ -135,6 +138,22 @@ def _validate_actuator_options(device: DeviceConfig) -> None:
                 f"devices.{device.key}.actuators.{actuator.name}.interlock "
                 "cannot include the actuator itself."
             )
+        if actuator.directed_interlock and not actuator.interlock_targets:
+            fail(
+                f"devices.{device.key}.actuators.{actuator.name}.directed_interlock "
+                "requires at least one interlock target."
+            )
+        if actuator.directed_interlock:
+            continue
+        for target in actuator.interlock_targets:
+            target_actuator = actuators_by_name[target]
+            if actuator.name not in target_actuator.interlock_targets:
+                fail(
+                    f"devices.{device.key}.actuators.{actuator.name}.interlock "
+                    f"targets {target!r}, but {target!r} does not target "
+                    f"{actuator.name!r}; use [devices.{device.key}.interlocks] "
+                    "for reciprocal groups or set directed_interlock = true."
+                )
 
 
 def _validate_clickable_targets(device: DeviceConfig) -> None:
@@ -240,6 +259,7 @@ def validate_project(project: ProjectConfig) -> None:
         "generator.static_config_router_header"
     )
     for device in project.devices.values():
+        _validate_device_name(device)
         previous_macro = build_macros.get(device.build_macro)
         if previous_macro is not None:
             fail(
@@ -259,6 +279,19 @@ def validate_project(project: ProjectConfig) -> None:
                     f"{previous_owner}: {include_path}."
                 )
             generated_headers[include_path] = f"devices.{device.key}.{field_name}"
+
+
+def _validate_device_name(device: DeviceConfig) -> None:
+    """Validate runtime device names before they become MQTT topic segments."""
+    path = f"devices.{device.key}.name"
+    if MQTT_DEVICE_NAME_RE.fullmatch(device.device_name) is None:
+        fail(
+            f"{path} must be a single ASCII MQTT topic segment using only "
+            "letters, digits, '_' or '-'."
+        )
+    name_bytes = len(device.device_name.encode("utf-8"))
+    if name_bytes > UINT8_MAX:
+        fail(f"{path} must be at most {UINT8_MAX} UTF-8 bytes.")
 
 
 def _has_effective_short_action(clickable: ClickableConfig) -> bool:

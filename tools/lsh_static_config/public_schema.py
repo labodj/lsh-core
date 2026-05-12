@@ -94,6 +94,7 @@ SUPER_LONG_ACTION_MAP = {
     "all_off": "normal",
     "off": "selective",
 }
+MIN_INTERLOCK_GROUP_ACTUATORS = 2
 
 NETWORK_FALLBACK_ALIASES = {
     "none": "do_nothing",
@@ -604,6 +605,7 @@ def _normalize_device(
             "serial",
             "advanced",
             "actuators",
+            "interlocks",
             "groups",
             "scenes",
             "buttons",
@@ -658,12 +660,18 @@ def _normalize_device(
         groups=groups,
         actuator_names=actuator_names,
     )
+    interlocks = _normalize_interlocks(
+        table.get("interlocks"),
+        f"{path}.interlocks",
+        actuator_names=actuator_names,
+    )
     aliases = ActionAliasContext(groups=groups, scenes=scenes)
 
     device["actuators"] = _normalize_actuators(
         table.get("actuators"),
         f"{path}.actuators",
         pin_aliases=pin_aliases,
+        interlocks=interlocks,
     )
     device["clickables"] = _normalize_clickables(
         table.get("buttons"),
@@ -742,6 +750,7 @@ def _normalize_actuators(
     path: str,
     *,
     pin_aliases: bool,
+    interlocks: dict[str, list[str]],
 ) -> list[TomlTable]:
     """Normalize named actuator tables and assign omitted public IDs."""
     resources = _named_resource_tables(raw, path)
@@ -761,6 +770,7 @@ def _normalize_actuators(
                 "pulse",
                 "pulse_ms",
                 "interlock",
+                "directed_interlock",
             },
             item_path,
         )
@@ -777,11 +787,18 @@ def _normalize_actuators(
         for key in ("protected", "auto_off", "auto_off_ms", "pulse", "pulse_ms"):
             if key in table:
                 item[key] = table[key]
-        if "interlock" in table:
-            item["interlock"] = _target_list(
-                table["interlock"],
-                f"{item_path}.interlock",
-            )
+        targets = (
+            _target_list(table["interlock"], f"{item_path}.interlock")
+            if "interlock" in table
+            else []
+        )
+        for group_targets in interlocks.values():
+            if name in group_targets:
+                targets.extend(target for target in group_targets if target != name)
+        if targets:
+            item["interlock"] = _dedupe_preserving_order(targets)
+        if "directed_interlock" in table:
+            item["directed_interlock"] = table["directed_interlock"]
         normalized.append(item)
     return normalized
 
@@ -891,6 +908,18 @@ def _public_resource_names(raw: TomlValue | None, path: str) -> list[str]:
     return [name for name, _table in _named_resource_tables(raw, path)]
 
 
+def _dedupe_preserving_order(values: list[str]) -> list[str]:
+    """Return values without duplicates, keeping the first declaration order."""
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        deduped.append(value)
+        seen.add(value)
+    return deduped
+
+
 def _normalize_groups(
     raw: TomlValue | None,
     path: str,
@@ -916,6 +945,29 @@ def _normalize_groups(
         _validate_public_targets(targets, actuator_names, group_path)
         groups[group_name] = targets
     return groups
+
+
+def _normalize_interlocks(
+    raw: TomlValue | None,
+    path: str,
+    *,
+    actuator_names: set[str],
+) -> dict[str, list[str]]:
+    """Normalize reciprocal interlock groups into actuator peer lists."""
+    if raw is None:
+        return {}
+    table = _expect_table(raw, path)
+    interlocks: dict[str, list[str]] = {}
+    for group_name, raw_group in table.items():
+        group_path = f"{path}.{group_name}"
+        group_table = _expect_table(raw_group, group_path)
+        _reject_unknown_keys(group_table, {"actuators"}, group_path)
+        targets = _target_list(group_table.get("actuators"), f"{group_path}.actuators")
+        if len(targets) < MIN_INTERLOCK_GROUP_ACTUATORS:
+            fail(f"{group_path}.actuators must contain at least two actuators.")
+        _validate_public_targets(targets, actuator_names, f"{group_path}.actuators")
+        interlocks[group_name] = targets
+    return interlocks
 
 
 def _normalize_scenes(

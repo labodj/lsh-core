@@ -275,7 +275,10 @@ def _bridge_build_flags(
     bridge_defines = [
         DefineValue("CONFIG_MAX_ACTUATORS", _uint_literal(len(device.actuators))),
         DefineValue("CONFIG_MAX_BUTTONS", _uint_literal(len(device.clickables))),
-        DefineValue("CONFIG_MAX_NAME_LENGTH", _uint_literal(len(device.device_name))),
+        DefineValue(
+            "CONFIG_MAX_NAME_LENGTH",
+            _uint_literal(len(device.device_name.encode("utf-8"))),
+        ),
         DefineValue("CONFIG_MQTT_TOPIC_BASE", _quoted(LSH_BASE_PATH.rstrip("/"))),
         DefineValue("CONFIG_MQTT_TOPIC_INPUT", _quoted(TOPIC_SUFFIX_INPUT)),
         DefineValue("CONFIG_MQTT_TOPIC_STATE", _quoted(TOPIC_SUFFIX_STATE)),

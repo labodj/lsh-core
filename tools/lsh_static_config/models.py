@@ -55,6 +55,7 @@ class ActuatorConfig:
     auto_off_ms: int | None = None
     pulse_ms: int | None = None
     interlock_targets: list[str] = field(default_factory=list)
+    directed_interlock: bool = False
 
 
 @dataclass

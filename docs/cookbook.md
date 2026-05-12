@@ -163,11 +163,12 @@ path fails. If a button needs to keep acting locally when the network is down, c
 ```toml
 [devices.kitchen.actuators.blind_up]
 pin = "R4"
-interlock = "blind_down"
 
 [devices.kitchen.actuators.blind_down]
 pin = "R5"
-interlock = "blind_up"
+
+[devices.kitchen.interlocks.blind]
+actuators = ["blind_up", "blind_down"]
 ```
 
 When one interlocked actuator turns ON, the generated setter turns its peer OFF first.

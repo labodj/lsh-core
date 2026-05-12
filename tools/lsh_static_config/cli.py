@@ -289,4 +289,16 @@ def _selected_devices(
     """Resolve CLI device selectors."""
     if requested_devices is None:
         return list(project.devices)
-    return [resolve_device_key(project, device) for device in requested_devices]
+    selected: list[str] = []
+    seen: dict[str, int] = {}
+    for index, requested in enumerate(requested_devices):
+        key = resolve_device_key(project, requested)
+        previous_index = seen.get(key)
+        if previous_index is not None:
+            fail(
+                f"--device {requested!r} resolves to {key!r}, which duplicates "
+                f"--device {requested_devices[previous_index]!r}."
+            )
+        seen[key] = index
+        selected.append(key)
+    return selected
