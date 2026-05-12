@@ -9,12 +9,9 @@ from typing import TYPE_CHECKING
 from .constants import (
     MSGPACK_FIXARRAY_MAX_LENGTH,
     MSGPACK_FIXSTR_MAX_LENGTH,
-    MSGPACK_FRAME_END,
-    MSGPACK_FRAME_ESCAPE,
-    MSGPACK_FRAME_ESCAPED_END,
-    MSGPACK_FRAME_ESCAPED_ESCAPE,
     MSGPACK_POSITIVE_FIXINT_MAX,
     PROTOCOL_DEVICE_DETAILS,
+    TRANSPORT_BYTE_RE,
     UINT8_MAX,
     UINT16_MAX,
     UINT32_MAX,
@@ -46,6 +43,40 @@ def wire_protocol_major() -> int:
     if match is None:
         fail(f"Cannot find WIRE_PROTOCOL_MAJOR in {protocol_path}.")
     return int(match.group(1))
+
+
+def transport_byte_constants() -> dict[str, int]:
+    """Read generated serial transport bytes from the C++ transport contract."""
+    transport_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "communication"
+        / "constants"
+        / "transport.hpp"
+    )
+    try:
+        transport_text = transport_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        fail(f"Cannot read {transport_path}: {exc}")
+
+    constants = {
+        name: int(value, 0) for name, value in TRANSPORT_BYTE_RE.findall(transport_text)
+    }
+    expected = {
+        "MSGPACK_FRAME_END",
+        "MSGPACK_FRAME_ESCAPE",
+        "MSGPACK_FRAME_ESCAPED_END",
+        "MSGPACK_FRAME_ESCAPED_ESCAPE",
+    }
+    missing = sorted(expected - set(constants))
+    if missing:
+        missing_constants = ", ".join(missing)
+        message = (
+            f"Cannot find transport byte constants in {transport_path}: "
+            f"{missing_constants}."
+        )
+        fail(message)
+    return constants
 
 
 def details_document(device: DeviceConfig) -> dict[str, object]:
@@ -139,15 +170,20 @@ def encode_msgpack_details_payload(device: DeviceConfig) -> list[int]:
 
 def frame_msgpack_payload(payload: Sequence[int]) -> list[int]:
     """Wrap raw MsgPack bytes in the serial delimiter-and-escape transport."""
-    framed = [MSGPACK_FRAME_END]
+    transport = transport_byte_constants()
+    frame_end = transport["MSGPACK_FRAME_END"]
+    frame_escape = transport["MSGPACK_FRAME_ESCAPE"]
+    frame_escaped_end = transport["MSGPACK_FRAME_ESCAPED_END"]
+    frame_escaped_escape = transport["MSGPACK_FRAME_ESCAPED_ESCAPE"]
+    framed = [frame_end]
     for byte in payload:
-        if byte == MSGPACK_FRAME_END:
-            framed.extend([MSGPACK_FRAME_ESCAPE, MSGPACK_FRAME_ESCAPED_END])
-        elif byte == MSGPACK_FRAME_ESCAPE:
-            framed.extend([MSGPACK_FRAME_ESCAPE, MSGPACK_FRAME_ESCAPED_ESCAPE])
+        if byte == frame_end:
+            framed.extend([frame_escape, frame_escaped_end])
+        elif byte == frame_escape:
+            framed.extend([frame_escape, frame_escaped_escape])
         else:
             framed.append(byte)
-    framed.append(MSGPACK_FRAME_END)
+    framed.append(frame_end)
     return framed
 
 

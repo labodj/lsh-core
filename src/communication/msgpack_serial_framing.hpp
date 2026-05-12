@@ -23,13 +23,10 @@
 
 #include <stdint.h>
 
+#include "communication/constants/transport.hpp"
+
 namespace lsh::core::transport
 {
-constexpr uint8_t MSGPACK_FRAME_END = 0xC0U;             //!< Delimiter byte that separates adjacent framed MsgPack payloads.
-constexpr uint8_t MSGPACK_FRAME_ESCAPE = 0xDBU;          //!< Escape marker emitted before reserved payload bytes.
-constexpr uint8_t MSGPACK_FRAME_ESCAPED_END = 0xDCU;     //!< Escaped representation of `MSGPACK_FRAME_END`.
-constexpr uint8_t MSGPACK_FRAME_ESCAPED_ESCAPE = 0xDDU;  //!< Escaped representation of `MSGPACK_FRAME_ESCAPE`.
-
 /**
  * @brief Outcome of feeding one raw serial byte into the MsgPack frame receiver.
  */
@@ -50,6 +47,7 @@ private:
     const uint16_t frameCapacity;       //!< Maximum number of payload bytes accepted before the current frame is dropped.
     uint16_t frameLengthBytes = 0U;     //!< Number of deframed payload bytes currently stored in `frameBuffer`.
     uint32_t lastByteTimeMs = 0U;       //!< Real-time timestamp of the most recent byte that touched this receiver.
+    bool frameStarted = false;          //!< True after the opening END until reset or completion.
     bool escapePending = false;         //!< True after an escape marker until the next byte resolves it.
     bool discardUntilFrameEnd = false;  //!< True while draining a known-bad frame until the next delimiter.
 
