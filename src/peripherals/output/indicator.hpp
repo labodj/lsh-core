@@ -65,6 +65,27 @@ private:
 #endif
     bool actualState = false;  //!< Actual state of the indicator
 
+    /**
+     * @brief Write the physical output without touching the cached state.
+     *
+     * @param stateToWrite the state to write true=ON, false=OFF.
+     */
+    void writeState(bool stateToWrite)
+    {
+#ifdef CONFIG_USE_FAST_INDICATORS
+        if (!stateToWrite)
+        {
+            *this->pinPort &= ~this->pinMask;
+        }
+        else
+        {
+            *this->pinPort |= this->pinMask;
+        }
+#else
+        digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToWrite));
+#endif
+    }
+
 public:
 #ifndef CONFIG_USE_FAST_INDICATORS
     /**
@@ -119,18 +140,8 @@ public:
      */
     void setState(bool stateToSet)
     {
-#ifdef CONFIG_USE_FAST_INDICATORS
-        if (!stateToSet)
-        {
-            *this->pinPort &= ~this->pinMask;
-        }
-        else
-        {
-            *this->pinPort |= this->pinMask;
-        }
-#else
-        digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToSet));
-#endif
+        this->actualState = stateToSet;
+        this->writeState(stateToSet);
     }
     void applyComputedState(bool newState)
     {
@@ -141,7 +152,6 @@ public:
         {
             return;
         }
-        this->actualState = newState;
         this->setState(newState);
     }
     void setIndex(uint8_t indexToSet);  // Set the indicator index on Indicators namespace Array
