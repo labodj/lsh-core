@@ -23,6 +23,18 @@ If you are new to LSH as a whole, start with the
 [`labo-smart-home` documentation map](https://github.com/labodj/labo-smart-home/blob/main/DOCS.md)
 before diving into firmware details.
 
+For a first end-to-end installation, do not start by copying controller and bridge flags
+by hand. Create a generated stack project instead:
+
+```bash
+lsh-stack new my-lsh-installation
+cd my-lsh-installation
+lsh-stack setup
+```
+
+That path creates the consumer PlatformIO projects, runs the controller generator and
+emits the bridge/coordinator/Node-RED artifacts from one TOML source.
+
 ## What lsh-core Owns
 
 `lsh-core` is intentionally close to the physical panel:
