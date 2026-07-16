@@ -30,7 +30,7 @@
   "frameworks": "arduino",
   "platforms": "atmelavr",
   "dependencies": {
-    "etlcpp/Embedded Template Library": "20.47.1",
+    "etlcpp/Embedded Template Library": "20.48.1",
     "bblanchon/ArduinoJson": "^6.21.6"
   },
   "build": {
