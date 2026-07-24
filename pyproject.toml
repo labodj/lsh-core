@@ -26,6 +26,9 @@ ignore = [
   # Ruff formatter owns these choices; enabling the lint rules would fight it.
   "COM812",
   "ISC001",
+  "ISC004",
+  # Copyright headers are managed at the repository level.
+  "CPY001",
   # Pick the docstring style opposite to D203/D213.
   "D203",
   "D213",
