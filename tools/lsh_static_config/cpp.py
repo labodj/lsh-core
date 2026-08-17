@@ -314,55 +314,6 @@ def render_timer_function(
     return lines
 
 
-def render_enum_accessor(
-    function_name: str,
-    param_name: str,
-    values: Sequence[str],
-    enum_name: str,
-    default_value: str,
-) -> list[str]:
-    """Render a generated enum accessor with only non-default branches."""
-    lines = [
-        (
-            f"auto {function_name}(uint8_t {param_name}) noexcept "
-            f"-> constants::{enum_name}"
-        ),
-        "{",
-    ]
-    non_default: dict[str, list[int]] = {}
-    for index, value in enumerate(values):
-        if value != default_value:
-            non_default.setdefault(value, []).append(index)
-
-    if not non_default:
-        lines.extend(
-            [
-                f"    static_cast<void>({param_name});",
-                f"    return constants::{enum_name}::{default_value};",
-                "}",
-            ]
-        )
-        return lines
-
-    groups = sorted(non_default.items(), key=lambda item: min(item[1]))
-    for group_index, (value, indexes) in enumerate(groups):
-        condition = render_values_condition(param_name, indexes)
-        if group_index != 0:
-            lines.append("")
-        lines.extend(
-            [
-                f"    if ({condition})",
-                "    {",
-                f"        return constants::{enum_name}::{value};",
-                "    }",
-            ]
-        )
-    lines.append("")
-    lines.append(f"    return constants::{enum_name}::{default_value};")
-    lines.append("}")
-    return lines
-
-
 def append_section(lines: list[str], section: Sequence[str]) -> None:
     """Append a generated function section separated by one blank line."""
     if lines and lines[-1] != "":

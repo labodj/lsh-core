@@ -43,8 +43,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-          restore-keys: ${{ runner.os }}-uv-
+          key: ${{ runner.os }}-uv-3.14-${{ hashFiles('uv.lock') }}
+          restore-keys: ${{ runner.os }}-uv-3.14-
 
       - name: Install Node tooling
         run: npm ci
@@ -98,6 +98,37 @@ jobs:
           uv run python tools/generate_lsh_static_config.py "$matrix_tmp/lsh_devices.toml" --check
           uv run python tools/generate_lsh_static_config.py "$matrix_tmp/lsh_devices.toml" --doctor
 
+  python-minimum-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: python3 -m pip install --upgrade pip uv
+
+      - name: Cache uv
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-3.11-${{ hashFiles('uv.lock') }}
+          restore-keys: ${{ runner.os }}-uv-3.11-
+
+      - name: Install Python tooling
+        run: uv sync --locked --only-group dev
+
+      - name: Verify minimum Python runtime
+        run: |
+          uv run python -m compileall -q tools tests
+          uv run pytest
+
   build-public-example:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -147,7 +178,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: ["mega2560_fast_release", "uno_release", "nano_release"]
+        env:
+          [
+            "mega2560_fast_release",
+            "uno_release",
+            "nano_release",
+            "uno_transport_only_release",
+          ]
 
     steps:
       - name: Checkout repository
@@ -307,6 +344,7 @@ jobs:
     needs:
       [
         static-checks,
+        python-minimum-version,
         build-public-example,
         build-avr-board-matrix,
         package-registry-smoke,

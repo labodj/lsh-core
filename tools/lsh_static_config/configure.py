@@ -109,15 +109,6 @@ def _indicator_registration_lines(device: DeviceConfig) -> list[str]:
     return lines
 
 
-def _protected_actuator_lines(device: DeviceConfig) -> list[str]:
-    """Render actuator protection setup statements."""
-    return [
-        f"{actuator_object_name(index, actuator)}.setProtected(true);"
-        for index, actuator in enumerate(device.actuators)
-        if actuator.protected
-    ]
-
-
 def render_configure(device: DeviceConfig) -> list[str]:
     """Render Configurator::configure for the normalized device profile."""
     lines = ["void Configurator::configure()", "{", "    using namespace Debug;"]
@@ -129,7 +120,6 @@ def render_configure(device: DeviceConfig) -> list[str]:
     _append_configure_section(lines, _actuator_registration_lines(device))
     _append_configure_section(lines, _clickable_registration_lines(device))
     _append_configure_section(lines, _indicator_registration_lines(device))
-    _append_configure_section(lines, _protected_actuator_lines(device))
 
     lines.append("}")
     return lines

@@ -92,6 +92,32 @@ def _validate_unique_fields(device: DeviceConfig) -> None:
     )
 
 
+def _validate_unique_pins(device: DeviceConfig) -> None:
+    """Reject two generated peripherals that would reconfigure the same pin."""
+    owners: dict[str, str] = {}
+    resources = (
+        (
+            "actuators",
+            ((actuator.name, actuator.pin) for actuator in device.actuators),
+        ),
+        (
+            "clickables",
+            ((clickable.name, clickable.pin) for clickable in device.clickables),
+        ),
+        (
+            "indicators",
+            ((indicator.name, indicator.pin) for indicator in device.indicators),
+        ),
+    )
+    for group_name, entries in resources:
+        for resource_name, pin in entries:
+            path = f"devices.{device.key}.{group_name}.{resource_name}.pin"
+            previous_owner = owners.get(pin)
+            if previous_owner is not None:
+                fail(f"{path} duplicates {previous_owner}: {pin!r}.")
+            owners[pin] = path
+
+
 def validate_target_set(targets: Sequence[str], allowed: set[str], path: str) -> None:
     """Validate target names and reject duplicate actuator links."""
     seen: set[str] = set()
@@ -122,6 +148,11 @@ def _validate_actuator_options(device: DeviceConfig) -> None:
     actuator_names = {actuator.name for actuator in device.actuators}
     actuators_by_name = {actuator.name: actuator for actuator in device.actuators}
     for actuator in device.actuators:
+        if actuator.pulse_ms is not None and actuator.default_state:
+            fail(
+                f"devices.{device.key}.actuators.{actuator.name} cannot combine "
+                "pulse with default=true; pulse outputs must boot OFF."
+            )
         if actuator.pulse_ms is not None and actuator.auto_off_ms is not None:
             fail(
                 f"devices.{device.key}.actuators.{actuator.name} cannot combine "
@@ -143,11 +174,17 @@ def _validate_actuator_options(device: DeviceConfig) -> None:
                 f"devices.{device.key}.actuators.{actuator.name}.directed_interlock "
                 "requires at least one interlock target."
             )
-        if actuator.directed_interlock:
-            continue
         for target in actuator.interlock_targets:
             target_actuator = actuators_by_name[target]
-            if actuator.name not in target_actuator.interlock_targets:
+            if actuator.default_state and target_actuator.default_state:
+                fail(
+                    f"devices.{device.key}.actuators.{actuator.name} and "
+                    f"{target!r} are interlocked and cannot both use default=true."
+                )
+            if (
+                not actuator.directed_interlock
+                and actuator.name not in target_actuator.interlock_targets
+            ):
                 fail(
                     f"devices.{device.key}.actuators.{actuator.name}.interlock "
                     f"targets {target!r}, but {target!r} does not target "
@@ -234,6 +271,7 @@ def validate_device(device: DeviceConfig) -> None:
     """Validate cross-resource references and static resource limits."""
     _validate_resource_counts(device)
     _validate_unique_fields(device)
+    _validate_unique_pins(device)
     _validate_actuator_options(device)
     _validate_clickable_targets(device)
     _validate_indicator_targets(device)

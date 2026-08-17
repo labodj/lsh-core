@@ -152,6 +152,39 @@ auto getActuatorIndexById(uint8_t actuatorId) noexcept -> uint8_t
     return actuatorId >= 1U && actuatorId <= 7U ? static_cast<uint8_t>(actuatorId - 1U) : UINT8_MAX;
 }
 
+auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t
+{
+    if (actuator == &actuator0_ceiling)
+    {
+        return 0U;
+    }
+    if (actuator == &actuator1_worktop)
+    {
+        return 1U;
+    }
+    if (actuator == &actuator2_ambient)
+    {
+        return 2U;
+    }
+    if (actuator == &actuator3_door_strike)
+    {
+        return 3U;
+    }
+    if (actuator == &actuator4_blind_up)
+    {
+        return 4U;
+    }
+    if (actuator == &actuator5_blind_down)
+    {
+        return 5U;
+    }
+    if (actuator == &actuator6_service)
+    {
+        return 6U;
+    }
+    return UINT8_MAX;
+}
+
 auto getClickableIndexById(uint8_t clickableId) noexcept -> uint8_t
 {
     return clickableId >= 1U && clickableId <= 5U ? static_cast<uint8_t>(clickableId - 1U) : UINT8_MAX;
@@ -201,6 +234,7 @@ auto writeDetailsPayload() noexcept -> bool
 #endif
 }
 
+static constexpr uint16_t PULSE_OFF_RETRY_DELAY_MS = 1U;
 static uint16_t pulseRemaining_ms[CONFIG_PULSE_STORAGE_CAPACITY] = {};
 static uint8_t activePulseActuators = 0U;
 
@@ -331,12 +365,13 @@ static uint8_t activePulseActuators = 0U;
     }
     else
     {
-        if (pulseRemaining_ms[0U] != 0U)
+        anyActuatorChangedState |= actuator3_door_strike.setStateStatic<3U>(false, actionNow);
+        // Keep the timer armed when debounce rejects the physical OFF transition.
+        if (pulseRemaining_ms[0U] != 0U && !actuator3_door_strike.getState())
         {
             pulseRemaining_ms[0U] = 0U;
             --activePulseActuators;
         }
-        anyActuatorChangedState |= actuator3_door_strike.setStateStatic<3U>(false, actionNow);
     }
     return anyActuatorChangedState;
 }
@@ -371,7 +406,12 @@ static uint8_t activePulseActuators = 0U;
     bool anyActuatorChangedState = false;
     if (state)
     {
+        // Every interlocked target must be physically OFF before this output turns ON.
         anyActuatorChangedState |= actuator5_blind_downActionSet(false, actionNow);
+        if (actuator5_blind_down.getState())
+        {
+            return anyActuatorChangedState;
+        }
     }
     anyActuatorChangedState |= actuator4_blind_up.setStateStatic<4U>(state, actionNow);
     return anyActuatorChangedState;
@@ -407,7 +447,12 @@ static uint8_t activePulseActuators = 0U;
     bool anyActuatorChangedState = false;
     if (state)
     {
+        // Every interlocked target must be physically OFF before this output turns ON.
         anyActuatorChangedState |= actuator4_blind_upActionSet(false, actionNow);
+        if (actuator4_blind_up.getState())
+        {
+            return anyActuatorChangedState;
+        }
     }
     anyActuatorChangedState |= actuator5_blind_down.setStateStatic<5U>(state, actionNow);
     return anyActuatorChangedState;
@@ -1046,8 +1091,8 @@ auto checkPulseTimers(uint16_t elapsed_ms) noexcept -> bool
     {
         if (pulseRemaining_ms[0U] <= elapsed_ms)
         {
-            pulseRemaining_ms[0U] = 0U;
-            --activePulseActuators;
+            // Retry on the next timed pass if debounce rejects OFF.
+            pulseRemaining_ms[0U] = PULSE_OFF_RETRY_DELAY_MS;
             anyActuatorChangedState |= actuator3_door_strikeActionSet(false);
         }
         else
@@ -1195,8 +1240,6 @@ void Configurator::configure()
     indicator2_cooking_led.setIndex(2U);
     Indicators::indicators[2U] = &indicator2_cooking_led;
 #endif
-
-    actuator6_service.setProtected(true);
 }
 
 #undef LSH_STATIC_CONFIG_READ_BYTE

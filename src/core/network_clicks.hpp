@@ -44,7 +44,7 @@ enum class RequestResult : uint8_t
 {
     Accepted,          //!< The request frame has been accepted by the UART and the request-timeout window is now active.
     AlreadyPending,    //!< The same clickable/clickType pair already has one in-flight transaction.
-    TransportRejected  //!< The UART rejected the outgoing request frame.
+    TransportRejected  //!< The bridge path is unavailable, full or unable to accept the outgoing frame.
 };
 
 // Network clicks

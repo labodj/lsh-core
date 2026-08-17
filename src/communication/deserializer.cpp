@@ -56,19 +56,6 @@ namespace
 }
 
 /**
- * @brief Validate one JSON scalar as a packed actuator-state byte.
- *
- * @param value JSON value to validate.
- * @param out Output byte written only when validation succeeds.
- * @return true if the value is an exact integer in the `[0, 255]` range.
- * @return false otherwise.
- */
-[[nodiscard]] auto tryGetPackedStateByte(const JsonVariantConst &value, uint8_t &out) -> bool
-{
-    return tryGetUint8Scalar(value, out);
-}
-
-/**
  * @brief Validate ignored tail bits in the final packed state byte.
  *
  * Static profiles know the exact actuator count, so the last byte can reject
@@ -97,31 +84,28 @@ namespace
     }
 }
 
+/**
+ * @brief Apply a packed state array after the dispatcher validated every byte.
+ *
+ * Keeping validation in a separate first pass makes the command transactional:
+ * a malformed later byte can never leave the earlier relays modified.
+ */
 template <uint8_t ByteIndex, uint8_t ByteCount> struct PackedStateApplier
 {
-    [[nodiscard]] static auto apply(const JsonArrayConst &statesArray, bool &anyStateChanged) -> bool
+    static void apply(const JsonArrayConst &statesArray, bool &anyStateChanged)
     {
-        uint8_t packedByte = 0U;
-        if (!tryGetPackedStateByte(statesArray[ByteIndex], packedByte))
-        {
-            return false;
-        }
-        if (!packedStateByteHasValidTail(ByteIndex, packedByte))
-        {
-            return false;
-        }
+        const uint8_t packedByte = statesArray[ByteIndex].as<uint8_t>();
         anyStateChanged |= lsh::core::static_config::applyPackedActuatorStateByte(ByteIndex, packedByte);
-        return PackedStateApplier<static_cast<uint8_t>(ByteIndex + 1U), ByteCount>::apply(statesArray, anyStateChanged);
+        PackedStateApplier<static_cast<uint8_t>(ByteIndex + 1U), ByteCount>::apply(statesArray, anyStateChanged);
     }
 };
 
 template <uint8_t ByteCount> struct PackedStateApplier<ByteCount, ByteCount>
 {
-    [[nodiscard]] static auto apply(const JsonArrayConst &statesArray, bool &anyStateChanged) -> bool
+    static void apply(const JsonArrayConst &statesArray, bool &anyStateChanged)
     {
         static_cast<void>(statesArray);
         static_cast<void>(anyStateChanged);
-        return true;
     }
 };
 
@@ -136,7 +120,7 @@ template <uint8_t ByteCount> struct PackedStateApplier<ByteCount, ByteCount>
 [[nodiscard]] auto tryGetBinaryState(const JsonVariantConst &value, bool &out) -> bool
 {
     uint8_t rawState = 0U;
-    if (!tryGetPackedStateByte(value, rawState) || rawState > 1U)
+    if (!tryGetUint8Scalar(value, rawState) || rawState > 1U)
     {
         return false;
     }
@@ -187,6 +171,11 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
     {
         return;
     }
+    result.payloadValid = true;
+    if (!BridgeSync::allowsMutatingCommands())
+    {
+        return;
+    }
     if (!NetworkClicks::matchesCorrelationId(clickableIndex, clickType, correlationId))
     {
         DPL("Ignoring stale or mismatched network click response for clickable ID ", clickableId, " with correlation ID ", correlationId,
@@ -200,10 +189,7 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
     }
     else if (cmd == Command::NETWORK_CLICK_ACK)
     {
-        if (!NetworkClicks::isNetworkClickExpired(clickableIndex, clickType))
-        {
-            result.networkClickHandled = NetworkClicks::confirm(clickableIndex, clickType);
-        }
+        result.networkClickHandled = NetworkClicks::confirm(clickableIndex, clickType);
     }
 }
 #endif
@@ -232,7 +218,7 @@ void processNetworkClickResponse(const JsonDocument &doc, lsh::core::protocol::C
  */
 auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 {
-    DispatchResult result;  // Default: { false, false }
+    DispatchResult result;
 
     uint8_t rawCommand = 0U;
     if (!tryGetUint8Scalar(doc[KEY_PAYLOAD], rawCommand))
@@ -245,10 +231,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
 #if CONFIG_USE_NETWORK_CLICKS
     if (cmd == Command::NETWORK_CLICK_ACK || cmd == Command::FAILOVER_CLICK)
     {
-        if (BridgeSync::allowsMutatingCommands())
-        {
-            processNetworkClickResponse(doc, cmd, result);
-        }
+        processNetworkClickResponse(doc, cmd, result);
         return result;
     }
 #else
@@ -261,33 +244,32 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
     switch (cmd)
     {
     case Command::SET_SINGLE_ACTUATOR:
+    {
+        bool state = false;
+        if (!tryGetBinaryState(doc[KEY_STATE], state))
+        {
+            break;  // Wrong or missing jsonState
+        }
+
+        uint8_t id = 0U;
+        if (!tryGetUint8Scalar(doc[KEY_ID], id))
+        {
+            break;
+        }
+        if (!Actuators::actuatorExists(id))
+        {
+            break;
+        }
+        result.payloadValid = true;
         if (!BridgeSync::allowsMutatingCommands())
         {
             break;
         }
-        // Get values from Json
-        {
-            bool state = false;
-            if (!tryGetBinaryState(doc[KEY_STATE], state))
-            {
-                break;  // Wrong or missing jsonState
-            }
-
-            uint8_t id = 0U;
-            if (!tryGetUint8Scalar(doc[KEY_ID], id))
-            {
-                break;
-            }
-            result.stateChanged = lsh::core::static_config::setActuatorStateById(id, state);
-            break;
-        }
+        result.stateChanged = lsh::core::static_config::setActuatorStateById(id, state);
+        break;
+    }
     case Command::SET_STATE:
     {
-        if (!BridgeSync::allowsMutatingCommands())
-        {
-            break;
-        }
-
         const JsonArrayConst statesArray = doc[KEY_STATE];
         if (statesArray.isNull())
         {
@@ -300,16 +282,30 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
             break;
         }
 
-        bool anyStateChanged = false;
-        if (!PackedStateApplier<0U, expectedBytes>::apply(statesArray, anyStateChanged))
+        // Validate the complete snapshot before touching a relay. Applying while
+        // parsing would make a malformed later byte leave a partial state behind.
+        for (uint8_t byteIndex = 0U; byteIndex < expectedBytes; ++byteIndex)
         {
-            return result;
+            uint8_t packedByte = 0U;
+            if (!tryGetUint8Scalar(statesArray[byteIndex], packedByte) || !packedStateByteHasValidTail(byteIndex, packedByte))
+            {
+                return result;
+            }
         }
+        result.payloadValid = true;
+        if (!BridgeSync::allowsMutatingCommands())
+        {
+            break;
+        }
+
+        bool anyStateChanged = false;
+        PackedStateApplier<0U, expectedBytes>::apply(statesArray, anyStateChanged);
         result.stateChanged = anyStateChanged;
         break;
     }
 
     case Command::FAILOVER:
+        result.payloadValid = true;
 #if CONFIG_USE_NETWORK_CLICKS
         if (!BridgeSync::allowsMutatingCommands())
         {
@@ -322,6 +318,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         break;
 
     case Command::REQUEST_STATE:
+        result.payloadValid = true;
         if (!BridgeSync::allowsStateRequests())
         {
             break;
@@ -334,6 +331,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         break;
 
     case Command::REQUEST_DETAILS:
+        result.payloadValid = true;
         if (Serializer::serializeDetails())
         {
             BridgeSync::onRequestDetailsServed();
@@ -342,6 +340,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         break;
 
     case Command::BOOT:
+        result.payloadValid = true;
         // BOOT is the only supported topology resync trigger. The controller topology is
         // static between reboots, so this always means "send fresh details and full state".
         // Re-open the bridge-sync gate first so this resync is reflected by the same
@@ -359,6 +358,7 @@ auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult
         break;
 
     case Command::PING_:
+        result.payloadValid = true;
         break;
 
     default:

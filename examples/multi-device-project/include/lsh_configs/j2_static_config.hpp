@@ -174,6 +174,43 @@ auto getActuatorIndexById(uint8_t actuatorId) noexcept -> uint8_t
     return actuatorId >= 7U && actuatorId <= 10U ? static_cast<uint8_t>(actuatorId - 3U) : UINT8_MAX;
 }
 
+auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t
+{
+    if (actuator == &actuator0_rel0)
+    {
+        return 0U;
+    }
+    if (actuator == &actuator1_rel1)
+    {
+        return 1U;
+    }
+    if (actuator == &actuator2_rel2)
+    {
+        return 2U;
+    }
+    if (actuator == &actuator3_rel3)
+    {
+        return 3U;
+    }
+    if (actuator == &actuator4_rel6)
+    {
+        return 4U;
+    }
+    if (actuator == &actuator5_rel7)
+    {
+        return 5U;
+    }
+    if (actuator == &actuator6_rel8)
+    {
+        return 6U;
+    }
+    if (actuator == &actuator7_rel9)
+    {
+        return 7U;
+    }
+    return UINT8_MAX;
+}
+
 auto getClickableIndexById(uint8_t clickableId) noexcept -> uint8_t
 {
     if (clickableId >= 1U && clickableId <= 4U)
@@ -1378,8 +1415,6 @@ void Configurator::configure()
     indicator2_light8.setIndex(2U);
     Indicators::indicators[2U] = &indicator2_light8;
 #endif
-
-    actuator4_rel6.setProtected(true);
 }
 
 #undef LSH_STATIC_CONFIG_READ_BYTE

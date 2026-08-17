@@ -73,14 +73,16 @@ private:
     void writeState(bool stateToWrite)
     {
 #ifdef CONFIG_USE_FAST_INDICATORS
-        if (!stateToWrite)
-        {
-            *this->pinPort &= ~this->pinMask;
-        }
-        else
-        {
-            *this->pinPort |= this->pinMask;
-        }
+        volatile uint8_t *const port = this->pinPort;
+        const uint8_t mask = this->pinMask;
+        // Expand the bool to 0x00/0xFF so the atomic bit assignment needs no branch.
+        const uint8_t stateMask = static_cast<uint8_t>(-static_cast<int8_t>(stateToWrite));
+        const uint8_t oldSREG = SREG;
+        cli();
+        uint8_t portState = *port;
+        portState ^= static_cast<uint8_t>((stateMask ^ portState) & mask);
+        *port = portState;
+        SREG = oldSREG;
 #else
         digitalWrite(this->pinNumber, static_cast<uint8_t>(stateToWrite));
 #endif
@@ -146,8 +148,7 @@ public:
     void applyComputedState(bool newState)
     {
         // Generated static profiles compute the indicator expression directly.
-        // Keep the state-change guard here so refreshIndicators() can avoid the
-        // old index-based Indicator::check() path in release builds.
+        // Keep the state-change guard at the shared output boundary.
         if (newState == this->actualState)
         {
             return;
@@ -155,7 +156,6 @@ public:
         this->setState(newState);
     }
     void setIndex(uint8_t indexToSet);  // Set the indicator index on Indicators namespace Array
-    void check();                       // Perform the actual check
 
     [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the indicator index on Indicators namespace Array
 };

@@ -22,7 +22,6 @@
 
 #include <stdint.h>
 
-#include "communication/constants/static_payloads.hpp"
 #include "communication/bridge_serial.hpp"
 #include "communication/bridge_sync.hpp"
 #include "communication/serializer.hpp"
@@ -48,9 +47,9 @@ using namespace Debug;
  * @details This entry point must be called exactly once from Arduino `setup()`.
  *          It initializes the optional debug serial, refreshes the cached loop
  *          time, starts the controller-to-bridge serial link, applies the
- *          user-defined topology, and then starts the bridge resynchronization
- *          handshake so the bridge must request fresh details and state before
- *          sending mutating commands.
+ *          user-defined topology, synchronizes indicators with actuator boot
+ *          states, and then starts the bridge resynchronization handshake so the
+ *          bridge must request fresh details and state before sending mutations.
  */
 void setup()
 {
@@ -66,6 +65,9 @@ void setup()
     BridgeSerial::init();
     Configurator::configure();      // Apply user configuration and register the real runtime topology.
     Configurator::finalizeSetup();  // Finalize setup for the actually registered devices only.
+#if LSH_STATIC_CONFIG_INDICATORS > 0
+    lsh::core::static_config::refreshIndicators();  // Reflect default actuator states before the first loop iteration.
+#endif
     // After any controller reboot or config change, the bridge must ask for
     // REQUEST_DETAILS and REQUEST_STATE before mutating commands are trusted.
     BridgeSync::begin();
@@ -193,6 +195,16 @@ void loop()
         BridgeSync::tick(loopElapsed_ms);
     }
 
+#if LSH_STATIC_CONFIG_PULSE_ACTUATORS > 0
+    // Advance existing pulses before local or bridge actions can arm one in this
+    // iteration. Otherwise loopElapsed_ms would include time from before a new
+    // pulse started and could shorten its physical ON duration.
+    if (loopElapsed_ms > 0U)
+    {
+        noteActuatorStateChanged(lsh::core::static_config::checkPulseTimers(loopElapsed_ms));
+    }
+#endif
+
     // Rescue one pending inbound payload before deciding whether the bridge is
     // alive for long/super-long click routing. Without this bounded pre-drain,
     // a valid frame already waiting in the UART could only refresh liveness on
@@ -255,18 +267,6 @@ void loop()
     }
 #endif
 
-#if LSH_STATIC_CONFIG_PULSE_ACTUATORS > 0
-    // Pulse actuators are momentary outputs: generated setters arm a compact
-    // uint16 countdown when an ON command is accepted, and this sweep turns the
-    // relay OFF when the pulse expires. The generated function first checks an
-    // 8-bit active counter, so keeping this in the main loop costs almost
-    // nothing while no pulse is pending.
-    if (loopElapsed_ms > 0U)
-    {
-        noteActuatorStateChanged(lsh::core::static_config::checkPulseTimers(loopElapsed_ms));
-    }
-#endif
-
 #if LSH_STATIC_CONFIG_INDICATORS > 0
     if (mustRefreshIndicators)
     {
@@ -287,7 +287,5 @@ void loop()
             }
         }
     }
-
-    // Serializer::serializeStaticPayload(StaticType::PING); // Try to send ping to ESP
 }
 }  // namespace lsh::core

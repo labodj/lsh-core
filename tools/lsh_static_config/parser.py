@@ -129,18 +129,29 @@ def validate_cpp_expr(value: str, path: str) -> str:
     return value
 
 
+def validate_explicit_include(
+    value: str, path: str, closing: str, error_message: str
+) -> str:
+    """Validate one already-delimited C++ include operand."""
+    if not value.endswith(closing) or not value[1:-1]:
+        fail(f"{path} {error_message}")
+    if re.fullmatch(r"[A-Za-z0-9_./+\-]+", value[1:-1]) is None:
+        fail(f"{path} contains unsupported include characters.")
+    return value
+
+
 def normalize_include(value: str, path: str) -> str:
     """Normalize bare hardware include names into angle-bracket includes."""
     if value.strip() != value:
         fail(f"{path} must not be padded with spaces.")
     if value.startswith("<"):
-        if not value.endswith(">") or value == "<>":
-            fail(f"{path} must use a balanced <header.h> include.")
-        return value
+        return validate_explicit_include(
+            value, path, ">", "must use a balanced <header.h> include."
+        )
     if value.startswith('"'):
-        if not value.endswith('"') or value == '""':
-            fail(f"{path} must use a balanced quoted include.")
-        return value
+        return validate_explicit_include(
+            value, path, '"', "must use a balanced quoted include."
+        )
     if value.endswith((">", '"')):
         fail(f"{path} has an include delimiter without a matching opener.")
     value = validate_cpp_expr(value, path)
@@ -213,6 +224,8 @@ def safe_header_include_path(value: str, path: str) -> str:
         )
     if posix_path.suffix not in (".h", ".hpp"):
         fail(f"{path} must point to a .h or .hpp header.")
+    for part in posix_path.parts:
+        safe_path_fragment(part, path)
     return str(posix_path)
 
 
@@ -339,9 +352,11 @@ def _apply_click_targets(action: ClickAction, table: TomlTable, path: str) -> No
 
 def _apply_click_timing(action: ClickAction, table: TomlTable, path: str) -> None:
     """Apply long/super-long threshold aliases to a click action."""
+    if "time" in table and "time_ms" in table:
+        fail(f"{path} cannot define both time and time_ms.")
     if "time" in table:
         action.time_ms = parse_duration_ms(table["time"], f"{path}.time", UINT16_MAX)
-    if "time_ms" in table:
+    elif "time_ms" in table:
         action.time_ms = parse_duration_ms(
             table["time_ms"], f"{path}.time_ms", UINT16_MAX
         )
@@ -470,6 +485,9 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
     for index, item in enumerate(expect_list(raw or [], path)):
         table = expect_table(item, f"{path}[{index}]")
         item_path = f"{path}[{index}]"
+        for first, second in (("auto_off", "auto_off_ms"), ("pulse", "pulse_ms")):
+            if first in table and second in table:
+                fail(f"{item_path} cannot define both {first} and {second}.")
         actuator = ActuatorConfig(
             name=validate_identifier(
                 get_string(table, "name", item_path), f"{item_path}.name"
@@ -488,7 +506,7 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
             actuator.auto_off_ms = parse_duration_ms(
                 table["auto_off"], f"{item_path}.auto_off"
             )
-        if "auto_off_ms" in table:
+        elif "auto_off_ms" in table:
             actuator.auto_off_ms = parse_duration_ms(
                 table["auto_off_ms"], f"{item_path}.auto_off_ms"
             )
@@ -496,7 +514,7 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
             actuator.pulse_ms = parse_duration_ms(
                 table["pulse"], f"{item_path}.pulse", UINT16_MAX
             )
-        if "pulse_ms" in table:
+        elif "pulse_ms" in table:
             actuator.pulse_ms = parse_duration_ms(
                 table["pulse_ms"], f"{item_path}.pulse_ms", UINT16_MAX
             )

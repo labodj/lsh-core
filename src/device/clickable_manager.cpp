@@ -94,28 +94,6 @@ auto getId(uint8_t clickableIndex) -> uint8_t
 }
 
 /**
- * @brief Get a single clickable.
- *
- * @param clickableId clickable UUID.
- * @return Clickable* A single clickable when the ID exists.
- * @return nullptr When the ID is unknown.
- */
-auto getClickable(uint8_t clickableId) -> Clickable *
-{
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    uint8_t clickableIndex = UINT8_MAX;
-    if (!tryGetIndex(clickableId, clickableIndex))
-    {
-        return nullptr;
-    }
-    return clickables[clickableIndex];
-#else
-    static_cast<void>(clickableId);
-    return nullptr;
-#endif
-}
-
-/**
  * @brief Get a single clickable index (in device vector of clickable).
  *
  * @param clickableId clickable UUID.

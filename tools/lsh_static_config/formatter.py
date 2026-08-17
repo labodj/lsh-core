@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import re
+import tomllib
 from typing import TYPE_CHECKING
 
 from .errors import fail
@@ -11,8 +14,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .models import TomlTable, TomlValue
-
-import tomllib
 
 CLICK_ACTION_KEYS = {"short", "long", "super_long"}
 BUTTON_ACTION_PATH_DEPTH = 4
@@ -106,9 +107,9 @@ def _render_table(lines: list[str], path: list[str], table: TomlTable) -> None:
 
     rendered_header = bool(scalar_items or not child_items)
     if rendered_header:
-        lines.append(f"[{'.'.join(path)}]")
+        lines.append(f"[{'.'.join(_toml_key(part) for part in path)}]")
     for key, value in scalar_items:
-        lines.append(f"{key} = {_render_value(value)}")
+        lines.append(f"{_toml_key(key)} = {_render_value(value)}")
     for index, (key, value) in enumerate(child_items):
         if rendered_header or index > 0:
             lines.append("")
@@ -202,14 +203,20 @@ def _render_value(value: TomlValue) -> str:
 
 def _render_inline_table(table: TomlTable) -> str:
     """Render one compact TOML inline table."""
-    items = [f"{key} = {_render_value(value)}" for key, value in table.items()]
+    items = [
+        f"{_toml_key(key)} = {_render_value(value)}" for key, value in table.items()
+    ]
     return "{ " + ", ".join(items) + " }"
+
+
+def _toml_key(value: str) -> str:
+    """Quote keys that are not valid TOML bare keys."""
+    return value if re.fullmatch(r"[A-Za-z0-9_-]+", value) else _quote(value)
 
 
 def _quote(value: str) -> str:
     """Return a TOML basic string."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def _is_table(value: TomlValue) -> bool:

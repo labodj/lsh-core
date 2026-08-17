@@ -8,6 +8,8 @@ from .cpp import u8, u16
 from .topology import actuator_name_at
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from .models import DeviceConfig
 
 INLINE_PREFIX = "[[nodiscard]] inline auto"
@@ -80,6 +82,27 @@ def render_set_state_call(
     return f"{function_name}Set({state})"
 
 
+def render_action_step_calls(
+    device: DeviceConfig,
+    step_sets: Sequence[tuple[str, list[int]]],
+    *,
+    cached_time: bool,
+) -> list[str]:
+    """Render deterministic scene/action-step calls in generated order."""
+    return [
+        render_toggle_call(device, actuator_index, cached_time=cached_time)
+        if operation == "TOGGLE"
+        else render_set_state_call(
+            device,
+            actuator_index,
+            "true" if operation == "ON" else "false",
+            cached_time=cached_time,
+        )
+        for operation, indexes in step_sets
+        for actuator_index in indexes
+    ]
+
+
 def render_action_helper_declarations(device: DeviceConfig) -> list[str]:
     """Render forward declarations for mutually interlocked actuator wrappers."""
     lines: list[str] = []
@@ -108,6 +131,7 @@ def render_pulse_storage(device: DeviceConfig) -> list[str]:
     if not any(actuator.pulse_ms is not None for actuator in device.actuators):
         return []
     return [
+        "static constexpr uint16_t PULSE_OFF_RETRY_DELAY_MS = 1U;",
         "static uint16_t pulseRemaining_ms[CONFIG_PULSE_STORAGE_CAPACITY] = {};",
         "static uint8_t activePulseActuators = 0U;",
     ]
@@ -129,11 +153,27 @@ def render_interlock_lines(device: DeviceConfig, actuator_index: int) -> list[st
     indexes = interlock_indexes(device, actuator_index)
     if not indexes:
         return []
-    lines = ["    if (state)", "    {"]
+    lines = [
+        "    if (state)",
+        "    {",
+        (
+            "        // Every interlocked target must be physically OFF before "
+            "this output turns ON."
+        ),
+    ]
     for interlock_index in indexes:
         function_name = actuator_action_function_name(device, interlock_index)
+        object_name = actuator_name_at(device, interlock_index)
         lines.append(
             f"        anyActuatorChangedState |= {function_name}Set(false, actionNow);"
+        )
+        lines.extend(
+            [
+                f"        if ({object_name}.getState())",
+                "        {",
+                "            return anyActuatorChangedState;",
+                "        }",
+            ]
         )
     lines.append("    }")
     return lines
@@ -180,15 +220,22 @@ def render_pulse_set_lines(
         "    }",
         "    else",
         "    {",
-        f"        if (pulseRemaining_ms[{u8(pulse_index)}] != 0U)",
-        "        {",
-        f"            pulseRemaining_ms[{u8(pulse_index)}] = 0U;",
-        "            --activePulseActuators;",
-        "        }",
         (
             f"        anyActuatorChangedState |= {object_name}"
             f".setStateStatic<{u8(actuator_index)}>(false, actionNow);"
         ),
+        (
+            "        // Keep the timer armed when debounce rejects the physical "
+            "OFF transition."
+        ),
+        (
+            f"        if (pulseRemaining_ms[{u8(pulse_index)}] != 0U && "
+            f"!{object_name}.getState())"
+        ),
+        "        {",
+        f"            pulseRemaining_ms[{u8(pulse_index)}] = 0U;",
+        "            --activePulseActuators;",
+        "        }",
         "    }",
     ]
 

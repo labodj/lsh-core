@@ -329,8 +329,11 @@ def render_check_pulse_timers(device: DeviceConfig) -> list[str]:
                 "    {",
                 f"        if (pulseRemaining_ms[{u8(pulse_index)}] <= elapsed_ms)",
                 "        {",
-                f"            pulseRemaining_ms[{u8(pulse_index)}] = 0U;",
-                "            --activePulseActuators;",
+                "            // Retry on the next timed pass if debounce rejects OFF.",
+                (
+                    f"            pulseRemaining_ms[{u8(pulse_index)}] = "
+                    "PULSE_OFF_RETRY_DELAY_MS;"
+                ),
                 f"            anyActuatorChangedState |= {off_call};",
                 "        }",
                 "        else",

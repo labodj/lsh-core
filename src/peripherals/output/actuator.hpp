@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 
+#include "config/static_config.hpp"
 #include "device/actuator_manager.hpp"
 #include "internal/cpp_features.hpp"
 #include "internal/pin_tag.hpp"
@@ -52,14 +53,6 @@
 class Actuator
 {
 private:
-    static constexpr uint8_t ACTUATOR_FLAG_ACTUAL_STATE = 0x01U;
-    static constexpr uint8_t ACTUATOR_FLAG_PROTECTED = 0x02U;
-
-    static constexpr auto initialFlags(bool normalState) noexcept -> uint8_t
-    {
-        return normalState ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
-    }
-
 #ifndef CONFIG_USE_FAST_ACTUATORS
     const uint8_t pinNumber;  //!< The pin to which the actuator is connected to, for conventional IO
 #else
@@ -73,7 +66,7 @@ private:
      * collapse here, so the initialization sequence is emitted only once.
      */
     explicit Actuator(lsh::core::avr::FastOutputPinBinding binding, bool normalState) noexcept :
-        pinMask(binding.mask), pinPort(binding.pinPort), flags(initialFlags(normalState))
+        pinMask(binding.mask), pinPort(binding.pinPort), actualState(normalState)
     {
         // Prime the output latch before enabling the pin as OUTPUT. That keeps
         // boot-time electrical transitions deterministic even if the previous
@@ -95,7 +88,7 @@ private:
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
     uint8_t index = UINT8_MAX;  //!< Debug/runtime-check registration index; stripped from release objects.
 #endif
-    uint8_t flags = 0U;  //!< Packed default/current/protection flags.
+    bool actualState = false;  //!< Cached physical state.
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     uint32_t lastTimeSwitched = 0U;  //!< Last time the actuator performed a switch
 #endif
@@ -109,48 +102,42 @@ private:
     void writePinState(bool state)
     {
 #ifdef CONFIG_USE_FAST_ACTUATORS
-        if (!state)
-        {
-            *this->pinPort &= ~this->pinMask;
-        }
-        else
-        {
-            *this->pinPort |= this->pinMask;
-        }
+        volatile uint8_t *const port = this->pinPort;
+        const uint8_t mask = this->pinMask;
+        // Expand the bool to 0x00/0xFF so the atomic bit assignment needs no branch.
+        const uint8_t stateMask = static_cast<uint8_t>(-static_cast<int8_t>(state));
+        const uint8_t oldSREG = SREG;
+        cli();
+        uint8_t portState = *port;
+        portState ^= static_cast<uint8_t>((stateMask ^ portState) & mask);
+        *port = portState;
+        SREG = oldSREG;
 #else
         digitalWrite(this->pinNumber, static_cast<uint8_t>(state));
 #endif
     }
 
     /**
-     * @brief Mirror the physical state into the packed object-local flag byte.
+     * @brief Mirror the physical state into the object-local cache.
      *
      * @details Keeping this separate from `writePinState()` makes the ordering
      *          explicit: the pin is switched first, then software state is made
      *          visible to later generated logic.
      */
-    void updateCachedStateFlag(bool state)
+    void updateCachedState(bool state)
     {
-        if (state)
-        {
-            this->flags |= ACTUATOR_FLAG_ACTUAL_STATE;
-        }
-        else
-        {
-            this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_ACTUAL_STATE);
-        }
+        this->actualState = state;
     }
 
     /**
      * @brief Return whether applying `state` would actually change the relay.
      *
-     * @details This is deliberately an 8-bit flag test so hot paths can reject
-     *          no-op writes before reading `millis()` or evaluating debounce.
+     * @details The cached-state comparison lets hot paths reject no-op writes
+     *          before reading `millis()` or evaluating debounce.
      */
     [[nodiscard]] auto wouldChangeState(bool state) const -> bool
     {
-        const uint8_t stateFlag = state ? ACTUATOR_FLAG_ACTUAL_STATE : 0U;
-        return (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != stateFlag;
+        return this->actualState != state;
     }
 
     /**
@@ -200,7 +187,7 @@ private:
         }
 
         this->writePinState(state);
-        this->updateCachedStateFlag(state);
+        this->updateCachedState(state);
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
         this->lastTimeSwitched = now_ms;
 #endif
@@ -215,17 +202,15 @@ private:
      * @brief Return the runtime-registration index only in builds that keep it.
      *
      * Release generated paths call `setStateStatic<index>()`, so storing the
-     * dense index in every actuator would waste one SRAM byte per relay. The
-     * public non-static setters remain usable for direct object tests, but they
-     * deliberately cannot update the generated packed-state shadow in a stripped
-     * release object because the index byte no longer exists.
+     * dense index in every actuator would waste one SRAM byte per relay. Public
+     * non-static setters use the generated cold object lookup instead.
      */
     [[nodiscard]] auto runtimeIndex() const -> uint8_t
     {
 #if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
         return this->index;
 #else
-        return UINT8_MAX;
+        return lsh::core::static_config::getActuatorIndex(this);
 #endif
     }
 
@@ -237,8 +222,7 @@ public:
      * @param pin pin number
      * @param normalState the default state of the actuator.
      */
-    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, bool normalState = false) noexcept :
-        pinNumber(pin), flags(initialFlags(normalState))
+    explicit LSH_OPTIONAL_CONSTEXPR_CTOR Actuator(uint8_t pin, bool normalState = false) noexcept : pinNumber(pin), actualState(normalState)
     {
         // Set the output latch first, then enable OUTPUT. This mirrors the fast
         // path and avoids a short wrong-level pulse during construction.
@@ -321,8 +305,6 @@ public:
     }
 
     void setIndex(uint8_t indexToSet);  // Set the actuator index on Actuators namespace Array
-    auto setProtected(bool hasProtection)
-        -> Actuator &;  // Set protection against global "turn-off" actions (e.g., a general super long click).
 
     // Getters
     [[nodiscard]] auto getIndex() const -> uint8_t;  // Get the actuator index on Actuators namespace Array
@@ -336,12 +318,12 @@ public:
 
     template <uint8_t ActuatorIndex> [[nodiscard]] auto toggleStateStatic() -> bool
     {
-        return this->setStateStatic<ActuatorIndex>((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U);
+        return this->setStateStatic<ActuatorIndex>(!this->actualState);
     }
 
     template <uint8_t ActuatorIndex> [[nodiscard]] auto toggleStateStatic(uint32_t now_ms) -> bool
     {
-        return this->setStateStatic<ActuatorIndex>((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U, now_ms);
+        return this->setStateStatic<ActuatorIndex>(!this->actualState, now_ms);
     }
 
     [[nodiscard]] auto checkAutoOffTimer(uint32_t now_ms, uint32_t autoOffTimer_ms)

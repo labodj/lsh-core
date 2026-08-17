@@ -383,6 +383,7 @@ template <uint8_t Pin> [[nodiscard]] inline auto modeRegisterForPin(::lsh::core:
  */
 template <uint8_t Pin> [[nodiscard]] inline auto makeFastInputPinBinding(::lsh::core::PinTag<Pin>) noexcept -> FastInputPinBinding
 {
+    static_assert(Pin < NUM_DIGITAL_PINS, "Clickable pin is outside the board's digital pin range.");
     // Materialize the constexpr descriptor into the same compact binding used
     // by the runtime path so peripherals keep one direct-register hot path.
     return FastInputPinBinding{readPinBitMask(::lsh::core::PinTag<Pin>{}), inputRegisterForPin(::lsh::core::PinTag<Pin>{}),
@@ -394,6 +395,7 @@ template <uint8_t Pin> [[nodiscard]] inline auto makeFastInputPinBinding(::lsh::
  */
 template <uint8_t Pin> [[nodiscard]] inline auto makeFastOutputPinBinding(::lsh::core::PinTag<Pin>) noexcept -> FastOutputPinBinding
 {
+    static_assert(Pin < NUM_DIGITAL_PINS, "Actuator or indicator pin is outside the board's digital pin range.");
     // The compile-time path resolves addresses here, but the peripheral still
     // stores only the minimal mask/register pair needed by the hot write path.
     return FastOutputPinBinding{readPinBitMask(::lsh::core::PinTag<Pin>{}), outputRegisterForPin(::lsh::core::PinTag<Pin>{}),

@@ -58,23 +58,6 @@ template <size_t PayloadLength> struct LiteralByteWriter<PayloadLength, PayloadL
     }
 };
 
-template <size_t Index, size_t PayloadLength> struct StaticPayloadByteWriter
-{
-    [[nodiscard]] static auto write(const etl::array<uint8_t, PayloadLength> &payload) -> bool
-    {
-        return writeSerialByte(payload[Index]) && StaticPayloadByteWriter<Index + 1U, PayloadLength>::write(payload);
-    }
-};
-
-template <size_t PayloadLength> struct StaticPayloadByteWriter<PayloadLength, PayloadLength>
-{
-    [[nodiscard]] static auto write(const etl::array<uint8_t, PayloadLength> &payload) -> bool
-    {
-        static_cast<void>(payload);
-        return true;
-    }
-};
-
 template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Size]) -> bool
 {
     static_assert(Size > 0U, "String literal must include a null terminator.");
@@ -94,11 +77,6 @@ template <size_t Size> [[nodiscard]] auto writeLiteral(const char (&literal)[Siz
     return true;
 }
 
-template <size_t PayloadLength> [[nodiscard]] auto writeStaticPayloadBytes(const etl::array<uint8_t, PayloadLength> &payload) -> bool
-{
-    return StaticPayloadByteWriter<0U, PayloadLength>::write(payload);
-}
-
 [[nodiscard]] auto finishSuccessfulPayload() -> bool
 {
     if constexpr (constants::bridgeSerial::COM_SERIAL_FLUSH_AFTER_SEND)
@@ -107,32 +85,6 @@ template <size_t PayloadLength> [[nodiscard]] auto writeStaticPayloadBytes(const
     }
     BridgeSerial::updateLastSentTime();
     return true;
-}
-
-[[nodiscard]] auto writeStaticPayload(constants::payloads::StaticType payloadType) -> bool
-{
-    using constants::payloads::StaticType;
-#ifdef CONFIG_MSG_PACK
-    switch (payloadType)
-    {
-    case StaticType::BOOT:
-        return writeStaticPayloadBytes(constants::payloads::MSGPACK_SERIAL_BOOT_BYTES);
-    case StaticType::PING_:
-        return writeStaticPayloadBytes(constants::payloads::MSGPACK_SERIAL_PING_BYTES);
-    default:
-        return false;
-    }
-#else
-    switch (payloadType)
-    {
-    case StaticType::BOOT:
-        return writeStaticPayloadBytes(constants::payloads::JSON_SERIAL_BOOT_BYTES);
-    case StaticType::PING_:
-        return writeStaticPayloadBytes(constants::payloads::JSON_SERIAL_PING_BYTES);
-    default:
-        return false;
-    }
-#endif
 }
 
 #ifdef CONFIG_MSG_PACK
@@ -225,7 +177,7 @@ template <uint8_t ByteCount> struct MsgPackPackedStateWriter<ByteCount, ByteCoun
 }
 #endif
 #else
-[[nodiscard]] auto writeUint8Decimal(uint8_t value) -> bool
+[[nodiscard, maybe_unused]] auto writeUint8Decimal(uint8_t value) -> bool
 {
     if (value >= 100U)
     {
@@ -287,6 +239,32 @@ template <uint8_t ByteCount> struct JsonPackedStateWriter<ByteCount, ByteCount>
 }
 #endif
 #endif
+
+[[nodiscard]] auto writeStaticPayload(constants::payloads::StaticType payloadType) -> bool
+{
+    // Reusing the codec writers avoids materializing the pre-serialized BOOT
+    // and PING arrays in AVR SRAM while keeping their wire format identical.
+    using constants::payloads::StaticType;
+    using lsh::core::protocol::Command;
+    uint8_t command = 0U;
+    switch (payloadType)
+    {
+    case StaticType::BOOT:
+        command = static_cast<uint8_t>(Command::BOOT);
+        break;
+    case StaticType::PING_:
+        command = static_cast<uint8_t>(Command::PING_);
+        break;
+    default:
+        return false;
+    }
+
+#ifdef CONFIG_MSG_PACK
+    return beginMsgPackFrame() && writeMsgPackFrameByte(0x81U) && writeMsgPackKey('p') && writeMsgPackUint(command) && endMsgPackFrame();
+#else
+    return writeLiteral("{\"p\":") && writeUint8Decimal(command) && writeLiteral("}\n");
+#endif
+}
 }  // namespace
 
 namespace Serializer
@@ -295,7 +273,7 @@ using namespace Debug;
 using lsh::core::protocol::Command;
 
 /**
- * @brief Send one compile-time pre-serialized static control payload.
+ * @brief Send one static control payload using the active serial codec.
  *
  * @param payloadType type of the payload.
  */

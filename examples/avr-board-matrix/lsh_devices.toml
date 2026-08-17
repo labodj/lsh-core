@@ -75,3 +75,6 @@ short = "relay"
 [devices.atmega328p_basic.indicators.led]
 pin = "13"
 when = "relay"
+
+[devices.transport_only]
+name = "transport-only"

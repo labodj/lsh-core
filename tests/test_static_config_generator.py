@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 import textwrap
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,6 +96,38 @@ def assert_config_error_contains(toml_text: str, expected: str) -> None:
     assert expected in str(raised.value)
 
 
+def test_formatter_preserves_escaped_control_characters() -> None:
+    """Formatted basic strings must remain valid TOML and preserve their value."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            'schema_version=2\nnote="line\\nnext\\ttab\\rreturn\\bback\\fform\\u007fdel"',
+        )
+
+        assert gen.format_config_file(config_path, check=False) is True
+        formatted = config_path.read_text(encoding="utf-8")
+
+    assert (
+        tomllib.loads(formatted)["note"] == "line\nnext\ttab\rreturn\bback\fform\x7fdel"
+    )
+
+
+def test_formatter_preserves_dotted_table_keys() -> None:
+    """A quoted dot remains part of one table key after formatting."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            'schema_version=2\n[devices."panel.one"]\nname="panel"',
+        )
+        before = tomllib.loads(config_path.read_text(encoding="utf-8"))
+
+        assert gen.format_config_file(config_path, check=False) is True
+        formatted = config_path.read_text(encoding="utf-8")
+
+    assert '[devices."panel.one"]' in formatted
+    assert tomllib.loads(formatted) == before
+
+
 def test_cli_rejects_duplicate_devices_after_selector_resolution(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -173,6 +206,7 @@ def test_generates_sparse_static_profile_without_runtime_tables() -> None:
     assert "#define LSH_STATIC_CONFIG_ACTIVE_NETWORK_CLICKS 1" in static_header
     assert "actuator0_relay_a.setIndex(0U);" in static_header
     assert "Actuators::actuators[0U] = &actuator0_relay_a;" in static_header
+    assert "setProtected" not in static_header
     assert "DETAILS_JSON_PAYLOAD" in static_header
     assert "DETAILS_MSGPACK_PAYLOAD" in static_header
     assert "button0_button_a.clickDetection<" in static_header
@@ -454,12 +488,30 @@ def test_groups_scenes_pulse_and_interlocks_are_static() -> None:
     )
     assert "actuator1_relay_bActionSet(false, actionNow);" in static_header
     assert "actuator0_relay_aActionSet(false, actionNow);" in static_header
+    assert "if (actuator1_relay_b.getState())" in static_header
+    assert "if (actuator0_relay_a.getState())" in static_header
+    assert "return anyActuatorChangedState;" in static_header
     assert (
         "static_assert(300U >= constants::timings::ACTUATOR_DEBOUNCE_TIME_MS"
         in static_header
     )
     assert "pulseRemaining_ms[0U] = 300U;" in static_header
+    assert "static constexpr uint16_t PULSE_OFF_RETRY_DELAY_MS = 1U;" in static_header
+    assert "pulseRemaining_ms[0U] = PULSE_OFF_RETRY_DELAY_MS;" in static_header
+    pulse_off_call = (
+        "anyActuatorChangedState |= "
+        "actuator2_door_strike.setStateStatic<2U>(false, actionNow);"
+    )
+    assert pulse_off_call in static_header
+    assert static_header.index(pulse_off_call) < static_header.index(
+        "if (pulseRemaining_ms[0U] != 0U && !actuator2_door_strike.getState())"
+    )
     assert "actuator2_door_strikeActionSet(true, actionNow)" in static_header
+    assert (
+        "auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t"
+        in static_header
+    )
+    assert "if (actuator == &actuator0_relay_a)" in static_header
 
 
 def test_direct_interlocks_must_be_explicitly_reciprocal() -> None:
@@ -475,7 +527,7 @@ def test_direct_interlocks_must_be_explicitly_reciprocal() -> None:
 
                 [devices.panel.actuators.relay_b]
                 id = 2
-                pin = "7"
+                pin = "8"
                 """,
             )
         ),
@@ -614,6 +666,36 @@ def test_lockfile_keeps_automatic_ids_stable() -> None:
         "devices.panel.actuators.extra.id",
         "devices.panel.buttons.button.id",
     ]
+
+
+def test_lockfile_quotes_dotted_device_keys() -> None:
+    """A dotted device key remains one TOML key across lockfile round trips."""
+    device_key = "panel.one"
+    quoted_key = json.dumps(device_key)
+    toml_text = f"""
+    schema_version = 2
+    preset = "arduino-generic/json"
+
+    [devices.{quoted_key}]
+    name = "panel-one"
+
+    [devices.{quoted_key}.actuators.relay]
+    pin = "6"
+
+    [devices.{quoted_key}.buttons.button]
+    pin = "7"
+    short = "relay"
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        directory = Path(tmpdir)
+        config_path = write_config(directory, toml_text)
+        project = gen.parse_project(config_path)
+        assert f"[devices.{quoted_key}.actuators]" in project.id_lock_content
+        assert gen.generate(project, [device_key], check=False) == 0
+        reparsed = gen.parse_project(config_path)
+
+    assert reparsed.devices[device_key].actuators[0].actuator_id == 1
+    assert reparsed.devices[device_key].clickables[0].clickable_id == 1
 
 
 def test_generation_writes_lockfile_and_check_detects_stale_lock() -> None:
@@ -974,6 +1056,36 @@ def test_custom_generated_header_names_emit_include_selector_defines() -> None:
     )
 
 
+def test_generated_router_rejects_multiple_profile_macros() -> None:
+    """Selecting two generated profiles must fail instead of taking the first."""
+    second_device = """
+    [devices.other]
+    name = "other"
+
+    [devices.other.actuators.relay]
+    pin = "8"
+
+    [devices.other.buttons.button]
+    pin = "9"
+    short = "relay"
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = write_config(
+            Path(tmpdir),
+            minimal_profile(ProfileParts(extra_sections=second_device)),
+        )
+        project = gen.parse_project(config_path)
+        files = gen.generated_files(project, ["panel", "other"])
+
+    user_config = next(
+        content for path, content in files.items() if path.name == "lsh_user_config.hpp"
+    )
+    assert (
+        "#if (defined(LSH_BUILD_PANEL) + defined(LSH_BUILD_OTHER)) > 1" in user_config
+    )
+    assert "Multiple lsh-core device profiles selected" in user_config
+
+
 def test_renders_extreme_static_profiles() -> None:
     """Edge profiles cover zero resources, sparse IDs and every action family."""
     actuators = """
@@ -1253,6 +1365,14 @@ def test_resource_names_are_independent_across_families() -> None:
             "must be a relative header path",
         ),
         (
+            minimal_profile(
+                ProfileParts(
+                    device_fields="""config_include = 'nested/bad"header.hpp'"""
+                ),
+            ),
+            "contains unsupported path characters",
+        ),
+        (
             minimal_profile().replace('output_dir = "out"', 'output_dir = "../out"'),
             "generator.output_dir must stay inside the TOML directory",
         ),
@@ -1261,6 +1381,91 @@ def test_resource_names_are_independent_across_families() -> None:
                 ProfileParts(actuators=DEFAULT_ACTUATOR.replace('"6"', '"6;evil"')),
             ),
             "not allowed in generated C++ expressions",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(
+                    controller_fields='hardware_include = "<Arduino.h>#error>"',
+                ),
+            ),
+            "contains unsupported include characters",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(clickables=DEFAULT_CLICKABLE.replace('"7"', '"6"')),
+            ),
+            "devices.panel.clickables.button.pin duplicates "
+            "devices.panel.actuators.relay.pin",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(
+                    actuators="""
+                    [devices.panel.actuators.relay]
+                    id = 1
+                    pin = "6"
+                    default = true
+                    pulse = "250ms"
+                    """,
+                ),
+            ),
+            "pulse with default=true",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(
+                    actuators="""
+                    [devices.panel.actuators.relay_a]
+                    id = 1
+                    pin = "6"
+                    default = true
+
+                    [devices.panel.actuators.relay_b]
+                    id = 2
+                    pin = "8"
+                    default = true
+
+                    [devices.panel.interlocks.relays]
+                    actuators = ["relay_a", "relay_b"]
+                    """,
+                    clickables="""
+                    [devices.panel.buttons.button]
+                    id = 1
+                    pin = "7"
+                    short = "relay_a"
+                    """,
+                ),
+            ),
+            "are interlocked and cannot both use default=true",
+        ),
+        (
+            minimal_profile().replace(
+                'pin = "6"',
+                'pin = "6"\nauto_off = "1s"\nauto_off_ms = 1000',
+                1,
+            ),
+            "cannot define both auto_off and auto_off_ms",
+        ),
+        (
+            minimal_profile().replace(
+                'pin = "6"',
+                'pin = "6"\npulse = "250ms"\npulse_ms = 250',
+                1,
+            ),
+            "cannot define both pulse and pulse_ms",
+        ),
+        (
+            minimal_profile(
+                ProfileParts(
+                    clickables=DEFAULT_CLICKABLE.replace(
+                        'short = "relay"',
+                        'short = "relay"\n'
+                        'long = { targets = ["relay"], time = "1s", '
+                        "time_ms = 1000 }",
+                    ),
+                ),
+            ),
+            "cannot define both time and time_ms",
         ),
         (
             minimal_profile(

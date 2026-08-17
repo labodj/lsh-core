@@ -7,6 +7,7 @@ wire IDs in a small generated lockfile beside `lsh_devices.toml`.
 
 from __future__ import annotations
 
+import json
 import tomllib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
@@ -21,6 +22,11 @@ if TYPE_CHECKING:
 
 LOCK_SCHEMA_VERSION = 1
 LOCKED_RESOURCE_GROUPS = ("actuators", "buttons")
+
+
+def _toml_key(value: str) -> str:
+    """Quote dotted keys so TOML keeps them as one resource name."""
+    return json.dumps(value) if "." in value else value
 
 
 @dataclass(frozen=True)
@@ -174,7 +180,7 @@ def _render_lock(devices: dict[str, dict[str, dict[str, int]]]) -> str:
             entries = groups.get(group_name, {})
             if not entries:
                 continue
-            lines.append(f"[devices.{device_key}.{group_name}]")
+            lines.append(f"[devices.{_toml_key(device_key)}.{group_name}]")
             for resource_name, resource_id in entries.items():
                 lines.append(f"{resource_name} = {resource_id}")
             lines.append("")

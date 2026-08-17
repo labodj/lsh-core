@@ -124,7 +124,7 @@ auto Actuator::applyStateChange(bool state, uint32_t now_ms, uint8_t actuatorInd
         return false;
     }
     this->writePinState(state);
-    this->updateCachedStateFlag(state);
+    this->updateCachedState(state);
 #if LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
     this->lastTimeSwitched = now_ms;
 #endif
@@ -153,25 +153,6 @@ void Actuator::setIndex(uint8_t indexToSet)
 }
 
 /**
- * @brief Set protection against some turn ON/OFF behaviour.
- *
- * @param hasProtection to set the property.
- * @return Actuator& the object instance.
- */
-auto Actuator::setProtected(bool hasProtection) -> Actuator &
-{
-    if (hasProtection)
-    {
-        this->flags |= ACTUATOR_FLAG_PROTECTED;
-    }
-    else
-    {
-        this->flags &= static_cast<uint8_t>(~ACTUATOR_FLAG_PROTECTED);
-    }
-    return *this;
-}
-
-/**
  * @brief Get the actuator index on Actuators namespace array.
  *
  * @return uint8_t actuator index.
@@ -193,7 +174,7 @@ auto Actuator::getIndex() const -> uint8_t
  */
 auto Actuator::getState() const -> bool
 {
-    return (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U;
+    return this->actualState;
 }
 
 /**
@@ -204,7 +185,7 @@ auto Actuator::getState() const -> bool
  */
 auto Actuator::toggleState() -> bool
 {
-    return this->setState((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U);
+    return this->setState(!this->actualState);
 }
 
 /**
@@ -216,7 +197,7 @@ auto Actuator::toggleState() -> bool
  */
 auto Actuator::toggleState(uint32_t now_ms) -> bool
 {
-    return this->setState((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U, now_ms);
+    return this->setState(!this->actualState, now_ms);
 }
 
 /**
@@ -228,7 +209,7 @@ auto Actuator::toggleState(uint32_t now_ms) -> bool
  */
 auto Actuator::toggleStateForIndex(uint8_t actuatorIndex) -> bool
 {
-    return this->setStateForIndex(actuatorIndex, (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U);
+    return this->setStateForIndex(actuatorIndex, !this->actualState);
 }
 
 /**
@@ -241,7 +222,7 @@ auto Actuator::toggleStateForIndex(uint8_t actuatorIndex) -> bool
  */
 auto Actuator::toggleStateForIndex(uint8_t actuatorIndex, uint32_t now_ms) -> bool
 {
-    return this->setStateForIndex(actuatorIndex, (this->flags & ACTUATOR_FLAG_ACTUAL_STATE) == 0U, now_ms);
+    return this->setStateForIndex(actuatorIndex, !this->actualState, now_ms);
 }
 
 /**
@@ -269,7 +250,7 @@ auto Actuator::checkAutoOffTimer(uint32_t now_ms, uint32_t autoOffTimer_ms) -> b
 auto Actuator::checkAutoOffTimerForIndex(uint8_t actuatorIndex, uint32_t now_ms, uint32_t autoOffTimer_ms) -> bool
 {
 #if !CONFIG_USE_COMPACT_ACTUATOR_SWITCH_TIMES && LSH_CORE_ACTUATOR_NEEDS_LOCAL_SWITCH_TIME
-    if ((this->flags & ACTUATOR_FLAG_ACTUAL_STATE) != 0U && autoOffTimer_ms != 0U)
+    if (this->actualState && autoOffTimer_ms != 0U)
     {
         if (now_ms - this->lastTimeSwitched >= autoOffTimer_ms)
         {

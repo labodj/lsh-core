@@ -25,6 +25,8 @@
 
 #include "util/constants/click_types.hpp"
 
+class Actuator;
+
 namespace lsh::core::static_config
 {
 static constexpr uint8_t CLICK_SCAN_STATE_CHANGED = 0x01U;    //!< A local click action changed at least one actuator state.
@@ -35,6 +37,8 @@ static constexpr uint8_t CLICK_SCAN_NETWORK_PENDING = 0x02U;  //!< A network-cli
 // generated topology code: fixed code can ask for IDs, dispatch cold bridge
 // commands, or run hot generated scans without storing TOML topology in SRAM.
 [[nodiscard]] auto getActuatorId(uint8_t actuatorIndex) noexcept -> uint8_t;
+/** @return Dense index for a generated actuator object, or `UINT8_MAX` for an external object. */
+[[nodiscard]] auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t;
 [[nodiscard]] auto getClickableId(uint8_t clickableIndex) noexcept -> uint8_t;
 [[nodiscard]] auto getActuatorIndexById(uint8_t actuatorId) noexcept -> uint8_t;
 [[nodiscard]] auto getClickableIndexById(uint8_t clickableId) noexcept -> uint8_t;

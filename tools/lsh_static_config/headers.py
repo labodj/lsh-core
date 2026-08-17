@@ -29,6 +29,19 @@ def render_user_config(project: ProjectConfig) -> str:
     guard = header_guard(project.settings.user_config_header)
     lines.extend([f"#ifndef {guard}", f"#define {guard}", ""])
 
+    if len(project.devices) > 1:
+        selector_count = " + ".join(
+            f"defined({device.build_macro})" for device in project.devices.values()
+        )
+        lines.extend(
+            [
+                f"#if ({selector_count}) > 1",
+                '#error "Multiple lsh-core device profiles selected. Define exactly '
+                'one generated LSH_BUILD_* macro."',
+                "#endif",
+                "",
+            ]
+        )
     for index, device in enumerate(project.devices.values()):
         directive = "#if" if index == 0 else "#elif"
         lines.append(f"{directive} defined({device.build_macro})")

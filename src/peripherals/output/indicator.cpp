@@ -20,9 +20,6 @@
 
 #include "peripherals/output/indicator.hpp"
 
-#include "config/static_config.hpp"
-#include "device/indicator_manager.hpp"
-
 /**
  * @brief Set the indicator index on Indicators namespace Array.
  *
@@ -36,27 +33,6 @@ void Indicator::setIndex(uint8_t indexToSet)
     // Generated release refresh code calls applyComputedState() directly with
     // compile-time topology, so indicators do not need an SRAM index byte.
     static_cast<void>(indexToSet);
-#endif
-}
-
-/**
- * @brief Switch the indicator based on controlled actuators status.
- *
- * The behavior depends on mode setting:
- *
- * If mode = ANY -> If any controlled actuator is ON switch ON the indicator, OFF otherwise.
- * If mode = ALL -> If all controlled actuators are ON switch ON the indicator, OFF otherwise.
- * If mode = MAJORITY -> If the majority of controlled actuators are ON switch ON the indicator, OFF otherwise.
- *
- * Indicators with zero controlled actuators are treated as OFF here as a final
- * safety net, even though setup validation should already reject that config.
- *
- */
-void Indicator::check()
-{
-#if defined(LSH_DEBUG) || defined(LSH_STATIC_CONFIG_RUNTIME_CHECKS)
-    const bool newState = lsh::core::static_config::computeIndicatorState(this->index);
-    this->applyComputedState(newState);
 #endif
 }
 

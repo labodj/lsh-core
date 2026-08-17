@@ -123,8 +123,11 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
 
         DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
         DPJ(receivedDocument);
-        receiveIdleAge_ms = 0U;
         receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
+        if (receiveResult.dispatch.payloadValid)
+        {
+            receiveIdleAge_ms = 0U;
+        }
         receiveResult.payloadDispatched = true;
         return receiveResult;
     }
@@ -166,8 +169,11 @@ auto receiveAndDispatch(uint16_t maxBytesToConsume) -> ReceiveResult
                 {
                     DP(FPSTR(dStr::JSON_RECEIVED), FPSTR(dStr::COLON_SPACE));
                     DPJ(receivedDocument);
-                    receiveIdleAge_ms = 0U;
                     receiveResult.dispatch = Deserializer::deserializeAndDispatch(receivedDocument);
+                    if (receiveResult.dispatch.payloadValid)
+                    {
+                        receiveIdleAge_ms = 0U;
+                    }
                     receiveResult.payloadDispatched = true;
                     return receiveResult;
                 }
@@ -228,7 +234,6 @@ void tickSendIdleTimer(uint16_t elapsed_ms)
  */
 auto canPing() -> bool
 {
-    // DP_CONTEXT(); // Bloats the serial output
     using constants::bridgeSerial::PING_INTERVAL_MS;
     return (sendIdleAge_ms > PING_INTERVAL_MS);
 }

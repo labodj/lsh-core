@@ -366,6 +366,12 @@ Common device fields:
 | `disable_eth`             | Device override for Controllino Ethernet disable.          |
 | `controllino_pin_aliases` | Device override for pin alias expansion.                   |
 
+Custom generated header paths must be relative, end in `.h` or `.hpp`, and contain only
+safe file-name segments.
+
+The generated router requires exactly one profile macro at compile time. Defining two
+`LSH_BUILD_*` macros is rejected instead of silently selecting the first profile.
+
 ## Actuators
 
 Actuators are named TOML tables:
@@ -393,11 +399,18 @@ When `id` is omitted, the generator writes `lsh_devices.lock.toml` and reuses th
 locked value on future runs. Commit the lockfile with the TOML profile so public wire
 IDs remain stable even when resources are reordered or inserted.
 
+Use either the duration form or its `_ms` compatibility form, never both on the same
+actuator. Do not reuse a physical pin across actuators, buttons or indicators because
+each generated peripheral configures it directly. The generator rejects identical pin
+expressions; distinct board aliases that resolve to the same pin remain the profile
+author's responsibility.
+
 `pulse` is for hardware that must receive a short ON pulse, such as a strike, bell or
 garage input. Any generated ON command, including serial commands from the bridge,
 starts or restarts the pulse countdown. OFF cancels a pending pulse and switches the
 output off. Use `auto_off` instead when the relay is a regular latched output that
-should stay ON but have a guard timer.
+should stay ON but have a guard timer. Pulse outputs must boot OFF (`default = false`)
+so every ON interval is owned by the generated countdown.
 
 `interlock` is resolved at generation time. Direct actuator-level declarations must be
 reciprocal unless `directed_interlock = true` is set, so accidental one-way motor
@@ -408,9 +421,11 @@ interlocks fail before compilation. Prefer interlock groups for the common case:
 actuators = ["blind_up", "blind_down"]
 ```
 
-The emitted setter turns listed peers OFF before turning the selected actuator ON, and
-the same rule is used by local clicks, scenes, packed bridge state and direct serial
-commands.
+The emitted setter turns listed peers OFF before turning the selected actuator ON. If
+debounce rejects a peer's OFF transition, the selected output remains OFF rather than
+violating the interlock. The same rule is used by local clicks, scenes, packed bridge
+state and direct serial commands. Two interlocked actuators therefore cannot both use
+`default = true`.
 
 ## Groups and Scenes
 
@@ -577,15 +592,19 @@ The generator fails before compilation when it finds:
 - unsupported schema v2 fields, which catches typos early;
 - invalid C++ identifiers or preprocessor macro names;
 - duplicate names or IDs;
+- duplicate pin expressions across actuators, buttons or indicators;
 - more than 255 actuators, buttons or indicators in one profile;
 - IDs or timing overrides outside generated field widths;
 - unknown actuator references;
 - duplicated targets in one action;
 - disabled actions that still contain active options;
 - scenes that assign the same actuator to conflicting operations;
-- pulse actuators combined with `auto_off`;
+- duration aliases such as `pulse`/`pulse_ms`, `auto_off`/`auto_off_ms` or
+  `time`/`time_ms` used together;
+- pulse actuators combined with `auto_off` or configured to boot ON;
 - interlock declarations that reference unknown actuators, themselves or an unmarked
   asymmetric peer;
+- interlocked actuators that are both configured to boot ON;
 - runtime device names that are not valid ASCII MQTT topic segments;
 - enabled long clicks with no local target and no network action;
 - super-long selective actions that target protected actuators;
@@ -594,6 +613,7 @@ The generator fails before compilation when it finds:
 - removed internal defines such as `LSH_NETWORK_CLICKS` or
   `LSH_COMPACT_ACTUATOR_SWITCH_TIMES`;
 - unsafe C++ pin or serial expressions;
+- malformed or unsafe explicit C++ include operands;
 - generated paths that escape the output directory.
 
 This keeps configuration mistakes close to the TOML and avoids defensive runtime lookup

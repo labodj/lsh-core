@@ -9,7 +9,11 @@ from .action_bodies import (
     render_switch_case_with_body,
     render_u8_sum_declaration,
 )
-from .action_calls import render_set_state_call, render_toggle_call
+from .action_calls import (
+    render_action_step_calls,
+    render_set_state_call,
+    render_toggle_call,
+)
 from .cpp import render_values_condition, u8
 from .topology import actuator_name_at, unprotected_actuator_indexes
 
@@ -41,27 +45,6 @@ def render_short_click_body(
         indent=indent,
         with_cached_time=cached_time,
     )
-
-
-def render_action_step_calls(
-    device: DeviceConfig,
-    step_sets: Sequence[tuple[str, list[int]]],
-    *,
-    cached_time: bool,
-) -> list[str]:
-    """Render deterministic scene/action-step calls in generated order."""
-    return [
-        render_toggle_call(device, actuator_index, cached_time=cached_time)
-        if operation == "TOGGLE"
-        else render_set_state_call(
-            device,
-            actuator_index,
-            "true" if operation == "ON" else "false",
-            cached_time=cached_time,
-        )
-        for operation, indexes in step_sets
-        for actuator_index in indexes
-    ]
 
 
 def render_long_normal_body(

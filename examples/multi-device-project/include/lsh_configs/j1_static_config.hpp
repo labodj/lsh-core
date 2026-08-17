@@ -173,6 +173,47 @@ auto getActuatorIndexById(uint8_t actuatorId) noexcept -> uint8_t
     return actuatorId == 10U ? 8U : UINT8_MAX;
 }
 
+auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t
+{
+    if (actuator == &actuator0_rel0)
+    {
+        return 0U;
+    }
+    if (actuator == &actuator1_rel1)
+    {
+        return 1U;
+    }
+    if (actuator == &actuator2_rel2)
+    {
+        return 2U;
+    }
+    if (actuator == &actuator3_rel3)
+    {
+        return 3U;
+    }
+    if (actuator == &actuator4_rel4)
+    {
+        return 4U;
+    }
+    if (actuator == &actuator5_rel5)
+    {
+        return 5U;
+    }
+    if (actuator == &actuator6_rel6)
+    {
+        return 6U;
+    }
+    if (actuator == &actuator7_rel7)
+    {
+        return 7U;
+    }
+    if (actuator == &actuator8_rel9)
+    {
+        return 8U;
+    }
+    return UINT8_MAX;
+}
+
 auto getClickableIndexById(uint8_t clickableId) noexcept -> uint8_t
 {
     if (clickableId >= 1U && clickableId <= 8U)

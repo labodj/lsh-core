@@ -36,6 +36,7 @@ struct DispatchResult
 {
     bool stateChanged = false;         //!< True if the device state was changed by the command.
     bool networkClickHandled = false;  //!< True if network click timer processing must remain active after this dispatch.
+    bool payloadValid = false;         //!< True if the payload is a recognized, semantically valid controller command.
 };
 
 auto deserializeAndDispatch(const JsonDocument &doc) -> DispatchResult;

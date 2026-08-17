@@ -21,6 +21,8 @@
 
 #include "core/network_clicks.hpp"
 
+#include "communication/bridge_serial.hpp"
+#include "communication/bridge_sync.hpp"
 #include "communication/serializer.hpp"
 #include "config/static_config.hpp"
 #include "internal/etl_array.hpp"
@@ -256,24 +258,27 @@ using constants::ClickType;
 
 /**
  * @brief Initiates a network click action.
- * @details Sends the initial network click request and keeps the pending
- *          timeout active only if the frame is accepted by the UART. If the
- *          serial transport rejects the request, the pending click is removed
- *          immediately so the caller can decide whether to execute a local
- *          fallback action instead of silently losing the press.
+ * @details A request is routed through the bridge only while its link is live
+ *          and the post-boot handshake is complete. The pending timeout remains
+ *          active only if the UART accepts the frame; otherwise the slot is
+ *          removed immediately so the caller can execute its local fallback.
  * @param clickableIndex The index of the clickable that was pressed.
  * @param clickType The type of click (LONG or SUPER_LONG).
  * @return RequestResult::Accepted if the request frame has been accepted by
  *         the UART and the pending timeout should remain active.
  * @return RequestResult::AlreadyPending if the same clickable/type pair still
  *         has one unresolved transaction and this press should be ignored.
- * @return RequestResult::TransportRejected if the UART rejected the request
- *         and the caller may decide to execute a local fallback instead.
+ * @return RequestResult::TransportRejected if the request cannot be routed,
+ *         stored or written and the caller may execute a local fallback.
  */
 auto request(uint8_t clickableIndex, constants::ClickType clickType) -> RequestResult
 {
     DP_CONTEXT();
     if (!isSupportedNetworkClickType(clickType))
+    {
+        return RequestResult::TransportRejected;
+    }
+    if (!BridgeSync::allowsMutatingCommands() || !BridgeSerial::isConnected())
     {
         return RequestResult::TransportRejected;
     }
@@ -283,6 +288,8 @@ auto request(uint8_t clickableIndex, constants::ClickType clickType) -> RequestR
         return RequestResult::AlreadyPending;
     }
 
+    // Preserve every sibling transaction's elapsed age before this entry starts
+    // a fresh retry budget at the shared timer epoch.
     advanceActiveTimersTo(timeKeeper::getTime());
     auto *const entry = appendActiveNetworkClick(clickableIndex, clickType);
     if (entry == nullptr)
@@ -310,7 +317,8 @@ auto request(uint8_t clickableIndex, constants::ClickType clickType) -> RequestR
  *          cleanup timeout expires.
  * @param clickableIndex The index of the clickable to confirm.
  * @param clickType The type of click to confirm.
- * @return true if there are still other active network clicks pending, false otherwise.
+ * @return true if any transaction still needs timeout or confirm-retry polling.
+ * @return false if no active transaction remains.
  */
 auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
 {
@@ -321,6 +329,7 @@ auto confirm(uint8_t clickableIndex, constants::ClickType clickType) -> bool
         return thereAreActiveNetworkClicks();
     }
 
+    advanceActiveTimersTo(timeKeeper::getTime());
     markNetworkClickAcked(*entry);
     // Once the ACK has arrived, the confirm retry budget must start from the
     // ACK moment, not from the original request. Otherwise a late ACK could

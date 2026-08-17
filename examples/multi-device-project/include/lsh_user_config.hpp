@@ -8,6 +8,10 @@
 #ifndef LSH_GENERATED_LSH_USER_CONFIG_HPP
 #define LSH_GENERATED_LSH_USER_CONFIG_HPP
 
+#if (defined(LSH_BUILD_J1) + defined(LSH_BUILD_J2)) > 1
+#error "Multiple lsh-core device profiles selected. Define exactly one generated LSH_BUILD_* macro."
+#endif
+
 #if defined(LSH_BUILD_J1)
 #include "lsh_configs/j1_config.hpp"
 #elif defined(LSH_BUILD_J2)

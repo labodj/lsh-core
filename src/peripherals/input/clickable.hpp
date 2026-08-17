@@ -129,32 +129,31 @@ private:
         this->debounceAge_ms = 0U;
     }
 
-    [[nodiscard]] auto confirmDebouncedEdge(bool pressed) noexcept -> constants::ClickResult
+    void confirmDebouncedEdge(bool pressed) noexcept
     {
         this->setClickableFlag(CLICKABLE_FLAG_DEBOUNCING, false);
         this->debounceAge_ms = 0U;
         this->setClickableFlag(CLICKABLE_FLAG_STABLE_PRESSED, pressed);
         this->setClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED, pressed);
-        return pressed ? constants::ClickResult::NO_CLICK_KEEPING_CLICKED : constants::ClickResult::NO_CLICK;
     }
 
-    [[nodiscard]] auto updateDebouncedEdge(bool rawPressed, uint16_t elapsed_ms) noexcept -> constants::ClickResult
+    void updateDebouncedEdge(bool rawPressed, uint16_t elapsed_ms) noexcept
     {
-        using constants::ClickResult;
         using constants::timings::CLICKABLE_DEBOUNCE_TIME_MS;
 
         if (!this->isDebouncing())
         {
             if (rawPressed == this->stablePressed())
             {
-                return ClickResult::NO_CLICK;
+                return;
             }
             if (CLICKABLE_DEBOUNCE_TIME_MS == 0U)
             {
-                return this->confirmDebouncedEdge(rawPressed);
+                this->confirmDebouncedEdge(rawPressed);
+                return;
             }
             this->startDebounce(rawPressed);
-            return ClickResult::NO_CLICK;
+            return;
         }
 
         if (rawPressed != this->candidatePressed())
@@ -165,16 +164,15 @@ private:
             this->setClickableFlag(CLICKABLE_FLAG_DEBOUNCING, false);
             this->setClickableFlag(CLICKABLE_FLAG_CANDIDATE_PRESSED, this->stablePressed());
             this->debounceAge_ms = 0U;
-            return ClickResult::NO_CLICK;
+            return;
         }
 
         const uint16_t nextDebounceAge = timeUtils::addElapsedTimeSaturated(this->debounceAge_ms, elapsed_ms);
         this->debounceAge_ms = nextDebounceAge > UINT8_MAX ? UINT8_MAX : static_cast<uint8_t>(nextDebounceAge);
         if (this->debounceAge_ms >= CLICKABLE_DEBOUNCE_TIME_MS)
         {
-            return this->confirmDebouncedEdge(rawPressed);
+            this->confirmDebouncedEdge(rawPressed);
         }
-        return ClickResult::NO_CLICK;
     }
 
     /**
@@ -193,7 +191,7 @@ private:
         using namespace constants::clickDetection;
 
         const bool wasStablePressed = this->stablePressed();
-        static_cast<void>(this->updateDebouncedEdge(this->getState(), elapsed_ms));
+        this->updateDebouncedEdge(this->getState(), elapsed_ms);
         const bool isStablePressed = this->stablePressed();
 
         if (!wasStablePressed && isStablePressed)

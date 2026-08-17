@@ -12,9 +12,31 @@ from .cpp import (
     render_u8_value_group_function,
 )
 from .runtime_paths import render_generated_action_accessors
+from .topology import actuator_name_at
 
 if TYPE_CHECKING:
     from .models import DeviceConfig, StaticProfileData
+
+
+def render_actuator_object_lookup(device: DeviceConfig) -> list[str]:
+    """Render the release-only object-to-dense-index lookup."""
+    lines = [
+        "auto getActuatorIndex(const ::Actuator *actuator) noexcept -> uint8_t",
+        "{",
+    ]
+    for actuator_index in range(len(device.actuators)):
+        lines.extend(
+            [
+                f"    if (actuator == &{actuator_name_at(device, actuator_index)})",
+                "    {",
+                f"        return {actuator_index}U;",
+                "    }",
+            ]
+        )
+    if not device.actuators:
+        lines.append("    static_cast<void>(actuator);")
+    lines.extend(["    return UINT8_MAX;", "}"])
+    return lines
 
 
 def render_details_payload_accessors() -> list[str]:
@@ -63,6 +85,7 @@ def render_core_static_accessors(
             {value: index for index, value in enumerate(profile.actuator_ids)},
         ),
     )
+    append_section(lines, render_actuator_object_lookup(device))
     append_section(
         lines,
         render_lookup_function(

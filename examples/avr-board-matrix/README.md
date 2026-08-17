@@ -5,11 +5,12 @@ Controllino boards and keeps representative Arduino AVR targets in CI.
 
 The tested matrix is:
 
-| Environment             | PlatformIO board | MCU        | Profile            | Fast I/O | Status                  |
-| ----------------------- | ---------------- | ---------- | ------------------ | -------- | ----------------------- |
-| `mega2560_fast_release` | `megaatmega2560` | ATmega2560 | `mega2560_fast`    | yes      | supported               |
-| `uno_release`           | `uno`            | ATmega328P | `atmega328p_basic` | no       | supported, conservative |
-| `nano_release`          | `nanoatmega328`  | ATmega328P | `atmega328p_basic` | no       | supported, conservative |
+| Environment                  | PlatformIO board | MCU        | Profile            | Fast I/O | Status                  |
+| ---------------------------- | ---------------- | ---------- | ------------------ | -------- | ----------------------- |
+| `mega2560_fast_release`      | `megaatmega2560` | ATmega2560 | `mega2560_fast`    | yes      | supported               |
+| `uno_release`                | `uno`            | ATmega328P | `atmega328p_basic` | no       | supported, conservative |
+| `nano_release`               | `nanoatmega328`  | ATmega328P | `atmega328p_basic` | no       | supported, conservative |
+| `uno_transport_only_release` | `uno`            | ATmega328P | `transport_only`   | no       | zero-resource coverage  |
 
 Controllino Maxi remains covered by `examples/multi-device-project`, because it needs
 the Controllino library, pin aliases and optional board helpers.
@@ -28,6 +29,7 @@ Build locally from the repository root:
 platformio run -d examples/avr-board-matrix -e mega2560_fast_release
 platformio run -d examples/avr-board-matrix -e uno_release
 platformio run -d examples/avr-board-matrix -e nano_release
+platformio run -d examples/avr-board-matrix -e uno_transport_only_release
 ```
 
 Run static analysis:
@@ -36,4 +38,5 @@ Run static analysis:
 platformio check -d examples/avr-board-matrix -e mega2560_fast_release --fail-on-defect low
 platformio check -d examples/avr-board-matrix -e uno_release --fail-on-defect low
 platformio check -d examples/avr-board-matrix -e nano_release --fail-on-defect low
+platformio check -d examples/avr-board-matrix -e uno_transport_only_release --fail-on-defect low
 ```

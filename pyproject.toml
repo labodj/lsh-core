@@ -66,7 +66,7 @@ project-excludes = [
 ]
 search-path = ["."]
 python-platform = "linux"
-python-version = "3.14"
+python-version = "3.11"
 python-interpreter-path = ".venv/bin/python"
 
 [tool.pytest.ini_options]
