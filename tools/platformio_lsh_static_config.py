@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-import os
 import re
 import sys
 from pathlib import Path
@@ -19,6 +18,15 @@ GENERATED_HEADER_DEPENDENCY_DEPTH = 2
 INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
 
 
+class PlatformIOPlatform(Protocol):
+    """Framework metadata and resolved package paths for the active platform."""
+
+    frameworks: dict[str, dict[str, str]]
+
+    def get_package_dir(self, name: str) -> str | None:
+        """Return an installed package directory for this platform."""
+
+
 class PlatformIOEnv(Protocol):
     """Subset of the SCons construction environment used by this hook."""
 
@@ -27,6 +35,9 @@ class PlatformIOEnv(Protocol):
 
     def subst(self, template: str) -> str:
         """Expand a SCons construction variable expression."""
+
+    def PioPlatform(self) -> PlatformIOPlatform:  # noqa: N802
+        """Return the platform selected by this build environment."""
 
     def Append(  # noqa: N802
         self,
@@ -128,26 +139,19 @@ def _header_includes(location: Path) -> list[Path]:
 
 
 def _platformio_header_search_roots() -> list[Path]:
-    """Return PlatformIO package roots worth scanning for generated includes."""
+    """Search project dependencies and only the selected framework packages."""
     roots = [Path(env.subst("$PROJECT_LIBDEPS_DIR")) / env.subst("$PIOENV")]
-
-    package_dirs = [
-        Path(candidate)
-        for candidate in (
-            env.subst("$PROJECT_PACKAGES_DIR"),
-            os.environ.get("PLATFORMIO_PACKAGES_DIR", ""),
-            str(Path.home() / ".platformio" / "packages"),
-        )
-        if candidate and "$" not in candidate
-    ]
-    seen_roots = set(roots)
-    for package_dir in package_dirs:
-        if not package_dir.is_dir():
-            continue
-        for framework_libraries in sorted(package_dir.glob("framework-*/libraries")):
-            if framework_libraries not in seen_roots:
-                roots.append(framework_libraries)
-                seen_roots.add(framework_libraries)
+    platform = env.PioPlatform()
+    frameworks = env.GetProjectOption("framework")
+    if not isinstance(frameworks, (list, tuple)):
+        return roots
+    for framework in frameworks:
+        package = platform.frameworks.get(framework, {}).get("package")
+        package_dir = platform.get_package_dir(package) if package else None
+        if package_dir:
+            libraries = Path(package_dir) / "libraries"
+            if libraries.is_dir() and libraries not in roots:
+                roots.append(libraries)
     return roots
 
 
