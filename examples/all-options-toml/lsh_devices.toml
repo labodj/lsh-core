@@ -4,6 +4,7 @@ schema_version = 2
 preset = "controllino-maxi/fast-msgpack"
 
 [generator]
+id_lock_file = "lsh_devices.lock.toml"
 output_dir = "generated"
 config_dir = "all_options_configs"
 user_config_header = "lsh_all_options_config.hpp"
@@ -35,6 +36,8 @@ scan_interval = "2ms"
 long_click = "450ms"
 super_long_click = "1200ms"
 network_click_timeout = "900ms"
+network_click_ack_timeout = "900ms"
+network_click_confirm_retry_timeout = "900ms"
 ping_interval = "7s"
 connection_timeout = "7300ms"
 bridge_boot_retry = "200ms"

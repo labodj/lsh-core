@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
+from .constants import UINT16_MAX
+from .errors import fail
 from .models import DefineValue
 from .platformio import merged_defines, render_escaped_build_flag_define
 from .profile import collect_static_profile_data
@@ -50,6 +53,7 @@ CORE_TO_BRIDGE_DEFINE_MAP: Mapping[str, str] = {
     "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP": (
         "CONFIG_ARDCOM_SERIAL_MAX_RX_BYTES_PER_LOOP"
     ),
+    "CONFIG_PING_INTERVAL_MS": "CONFIG_PING_INTERVAL_CONTROLLINO_MS",
     "CONFIG_CONNECTION_TIMEOUT_MS": "CONFIG_CONNECTION_TIMEOUT_CONTROLLINO_MS",
     "CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS": "CONFIG_BOOTSTRAP_REQUEST_INTERVAL_MS",
 }
@@ -67,6 +71,14 @@ def build_stack_config(
 ) -> dict[str, Any]:
     """Build a machine-readable stack config for bridge/coordinator consumers."""
     devices = [project.devices[device_key] for device_key in selected_devices]
+    names: dict[str, str] = {}
+    for device in devices:
+        if device.device_name in names:
+            fail(
+                f"devices.{device.key}.name duplicates "
+                f"devices.{names[device.device_name]}.name: {device.device_name!r}."
+            )
+        names[device.device_name] = device.key
     mqtt_protocol = _stack_mqtt_protocol(project, devices)
     subscriptions = _coordinator_subscriptions(devices)
     device_exports = [
@@ -272,6 +284,18 @@ def _bridge_build_flags(
 ) -> list[str]:
     """Return per-device lsh-bridge PlatformIO build flags."""
     defines = _define_map(project, device)
+    ping = _uint_value(
+        defines.get("CONFIG_PING_INTERVAL_MS", 10000), field="timing.ping_interval"
+    )
+    timeout = _uint_value(
+        defines.get("CONFIG_CONNECTION_TIMEOUT_MS", ping + 200),
+        field="timing.connection_timeout",
+    )
+    if not 0 < ping < timeout <= UINT16_MAX:
+        fail(
+            f"devices.{device.key}: stack export requires 0 < timing.ping_interval "
+            f"< timing.connection_timeout <= {UINT16_MAX}."
+        )
     bridge_defines = [
         DefineValue("CONFIG_MAX_ACTUATORS", _uint_literal(len(device.actuators))),
         DefineValue("CONFIG_MAX_BUTTONS", _uint_literal(len(device.clickables))),
@@ -315,7 +339,12 @@ def _bridge_build_flags(
     for core_define, bridge_define in CORE_TO_BRIDGE_DEFINE_MAP.items():
         value = defines.get(core_define, CORE_DEFAULT_TIMING_DEFINES.get(core_define))
         if value is not None:
-            bridge_defines.append(DefineValue(bridge_define, _uint_literal(value)))
+            bridge_defines.append(
+                DefineValue(
+                    bridge_define,
+                    _uint_literal(value, field=f"devices.{device.key}: {core_define}"),
+                )
+            )
 
     if "CONFIG_MSG_PACK" in defines:
         bridge_defines.append(DefineValue("CONFIG_MSG_PACK_ARDUINO"))
@@ -422,9 +451,23 @@ def _quoted(value: str) -> str:
     return f'"{value}"'
 
 
-def _uint_literal(value: object) -> str:
+def _uint_literal(value: object, *, field: str = "value") -> str:
     """Render a non-negative integer-like value as a C++ unsigned literal."""
-    text = str(value).strip()
-    if text.endswith(("U", "u")):
-        text = text[:-1]
-    return f"{int(text)}U"
+    return f"{_uint_value(value, field=field)}U"
+
+
+def _uint_value(value: object, *, field: str) -> int:
+    """Decode the unsigned C++ literal before comparing or exporting it."""
+    match = re.fullmatch(
+        r"(0[xX][0-9a-fA-F]+|0[bB][01]+|0[0-7]*|[1-9][0-9]*)"
+        r"(?:[uU](?:ll|LL|[lL])?|(?:ll|LL|[lL])[uU]?)?",
+        str(value).strip(),
+    )
+    if match is None:
+        fail(
+            f"{field} must be an unsigned C++ integer literal "
+            f"for stack export, got {value!r}."
+        )
+    digits = match[1]
+    base = 8 if digits.startswith("0") and digits.isdigit() else 0
+    return int(digits, base)

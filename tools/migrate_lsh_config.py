@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tools.lsh_static_config.emitter import write_text
 from tools.lsh_static_config.errors import ConfigError, fail
 from tools.lsh_static_config.legacy_migration import migrate_file
 
@@ -40,9 +41,9 @@ def main(argv: Sequence[str]) -> int:
         args = parse_args(argv)
         if args.write and args.output is not None:
             fail("--write and --output are mutually exclusive.")
-        migrated = migrate_file(args.config.resolve())
+        migrated = migrate_file(args.config.resolve(), output_path=args.output)
         return _emit_migration(args, migrated)
-    except ConfigError as exc:
+    except (ConfigError, OSError) as exc:
         sys.stderr.write(f"lsh migration error: {exc}\n")
         return 2
 
@@ -50,9 +51,9 @@ def main(argv: Sequence[str]) -> int:
 def _emit_migration(args: argparse.Namespace, migrated: str) -> int:
     """Write migrated TOML to the requested destination."""
     if args.write:
-        args.config.write_text(migrated, encoding="utf-8")
+        write_text(args.config, migrated)
     elif args.output is not None:
-        args.output.write_text(migrated, encoding="utf-8")
+        write_text(args.output, migrated)
     else:
         sys.stdout.write(migrated)
     return 0

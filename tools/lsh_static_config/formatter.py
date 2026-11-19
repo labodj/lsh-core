@@ -82,7 +82,7 @@ def _read_root(path: Path) -> TomlTable:
     try:
         with path.open("rb") as file_obj:
             root = tomllib.load(file_obj)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"Cannot read {path}: {exc}")
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")

@@ -24,6 +24,7 @@
 #include <ArduinoJson.h>
 #include <stdint.h>
 
+#include "communication/msgpack_serial_framing.hpp"
 #include "internal/etl_bit.hpp"
 #include "internal/user_config_bridge.hpp"
 /**
@@ -149,37 +150,7 @@ constexpr uint16_t RECEIVED_DOC_SIZE =
 static_assert(RECEIVED_DOC_SIZE >= JSON_OBJECT_SIZE(4), "RECEIVED_DOC_SIZE must fit network click responses with correlation ID.");
 
 #ifdef CONFIG_MSG_PACK
-/**
- * @brief Return the MsgPack array-header size required by one packed actuator-state payload.
- *
- * `SET_STATE` is the largest inbound command in MsgPack mode. The controller
- * stores the deframed payload bytes in `rawInputBuffer`, so the sizing formula
- * must follow the binary MsgPack shape instead of the historical JSON line
- * length.
- */
-constexpr uint16_t PACKED_STATE_MSGPACK_ARRAY_HEADER_SIZE =
-    (PACKED_STATE_BYTES < 16U) ? 1U : 3U;  //!< `fixarray` for up to 15 bytes, `array16` beyond that.
-
-/**
- * @brief Maximum MsgPack size of one fixed-width inbound command handled by the controller.
- * @details `NETWORK_CLICK_*` and `FAILOVER_CLICK` are the widest fixed-shape
- *          commands received by the controller in MsgPack mode:
- *          `map4 + 4 one-character keys + 4 uint8_t values`.
- */
-constexpr uint16_t RAW_INPUT_BUFFER_FIXED_CMD_SIZE = 13U;
-
-/**
- * @brief Maximum MsgPack size of a packed `SET_STATE` command received from the bridge.
- * @details Layout:
- *          - `map2` header: 1 byte
- *          - key `p`: 2 bytes
- *          - command value: 1 byte
- *          - key `s`: 2 bytes
- *          - array header: 1 or 3 bytes
- *          - packed state bytes: `PACKED_STATE_BYTES`
- */
-constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE = 6U + PACKED_STATE_MSGPACK_ARRAY_HEADER_SIZE + PACKED_STATE_BYTES;
-
+constexpr uint16_t RAW_INPUT_BUFFER_SIZE = lsh::core::transport::maxInboundPayloadSize(PACKED_STATE_BYTES);
 #else
 /**
  * @brief Minimum JSON-line buffer size required by the widest fixed-width command.
@@ -192,12 +163,12 @@ constexpr uint16_t RAW_INPUT_BUFFER_FIXED_CMD_SIZE =
  */
 constexpr uint16_t RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE =
     etl::bit_ceil(17U + (4U * PACKED_STATE_BYTES));  //!< Conservative worst case for {"p":12,"s":[255,...]}\n\0
-#endif
 
 constexpr uint16_t RAW_INPUT_BUFFER_SIZE =
     RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE <= RAW_INPUT_BUFFER_FIXED_CMD_SIZE
         ? RAW_INPUT_BUFFER_FIXED_CMD_SIZE
         : RAW_INPUT_BUFFER_VARIABLE_CMD_SIZE;  //!< Final allocated size for the raw serial input buffer used by the active codec.
+#endif
 
 #ifdef CONFIG_MSG_PACK
 /**
@@ -208,7 +179,7 @@ constexpr uint16_t RAW_INPUT_BUFFER_SIZE =
  */
 constexpr uint16_t MSGPACK_SERIAL_MAX_FRAME_SIZE = static_cast<uint16_t>(2U + (RAW_INPUT_BUFFER_SIZE * 2U));
 
-static_assert(RAW_INPUT_BUFFER_SIZE >= 13U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size network click commands in MsgPack mode.");
+static_assert(RAW_INPUT_BUFFER_SIZE >= 15U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size network click commands in MsgPack mode.");
 #else
 static_assert(RAW_INPUT_BUFFER_SIZE >= 31U, "RAW_INPUT_BUFFER_SIZE must fit fixed-size click/failover commands plus null terminator.");
 #endif

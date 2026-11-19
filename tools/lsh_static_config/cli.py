@@ -11,7 +11,7 @@ from .doctor import diagnose_project, render_diagnostics
 from .emitter import generate
 from .errors import ConfigError, fail
 from .formatter import format_config_file
-from .json_schema import project_schema_json, schema_json, write_project_schema
+from .json_schema import project_schema_json, schema_json, write_schema_for_project
 from .parser import parse_project
 from .platformio import merged_defines, raw_build_flags, resolve_device_key
 from .presets import PRESETS
@@ -160,11 +160,11 @@ def main(argv: Sequence[str]) -> int:
         if format_status is not None:
             return format_status
         project = parse_project(config_path)
-        schema_status = _handle_project_schema_command(args, config_path)
+        schema_status = _handle_project_schema_command(args, project)
         if schema_status is not None:
             return schema_status
         return _dispatch_project_command(args, project)
-    except ConfigError as exc:
+    except (ConfigError, OSError) as exc:
         sys.stderr.write(f"lsh static config error: {exc}\n")
         return 2
 
@@ -214,15 +214,15 @@ def _schema_output_path(raw_path: object) -> Path | None:
 
 def _handle_project_schema_command(
     args: argparse.Namespace,
-    config_path: Path,
+    project: ProjectConfig,
 ) -> int | None:
     """Run schema commands that require a valid existing TOML project."""
     if args.print_project_json_schema:
-        sys.stdout.write(project_schema_json(config_path))
+        sys.stdout.write(project_schema_json(project.source_path))
         return 0
     if args.write_vscode_schema is not None:
         schema_path = _schema_output_path(args.write_vscode_schema)
-        write_project_schema(config_path, schema_path)
+        write_schema_for_project(project, schema_path)
         return 0
     return None
 
@@ -235,9 +235,7 @@ def _handle_format(args: argparse.Namespace, config_path: Path) -> int | None:
     if args.check_format and stale:
         sys.stderr.write(f"stale-format: {config_path}\n")
         return 1
-    if args.format_config:
-        return 0
-    return None
+    return 0
 
 
 def _list_devices(project: ProjectConfig) -> int:

@@ -7,6 +7,7 @@ import re
 UINT8_MAX = 255
 UINT16_MAX = 65535
 UINT32_MAX = 4294967295
+MAX_AUTO_OFF_MS = UINT32_MAX >> 1
 DEFAULT_LONG_CLICK_MS = 400
 DEFAULT_SUPER_LONG_CLICK_MS = 1000
 MAX_INLINE_SUM_TERMS = 2
@@ -18,7 +19,8 @@ MSGPACK_FIXARRAY_MAX_LENGTH = 15
 
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MACRO_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-DURATION_RE = re.compile(r"^\s*(\d+)\s*(ms|s|m|h)?\s*$", re.IGNORECASE)
+DURATION_UNIT = r"([mM][sS]|[sSmMhH])?"
+DURATION_RE = re.compile(rf"^\s*(\d+)\s*{DURATION_UNIT}\s*$")
 WIRE_PROTOCOL_MAJOR_RE = re.compile(r"WIRE_PROTOCOL_MAJOR\s*=\s*(\d+)U")
 TRANSPORT_BYTE_RE = re.compile(
     r"(MSGPACK_FRAME_(?:END|ESCAPE|ESCAPED_END|ESCAPED_ESCAPE))\s*=\s*(0x[0-9A-Fa-f]+|\d+)U"

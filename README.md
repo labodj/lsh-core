@@ -80,31 +80,9 @@ For the stack-level bring-up sequence around this example, use the
 
 ## Create a Consumer Project
 
-Install from the PlatformIO Registry:
-
-```ini
-[env:kitchen_release]
-platform = atmelavr
-framework = arduino
-board = controllino_maxi
-lib_deps = labodj/lsh-core @ ^4.0.1
-build_unflags = -std=gnu++11 -std=c++11
-build_flags =
-    -I include
-    -std=gnu++17
-```
-
-Add the static-config pre-build hook:
-
-```ini
-extra_scripts = pre:.pio/libdeps/kitchen_release/lsh-core/tools/platformio_lsh_static_config.py
-custom_lsh_config = lsh_devices.toml
-custom_lsh_device = kitchen
-```
-
-Then write `lsh_devices.toml` and build. PlatformIO runs the generator, validates the
-TOML, writes the generated headers, adds the selected `LSH_BUILD_*` macro and compiles
-the matching static profile.
+Follow the
+[consumer quick start](https://github.com/labodj/lsh-core/blob/main/docs/static-toml-config.md#quick-start)
+for a complete Controllino Maxi configuration, Arduino entry point and first build.
 
 For a complete layout, reuse the structure of
 [examples/multi-device-project](https://github.com/labodj/lsh-core/tree/main/examples/multi-device-project)
@@ -282,5 +260,5 @@ platformio pkg publish --owner labodj --type library --no-interactive
 After a Registry release, consumers can pin the Registry package:
 
 ```ini
-lib_deps = labodj/lsh-core @ ^4.0.1
+lib_deps = labodj/lsh-core @ ^4.0.2
 ```

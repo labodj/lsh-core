@@ -56,6 +56,55 @@
 
 namespace
 {
+[[maybe_unused]] constexpr void validatePinAssignments()
+{
+    switch (0)
+    {
+    case (CONTROLLINO_R0):  // rel0
+        break;
+    case (CONTROLLINO_R1):  // rel1
+        break;
+    case (CONTROLLINO_R2):  // rel2
+        break;
+    case (CONTROLLINO_R3):  // rel3
+        break;
+    case (CONTROLLINO_R6):  // rel6
+        break;
+    case (CONTROLLINO_R7):  // rel7
+        break;
+    case (CONTROLLINO_R8):  // rel8
+        break;
+    case (CONTROLLINO_R9):  // rel9
+        break;
+    case (CONTROLLINO_A0):  // btn0
+        break;
+    case (CONTROLLINO_A1):  // btn1
+        break;
+    case (CONTROLLINO_A2):  // btn2
+        break;
+    case (CONTROLLINO_A3):  // btn3
+        break;
+    case (CONTROLLINO_A6):  // btn6
+        break;
+    case (CONTROLLINO_A7):  // btn7
+        break;
+    case (CONTROLLINO_A8):  // btn8
+        break;
+    case (CONTROLLINO_A9):  // btn9
+        break;
+    case (CONTROLLINO_IN0):  // btn10
+        break;
+    case (CONTROLLINO_IN1):  // btn11
+        break;
+    case (CONTROLLINO_D6):  // light6
+        break;
+    case (CONTROLLINO_D7):  // light7
+        break;
+    case (CONTROLLINO_D8):  // light8
+        break;
+    }
+}
+
 // clang-format off
 const uint8_t DETAILS_JSON_PAYLOAD[] LSH_STATIC_CONFIG_PROGMEM = {
     0x7BU, 0x22U, 0x70U, 0x22U, 0x3AU, 0x31U, 0x2CU, 0x22U, 0x76U, 0x22U, 0x3AU, 0x33U,
@@ -75,7 +124,11 @@ const uint8_t DETAILS_MSGPACK_PAYLOAD[] LSH_STATIC_CONFIG_PROGMEM = {
 };
 // clang-format on
 
+#ifdef LSH_DEBUG
 constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 128U;
+#else
+constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 0U;
+#endif
 
 template <uint16_t ByteIndex, uint16_t PayloadSize> struct GeneratedPayloadByteWriter
 {
@@ -151,7 +204,7 @@ auto getActuatorId(uint8_t actuatorIndex) noexcept -> uint8_t
         return static_cast<uint8_t>(actuatorIndex + 1U);
     }
 
-    return actuatorIndex >= 4U && actuatorIndex <= 7U ? static_cast<uint8_t>(actuatorIndex + 3U) : 0U;
+    return actuatorIndex <= 7U ? static_cast<uint8_t>(actuatorIndex + 3U) : 0U;
 }
 
 auto getClickableId(uint8_t clickableIndex) noexcept -> uint8_t
@@ -161,7 +214,7 @@ auto getClickableId(uint8_t clickableIndex) noexcept -> uint8_t
         return static_cast<uint8_t>(clickableIndex + 1U);
     }
 
-    return clickableIndex >= 4U && clickableIndex <= 9U ? static_cast<uint8_t>(clickableIndex + 3U) : 0U;
+    return clickableIndex <= 9U ? static_cast<uint8_t>(clickableIndex + 3U) : 0U;
 }
 
 auto getActuatorIndexById(uint8_t actuatorId) noexcept -> uint8_t
@@ -524,8 +577,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     {
     case 0U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator0_rel0.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator0_rel0.getState()) | static_cast<uint8_t>(actuator2_rel2.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -542,8 +595,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     }
     case 2U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator2_rel2.getState()) | static_cast<uint8_t>(actuator1_rel1.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -556,8 +609,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     }
     case 3U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator3_rel3.getState()) + static_cast<uint8_t>(actuator7_rel9.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator3_rel3.getState()) | static_cast<uint8_t>(actuator7_rel9.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -570,8 +623,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     }
     case 7U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator7_rel9.getState()) + static_cast<uint8_t>(actuator3_rel3.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator7_rel9.getState()) | static_cast<uint8_t>(actuator3_rel3.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -584,8 +637,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     }
     case 8U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator0_rel0.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator0_rel0.getState()) | static_cast<uint8_t>(actuator2_rel2.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -598,8 +651,8 @@ auto runLongClick(uint8_t clickableIndex) noexcept -> bool
     }
     case 9U:
     {
-        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
-        const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+        const uint8_t actuatorsLongOn = static_cast<uint8_t>(actuator2_rel2.getState()) | static_cast<uint8_t>(actuator1_rel1.getState());
+        const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
         const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -834,8 +887,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 1U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator0_rel0.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator0_rel0.getState()) | static_cast<uint8_t>(actuator2_rel2.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -916,8 +969,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 3U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator2_rel2.getState()) | static_cast<uint8_t>(actuator1_rel1.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -961,8 +1014,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 4U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator3_rel3.getState()) + static_cast<uint8_t>(actuator7_rel9.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator3_rel3.getState()) | static_cast<uint8_t>(actuator7_rel9.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -1072,8 +1125,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 10U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator7_rel9.getState()) + static_cast<uint8_t>(actuator3_rel3.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator7_rel9.getState()) | static_cast<uint8_t>(actuator3_rel3.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -1117,8 +1170,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 11U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator0_rel0.getState()) + static_cast<uint8_t>(actuator2_rel2.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator0_rel0.getState()) | static_cast<uint8_t>(actuator2_rel2.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else
@@ -1202,8 +1255,8 @@ auto scanClickables(uint16_t elapsed_ms) noexcept -> uint8_t
             DPL(FPSTR(dStr::CLICKABLE), FPSTR(dStr::SPACE), 12U, FPSTR(dStr::SPACE), FPSTR(dStr::LONG), FPSTR(dStr::SPACE),
                 FPSTR(dStr::CLICKED));
             const uint8_t actuatorsLongOn =
-                static_cast<uint8_t>(actuator2_rel2.getState()) + static_cast<uint8_t>(actuator1_rel1.getState());
-            const bool stateToSet = (static_cast<uint8_t>(actuatorsLongOn << 1U) < 2U);
+                static_cast<uint8_t>(actuator2_rel2.getState()) | static_cast<uint8_t>(actuator1_rel1.getState());
+            const bool stateToSet = actuatorsLongOn < 1U;
 #if LSH_CORE_ACTUATOR_NEEDS_SWITCH_TIMESTAMP
             const uint32_t actionNow = timeKeeper::getTime();
 #else

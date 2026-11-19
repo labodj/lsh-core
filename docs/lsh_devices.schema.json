@@ -64,18 +64,21 @@
               "additionalProperties": false,
               "properties": {
                 "auto_off": {
+                  "description": "Maximum duration: 2147483647 ms.",
+                  "maximum": 2147483647,
                   "oneOf": [
                     {
                       "minimum": 1,
                       "type": "integer"
                     },
                     {
-                      "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                      "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                       "type": "string"
                     }
                   ]
                 },
                 "auto_off_ms": {
+                  "maximum": 2147483647,
                   "minimum": 1,
                   "type": "integer"
                 },
@@ -121,7 +124,7 @@
                       "type": "integer"
                     },
                     {
-                      "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                      "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                       "type": "string"
                     }
                   ]
@@ -188,7 +191,7 @@
                 "long": {
                   "oneOf": [
                     {
-                      "type": "boolean"
+                      "const": false
                     },
                     {
                       "oneOf": [
@@ -209,13 +212,211 @@
                     },
                     {
                       "additionalProperties": false,
+                      "allOf": [
+                        {
+                          "not": {
+                            "required": [
+                              "target",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "group",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "target"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "group"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "action"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "after",
+                              "time"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "after",
+                              "time_ms"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "time",
+                              "time_ms"
+                            ]
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "enabled": {
+                                "const": false
+                              }
+                            },
+                            "required": [
+                              "enabled"
+                            ]
+                          },
+                          "then": {
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "target"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "targets"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "group"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "groups"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "scene"
+                                  ]
+                                },
+                                {
+                                  "properties": {
+                                    "network": {
+                                      "const": true
+                                    }
+                                  },
+                                  "required": [
+                                    "network"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "after"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time_ms"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "target"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "targets"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "group"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "groups"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "scene"
+                              ]
+                            },
+                            {
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              },
+                              "required": [
+                                "enabled"
+                              ]
+                            },
+                            {
+                              "properties": {
+                                "network": {
+                                  "const": true
+                                }
+                              },
+                              "required": [
+                                "network"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
                       "properties": {
                         "action": {
                           "enum": [
                             "toggle",
                             "on",
-                            "off",
-                            "all_off"
+                            "off"
                           ]
                         },
                         "after": {
@@ -225,7 +426,7 @@
                               "type": "integer"
                             },
                             {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                               "type": "string"
                             }
                           ]
@@ -296,12 +497,13 @@
                               "type": "integer"
                             },
                             {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                               "type": "string"
                             }
                           ]
                         },
                         "time_ms": {
+                          "maximum": 65535,
                           "minimum": 1,
                           "type": "integer"
                         }
@@ -317,7 +519,7 @@
                 "short": {
                   "oneOf": [
                     {
-                      "type": "boolean"
+                      "const": false
                     },
                     {
                       "oneOf": [
@@ -338,36 +540,180 @@
                     },
                     {
                       "additionalProperties": false,
+                      "allOf": [
+                        {
+                          "not": {
+                            "required": [
+                              "target",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "group",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "target"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "group"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "action"
+                            ]
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "enabled": {
+                                "const": false
+                              }
+                            },
+                            "required": [
+                              "enabled"
+                            ]
+                          },
+                          "then": {
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "target"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "targets"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "group"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "groups"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "scene"
+                                  ]
+                                },
+                                {
+                                  "properties": {
+                                    "network": {
+                                      "const": true
+                                    }
+                                  },
+                                  "required": [
+                                    "network"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "after"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time_ms"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "target"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "targets"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "group"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "groups"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "scene"
+                              ]
+                            },
+                            {
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              },
+                              "required": [
+                                "enabled"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
                       "properties": {
                         "action": {
                           "enum": [
                             "toggle",
-                            "on",
-                            "off",
-                            "all_off"
-                          ]
-                        },
-                        "after": {
-                          "oneOf": [
-                            {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
-                              "type": "string"
-                            }
+                            "normal"
                           ]
                         },
                         "enabled": {
                           "type": "boolean"
-                        },
-                        "fallback": {
-                          "enum": [
-                            "local",
-                            "do_nothing",
-                            "none"
-                          ]
                         },
                         "group": {
                           "minLength": 1,
@@ -389,9 +735,6 @@
                               "uniqueItems": true
                             }
                           ]
-                        },
-                        "network": {
-                          "type": "boolean"
                         },
                         "scene": {
                           "minLength": 1,
@@ -417,22 +760,6 @@
                               "uniqueItems": true
                             }
                           ]
-                        },
-                        "time": {
-                          "oneOf": [
-                            {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
-                              "type": "string"
-                            }
-                          ]
-                        },
-                        "time_ms": {
-                          "minimum": 1,
-                          "type": "integer"
                         }
                       },
                       "type": "object"
@@ -463,11 +790,263 @@
                     },
                     {
                       "additionalProperties": false,
+                      "allOf": [
+                        {
+                          "not": {
+                            "required": [
+                              "target",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "group",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "target"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "targets"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "group"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "groups"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "scene",
+                              "action"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "after",
+                              "time"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "after",
+                              "time_ms"
+                            ]
+                          }
+                        },
+                        {
+                          "not": {
+                            "required": [
+                              "time",
+                              "time_ms"
+                            ]
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "enabled": {
+                                "const": false
+                              }
+                            },
+                            "required": [
+                              "enabled"
+                            ]
+                          },
+                          "then": {
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "target"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "targets"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "group"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "groups"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "scene"
+                                  ]
+                                },
+                                {
+                                  "properties": {
+                                    "network": {
+                                      "const": true
+                                    }
+                                  },
+                                  "required": [
+                                    "network"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "after"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "time_ms"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "action": {
+                                "const": "all_off"
+                              }
+                            },
+                            "required": [
+                              "action"
+                            ]
+                          },
+                          "then": {
+                            "not": {
+                              "anyOf": [
+                                {
+                                  "required": [
+                                    "target"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "targets"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "group"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "groups"
+                                  ]
+                                },
+                                {
+                                  "required": [
+                                    "scene"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "if": {
+                            "properties": {
+                              "action": {
+                                "const": "off"
+                              }
+                            },
+                            "required": [
+                              "action"
+                            ]
+                          },
+                          "then": {
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "target"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "targets"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "group"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "groups"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "scene"
+                                ]
+                              },
+                              {
+                                "properties": {
+                                  "network": {
+                                    "const": true
+                                  }
+                                },
+                                "required": [
+                                  "network"
+                                ]
+                              },
+                              {
+                                "properties": {
+                                  "enabled": {
+                                    "const": false
+                                  }
+                                },
+                                "required": [
+                                  "enabled"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ],
                       "properties": {
                         "action": {
                           "enum": [
-                            "toggle",
-                            "on",
                             "off",
                             "all_off"
                           ]
@@ -479,7 +1058,7 @@
                               "type": "integer"
                             },
                             {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                               "type": "string"
                             }
                           ]
@@ -550,12 +1129,13 @@
                               "type": "integer"
                             },
                             {
-                              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                               "type": "string"
                             }
                           ]
                         },
                         "time_ms": {
+                          "maximum": 65535,
                           "minimum": 1,
                           "type": "integer"
                         }
@@ -606,6 +1186,7 @@
                 "type": "boolean"
               },
               "bench_iterations": {
+                "maximum": 4294967295,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -892,10 +1473,12 @@
             "additionalProperties": false,
             "properties": {
               "bridge_baud": {
+                "maximum": 4294967295,
                 "minimum": 1,
                 "type": "integer"
               },
               "debug_baud": {
+                "maximum": 4294967295,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -903,43 +1486,51 @@
                 "type": "boolean"
               },
               "max_rx_bytes_per_loop": {
+                "maximum": 65535,
                 "minimum": 1,
                 "type": "integer"
               },
               "max_rx_payloads_per_loop": {
+                "maximum": 255,
                 "minimum": 1,
                 "type": "integer"
               },
               "msgpack_frame_idle_timeout": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
                 "oneOf": [
                   {
                     "minimum": 0,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "rx_buffer_size": {
-                "minimum": 1,
+                "maximum": 65535,
+                "minimum": 2,
                 "type": "integer"
               },
               "timeout": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
                 "oneOf": [
                   {
                     "minimum": 0,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "tx_buffer_size": {
-                "minimum": 1,
+                "maximum": 65535,
+                "minimum": 2,
                 "type": "integer"
               }
             },
@@ -953,181 +1544,211 @@
             "additionalProperties": false,
             "properties": {
               "actuator_debounce": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
                 "oneOf": [
                   {
                     "minimum": 0,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "auto_off_check_interval": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "bridge_boot_retry": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "bridge_state_timeout": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "button_debounce": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
                 "oneOf": [
                   {
                     "minimum": 0,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "connection_timeout": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "long_click": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "network_click_ack_timeout": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "network_click_check_interval": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "network_click_confirm_retry_timeout": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "network_click_timeout": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "ping_interval": {
-                "oneOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
-                    "type": "string"
-                  }
-                ]
-              },
-              "post_receive_delay": {
+                "description": "Maximum duration: 65534 ms.",
+                "maximum": 65534,
                 "oneOf": [
                   {
                     "minimum": 0,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "post_receive_delay": {
+                "description": "Maximum duration: 255 ms.",
+                "maximum": 255,
+                "oneOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "scan_interval": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
               },
               "super_long_click": {
+                "description": "Maximum duration: 65535 ms.",
+                "maximum": 65535,
                 "oneOf": [
                   {
                     "minimum": 1,
                     "type": "integer"
                   },
                   {
-                    "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+                    "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
                     "type": "string"
                   }
                 ]
@@ -1158,6 +1779,7 @@
           "type": "boolean"
         },
         "bench_iterations": {
+          "maximum": 4294967295,
           "minimum": 1,
           "type": "integer"
         },
@@ -1209,10 +1831,12 @@
         },
         "static_config_router_header": {
           "default": "lsh_static_config_router.hpp",
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.h(pp)?$",
           "type": "string"
         },
         "user_config_header": {
           "default": "lsh_user_config.hpp",
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.h(pp)?$",
           "type": "string"
         }
       },
@@ -1233,10 +1857,12 @@
       "additionalProperties": false,
       "properties": {
         "bridge_baud": {
+          "maximum": 4294967295,
           "minimum": 1,
           "type": "integer"
         },
         "debug_baud": {
+          "maximum": 4294967295,
           "minimum": 1,
           "type": "integer"
         },
@@ -1244,43 +1870,51 @@
           "type": "boolean"
         },
         "max_rx_bytes_per_loop": {
+          "maximum": 65535,
           "minimum": 1,
           "type": "integer"
         },
         "max_rx_payloads_per_loop": {
+          "maximum": 255,
           "minimum": 1,
           "type": "integer"
         },
         "msgpack_frame_idle_timeout": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
           "oneOf": [
             {
               "minimum": 0,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "rx_buffer_size": {
-          "minimum": 1,
+          "maximum": 65535,
+          "minimum": 2,
           "type": "integer"
         },
         "timeout": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
           "oneOf": [
             {
               "minimum": 0,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "tx_buffer_size": {
-          "minimum": 1,
+          "maximum": 65535,
+          "minimum": 2,
           "type": "integer"
         }
       },
@@ -1290,181 +1924,211 @@
       "additionalProperties": false,
       "properties": {
         "actuator_debounce": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
           "oneOf": [
             {
               "minimum": 0,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "auto_off_check_interval": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "bridge_boot_retry": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "bridge_state_timeout": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "button_debounce": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
           "oneOf": [
             {
               "minimum": 0,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "connection_timeout": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "long_click": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "network_click_ack_timeout": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "network_click_check_interval": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "network_click_confirm_retry_timeout": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "network_click_timeout": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "ping_interval": {
-          "oneOf": [
-            {
-              "minimum": 1,
-              "type": "integer"
-            },
-            {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
-              "type": "string"
-            }
-          ]
-        },
-        "post_receive_delay": {
+          "description": "Maximum duration: 65534 ms.",
+          "maximum": 65534,
           "oneOf": [
             {
               "minimum": 0,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*\\d+\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
+              "type": "string"
+            }
+          ]
+        },
+        "post_receive_delay": {
+          "description": "Maximum duration: 255 ms.",
+          "maximum": 255,
+          "oneOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\s*\\d+\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "scan_interval": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]
         },
         "super_long_click": {
+          "description": "Maximum duration: 65535 ms.",
+          "maximum": 65535,
           "oneOf": [
             {
               "minimum": 1,
               "type": "integer"
             },
             {
-              "pattern": "^\\s*[1-9]\\d*\\s*(ms|s|m|h)?\\s*$",
+              "pattern": "^\\s*0*[1-9]\\d*\\s*([mM][sS]|[sSmMhH])?\\s*$",
               "type": "string"
             }
           ]

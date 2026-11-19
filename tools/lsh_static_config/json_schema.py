@@ -6,13 +6,21 @@ import json
 import tomllib
 from typing import TYPE_CHECKING, cast
 
+from .constants import DURATION_UNIT, MAX_AUTO_OFF_MS, UINT8_MAX, UINT32_MAX
 from .errors import fail
+from .parser import parse_project
 from .presets import PRESETS
+from .public_schema import (
+    SERIAL_BUFFER_FLAG_MAP,
+    SERIAL_INTEGER_LIMITS,
+    TIMING_DEFINE_MAP,
+)
+from .validation import validate_output_paths
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from .models import TomlTable
+    from .models import ProjectConfig, TomlTable
 
 JsonObject = dict[str, object]
 
@@ -70,7 +78,16 @@ def default_vscode_schema_path(config_path: Path) -> Path:
 
 def write_project_schema(config_path: Path, output_path: Path | None = None) -> Path:
     """Write the project-specific schema and return the path used."""
+    return write_schema_for_project(parse_project(config_path), output_path)
+
+
+def write_schema_for_project(
+    project: ProjectConfig, output_path: Path | None = None
+) -> Path:
+    """Write the schema beside an already validated project."""
+    config_path = project.source_path
     schema_path = output_path or default_vscode_schema_path(config_path)
+    validate_output_paths(project, schema_path)
     schema_path.parent.mkdir(parents=True, exist_ok=True)
     schema_path.write_text(project_schema_json(config_path), encoding="utf-8")
     return schema_path
@@ -86,7 +103,7 @@ def _load_toml_table(path: Path) -> TomlTable:
     try:
         with path.open("rb") as file_obj:
             root = tomllib.load(file_obj)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"Cannot read {path}: {exc}")
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")
@@ -97,8 +114,6 @@ def _load_toml_table(path: Path) -> TomlTable:
 
 def _root_schema(devices_schema: JsonObject) -> JsonObject:
     """Return the top-level project schema with a supplied devices schema."""
-    duration = _duration_schema()
-    positive_duration = _positive_duration_schema()
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://labodj.github.io/lsh-core/lsh_devices.schema.json",
@@ -112,8 +127,8 @@ def _root_schema(devices_schema: JsonObject) -> JsonObject:
             "generator": _generator_schema(),
             "controller": _controller_schema(),
             "features": _features_schema(),
-            "timing": _timing_schema(duration, positive_duration),
-            "serial": _serial_schema(duration, positive_duration),
+            "timing": _timing_schema(),
+            "serial": _serial_schema(),
             "advanced": _advanced_schema(),
             "devices": devices_schema,
         },
@@ -125,7 +140,7 @@ def _duration_schema() -> JsonObject:
     return {
         "oneOf": [
             {"type": "integer", "minimum": 0},
-            {"type": "string", "pattern": r"^\s*\d+\s*(ms|s|m|h)?\s*$"},
+            {"type": "string", "pattern": rf"^\s*\d+\s*{DURATION_UNIT}\s*$"},
         ]
     }
 
@@ -135,7 +150,7 @@ def _positive_duration_schema() -> JsonObject:
     return {
         "oneOf": [
             {"type": "integer", "minimum": 1},
-            {"type": "string", "pattern": r"^\s*[1-9]\d*\s*(ms|s|m|h)?\s*$"},
+            {"type": "string", "pattern": rf"^\s*0*[1-9]\d*\s*{DURATION_UNIT}\s*$"},
         ]
     }
 
@@ -180,30 +195,132 @@ def _click_action_schema(
     resolved_group_value = group_value if group_value is not None else target_value
     group_name = _target_item_schema(resolved_group_value)
     scene_name = _target_name_schema(scene_names)
-    return {
-        "oneOf": [
-            {"type": "boolean"},
-            target_value,
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "enabled": {"type": "boolean"},
-                    "target": target_name,
-                    "targets": target_value,
-                    "group": group_name,
-                    "groups": resolved_group_value,
-                    "scene": scene_name,
-                    "action": {"enum": ["toggle", "on", "off", "all_off"]},
-                    "after": positive_duration,
-                    "time": positive_duration,
-                    "time_ms": {"type": "integer", "minimum": 1},
-                    "network": {"type": "boolean"},
-                    "fallback": {"enum": ["local", "do_nothing", "none"]},
-                },
-            },
-        ]
+    selectors = ("target", "targets", "group", "groups")
+    local = [{"required": [key]} for key in (*selectors, "scene")]
+    common = {
+        "enabled": {"type": "boolean"},
+        "target": target_name,
+        "targets": target_value,
+        "group": group_name,
+        "groups": resolved_group_value,
+        "scene": scene_name,
     }
+    timed = {
+        "after": positive_duration,
+        "time": positive_duration,
+        "time_ms": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "network": {"type": "boolean"},
+        "fallback": {"enum": ["local", "do_nothing", "none"]},
+    }
+    network = {"required": ["network"], "properties": {"network": {"const": True}}}
+    disabled = {"required": ["enabled"], "properties": {"enabled": {"const": False}}}
+    actions = {
+        "short": ["toggle", "normal"],
+        "long": ["toggle", "on", "off"],
+        "super_long": ["off", "all_off"],
+    }
+    result: JsonObject = {}
+    for kind, operations in actions.items():
+        properties = {
+            **common,
+            **(timed if kind != "short" else {}),
+            "action": {"enum": operations},
+        }
+        conflicts = [
+            ("target", "targets"),
+            ("group", "groups"),
+            *(("scene", k) for k in (*selectors, "action")),
+        ]
+        if kind != "short":
+            conflicts.extend(
+                [("after", "time"), ("after", "time_ms"), ("time", "time_ms")]
+            )
+        rules: list[JsonObject] = [
+            {"not": {"required": list(pair)}} for pair in conflicts
+        ]
+        rules.append(
+            {
+                "if": disabled,
+                "then": {
+                    "not": {
+                        "anyOf": [
+                            *local,
+                            network,
+                            *(
+                                {"required": [key]}
+                                for key in ("after", "time", "time_ms")
+                            ),
+                        ]
+                    }
+                },
+            }
+        )
+        compact = target_value
+        if kind == "super_long":
+            rules.append(
+                {
+                    "if": {
+                        "required": ["action"],
+                        "properties": {"action": {"const": "all_off"}},
+                    },
+                    "then": {"not": {"anyOf": local}},
+                }
+            )
+            rules.append(
+                {
+                    "if": {
+                        "required": ["action"],
+                        "properties": {"action": {"const": "off"}},
+                    },
+                    "then": {"anyOf": [*local, network, disabled]},
+                }
+            )
+            keywords = ("all_off", "off", "disabled", "none")
+            known = target_name.get("enum")
+            if isinstance(known, list):
+                reserved = {name.lower() for name in known}.intersection(keywords)
+                names = [name for name in known if name.lower() not in reserved]
+                words = [
+                    "".join(
+                        f"[{c.lower()}{c.upper()}]" if c.isalpha() else c for c in word
+                    )
+                    for word in keywords
+                    if word not in reserved
+                ]
+                compact = {
+                    "anyOf": [
+                        _target_name_schema(tuple(names)),
+                        *(
+                            [
+                                {
+                                    "type": "string",
+                                    "pattern": "^(?:" + "|".join(words) + ")$",
+                                }
+                            ]
+                            if words
+                            else []
+                        ),
+                        cast("list[object]", target_value["oneOf"])[1],
+                    ]
+                }
+
+        else:
+            rules.append(
+                {"anyOf": [*local, disabled, *([network] if kind == "long" else [])]}
+            )
+        result[kind] = {
+            "oneOf": [
+                {"type": "boolean"} if kind == "super_long" else {"const": False},
+                compact,
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": properties,
+                    "allOf": rules,
+                },
+            ]
+        }
+    return result
 
 
 def _generic_devices_schema() -> JsonObject:
@@ -289,7 +406,6 @@ def _device_schema(
     resource_names: dict[str, tuple[str, ...]] | None,
 ) -> JsonObject:
     """Return the device-resource schema."""
-    duration = _duration_schema()
     positive_duration = _positive_duration_schema()
     names = resource_names or {}
     return {
@@ -312,8 +428,8 @@ def _device_schema(
             "disable_eth": {"type": "boolean"},
             "controllino_pin_aliases": {"type": "boolean"},
             "features": _features_schema(),
-            "timing": _timing_schema(duration, positive_duration),
-            "serial": _serial_schema(duration, positive_duration),
+            "timing": _timing_schema(),
+            "serial": _serial_schema(),
             "advanced": _advanced_schema(),
             "actuators": {
                 "type": "object",
@@ -361,10 +477,12 @@ def _generator_schema() -> JsonObject:
             "user_config_header": {
                 "type": "string",
                 "default": "lsh_user_config.hpp",
+                "pattern": r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.h(pp)?$",
             },
             "static_config_router_header": {
                 "type": "string",
                 "default": "lsh_static_config_router.hpp",
+                "pattern": r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.h(pp)?$",
             },
             "id_lock_file": {
                 "type": "string",
@@ -402,7 +520,11 @@ def _features_schema() -> JsonObject:
             "fast_actuators": {"type": "boolean"},
             "fast_indicators": {"type": "boolean"},
             "bench": {"type": "boolean"},
-            "bench_iterations": {"type": "integer", "minimum": 1},
+            "bench_iterations": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": UINT32_MAX,
+            },
             "aggressive_constexpr_ctors": {
                 "oneOf": [{"type": "boolean"}, {"const": "auto"}]
             },
@@ -413,47 +535,47 @@ def _features_schema() -> JsonObject:
     }
 
 
-def _timing_schema(duration: object, positive_duration: object) -> JsonObject:
-    """Return the timing-section schema."""
+def _timing_schema() -> JsonObject:
+    """Use the generator's AVR field widths for editor feedback."""
     return {
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "actuator_debounce": duration,
-            "button_debounce": duration,
-            "scan_interval": positive_duration,
-            "long_click": positive_duration,
-            "super_long_click": positive_duration,
-            "network_click_timeout": positive_duration,
-            "network_click_ack_timeout": positive_duration,
-            "network_click_confirm_retry_timeout": positive_duration,
-            "ping_interval": positive_duration,
-            "connection_timeout": positive_duration,
-            "bridge_boot_retry": positive_duration,
-            "bridge_state_timeout": positive_duration,
-            "post_receive_delay": duration,
-            "network_click_check_interval": positive_duration,
-            "auto_off_check_interval": positive_duration,
+            field: _bounded_duration_schema(allow_zero=allow_zero, maximum=maximum)
+            for field, (_, allow_zero, maximum) in TIMING_DEFINE_MAP.items()
         },
     }
 
 
-def _serial_schema(duration: object, positive_duration: object) -> JsonObject:
+def _bounded_duration_schema(*, allow_zero: bool, maximum: int) -> JsonObject:
+    """Bound millisecond integers and document the limit for unit strings."""
+    duration = _duration_schema() if allow_zero else _positive_duration_schema()
+    return {
+        **duration,
+        "maximum": maximum,
+        "description": f"Maximum duration: {maximum} ms.",
+    }
+
+
+def _serial_schema() -> JsonObject:
     """Return the serial-section schema."""
-    del positive_duration
     return {
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "debug_baud": {"type": "integer", "minimum": 1},
-            "bridge_baud": {"type": "integer", "minimum": 1},
-            "timeout": duration,
-            "msgpack_frame_idle_timeout": duration,
-            "max_rx_payloads_per_loop": {"type": "integer", "minimum": 1},
-            "max_rx_bytes_per_loop": {"type": "integer", "minimum": 1},
+            **{
+                field: {
+                    "type": "integer",
+                    "minimum": 2 if field in SERIAL_BUFFER_FLAG_MAP else 1,
+                    "maximum": maximum,
+                }
+                for field, maximum in SERIAL_INTEGER_LIMITS.items()
+            },
+            "timeout": _bounded_duration_schema(allow_zero=True, maximum=UINT8_MAX),
+            "msgpack_frame_idle_timeout": _bounded_duration_schema(
+                allow_zero=True, maximum=UINT8_MAX
+            ),
             "flush_after_send": {"type": "boolean"},
-            "rx_buffer_size": {"type": "integer", "minimum": 1},
-            "tx_buffer_size": {"type": "integer", "minimum": 1},
         },
     }
 
@@ -493,8 +615,14 @@ def _actuator_schema(positive_duration: object, target_value: JsonObject) -> Jso
             "pin": {"type": "string", "minLength": 1},
             "default": {"type": "boolean"},
             "protected": {"type": "boolean"},
-            "auto_off": positive_duration,
-            "auto_off_ms": {"type": "integer", "minimum": 1},
+            "auto_off": _bounded_duration_schema(
+                allow_zero=False, maximum=MAX_AUTO_OFF_MS
+            ),
+            "auto_off_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": MAX_AUTO_OFF_MS,
+            },
             "pulse": positive_duration,
             "pulse_ms": {"type": "integer", "minimum": 1, "maximum": 65535},
             "interlock": target_value,
@@ -546,7 +674,7 @@ def _scene_schema(target_value: JsonObject) -> JsonObject:
     }
 
 
-def _button_schema(click_action: object) -> JsonObject:
+def _button_schema(click_action: JsonObject) -> JsonObject:
     """Return the button-resource schema."""
     return {
         "type": "object",
@@ -555,9 +683,7 @@ def _button_schema(click_action: object) -> JsonObject:
         "properties": {
             "id": {"type": "integer", "minimum": 1, "maximum": 255},
             "pin": {"type": "string", "minLength": 1},
-            "short": click_action,
-            "long": click_action,
-            "super_long": click_action,
+            **click_action,
         },
     }
 

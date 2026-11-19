@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import textwrap
@@ -131,3 +132,33 @@ def test_msgpack_receiver_ignores_noise_and_requires_opening_delimiter(
         text=True,
     )
     assert run_result.returncode == 0, run_result.stderr + run_result.stdout
+
+
+def test_v3_inbound_command_capacity(tmp_path: Path) -> None:
+    """Accept complete ACK and packed SET_STATE commands at wire-width transitions."""
+    compiler = shutil.which("g++")
+    assert compiler is not None
+    root = Path(__file__).resolve().parents[1]
+    binary = tmp_path / "command_sizes"
+    subprocess.run(  # noqa: S603
+        [
+            compiler,
+            "-std=c++17",
+            "-I",
+            str(root / "src"),
+            str(root / "tests/msgpack_command_sizes.cpp"),
+            str(root / "src/communication/msgpack_serial_framing.cpp"),
+            "-o",
+            str(binary),
+        ],
+        check=True,
+    )
+    golden = root / "vendor/lsh-protocol/shared/lsh_protocol_golden_payloads.json"
+    vectors = json.loads(golden.read_text())["wireVectors"].values()
+    stream = b"".join(bytes.fromhex(v["uart"]) for v in vectors)
+    payloads = [bytes.fromhex(v["msgpack"]) for v in vectors]
+    assert payloads
+    result = subprocess.run(  # noqa: S603 - the binary was built in tmp_path above.
+        [str(binary)], input=stream, capture_output=True, check=True
+    )
+    assert result.stdout == b"".join(bytes([len(raw)]) + raw for raw in payloads)

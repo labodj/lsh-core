@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
     from .models import DeviceConfig
 
-SWITCH_LOOKUP_MIN_VALUES = 4
+# Four sparse IDs compile smaller as comparisons on ATmega328P (AVR-GCC -Os).
+SWITCH_LOOKUP_MIN_VALUES = 5
 SWITCH_LOOKUP_MAX_DENSITY_PERCENT = 50
 
 
@@ -133,7 +134,11 @@ def render_index_to_value_function(
     pairs = list(enumerate(values))
     runs = consecutive_runs(pairs)
     for run_index, (start, end, offset) in enumerate(runs):
-        condition = render_range_condition(param_name, start, end)
+        condition = (
+            f"{param_name} <= {u8(end)}"
+            if start and start != end
+            else render_range_condition(param_name, start, end)
+        )
         value = render_run_value_expression(param_name, start, end, offset)
         if run_index == len(runs) - 1:
             if run_index != 0:

@@ -13,6 +13,7 @@ from .constants import (
     INDICATOR_MODES,
     LONG_CLICK_TYPES,
     MACRO_RE,
+    MAX_AUTO_OFF_MS,
     NETWORK_FALLBACKS,
     SAFE_CPP_EXPR_FORBIDDEN,
     SUPER_LONG_CLICK_TYPES,
@@ -504,11 +505,11 @@ def parse_actuators(raw: TomlValue | None, path: str) -> list[ActuatorConfig]:
         )
         if "auto_off" in table:
             actuator.auto_off_ms = parse_duration_ms(
-                table["auto_off"], f"{item_path}.auto_off"
+                table["auto_off"], f"{item_path}.auto_off", MAX_AUTO_OFF_MS
             )
         elif "auto_off_ms" in table:
             actuator.auto_off_ms = parse_duration_ms(
-                table["auto_off_ms"], f"{item_path}.auto_off_ms"
+                table["auto_off_ms"], f"{item_path}.auto_off_ms", MAX_AUTO_OFF_MS
             )
         if "pulse" in table:
             actuator.pulse_ms = parse_duration_ms(
@@ -589,12 +590,16 @@ def parse_project(path: Path) -> ProjectConfig:
     try:
         with path.open("rb") as file_obj:
             root = tomllib.load(file_obj)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"Cannot read {path}: {exc}")
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")
 
-    raw_root_table = expect_table(root, "root")
+    return parse_project_table(path, expect_table(root, "root"))
+
+
+def parse_project_table(path: Path, raw_root_table: TomlTable) -> ProjectConfig:
+    """Validate a parsed project, resolving outputs relative to its intended TOML."""
     raw_generator_table = expect_table(raw_root_table.get("generator", {}), "generator")
     lock_file = safe_path_fragment(
         get_string(
@@ -724,7 +729,13 @@ def parse_project(path: Path) -> ProjectConfig:
                 table.get("indicators"), f"{device_path}.indicators"
             ),
         )
-        validate_device(device)
+        preset = raw_root_table.get("preset", "")
+        maxi = (
+            isinstance(preset, str)
+            and preset.lower().startswith("controllino-maxi/")
+            and "Controllino.h" in device.hardware_include
+        )
+        validate_device(device, maxi=maxi)
         validate_controllino_options(device, device_path)
         if safe_key in devices:
             fail(f"{device_path} normalizes to duplicate device key {safe_key!r}.")

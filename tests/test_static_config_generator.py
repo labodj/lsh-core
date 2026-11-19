@@ -1160,10 +1160,7 @@ def test_renders_extreme_static_profiles() -> None:
     assert "setClickable" not in static_header
     assert "NoNetworkClickType::DO_NOTHING" not in static_header
     assert "const uint8_t totalControlledActuatorsOn" in static_header
-    assert (
-        "return static_cast<uint8_t>(totalControlledActuatorsOn << 1U) > 3U;"
-        in static_header
-    )
+    assert "return totalControlledActuatorsOn > 1U;" in static_header
     assert "case 0U:" in static_header
     assert "case 1U:" in static_header
 

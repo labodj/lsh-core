@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .errors import fail
 from .formatter import render_toml
+from .parser import parse_project_table
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -76,13 +77,15 @@ FALLBACK_ACTIONS = {
 }
 
 
-def migrate_file(path: Path) -> str:
+def migrate_file(path: Path, *, output_path: Path | None = None) -> str:
     """Return a schema v2 TOML document converted from one legacy profile."""
     root = _read_root(path)
     if root.get("schema_version") == SCHEMA_VERSION:
         fail(f"{path} is already schema v2.")
     migrated = _migrate_root(root)
-    return render_toml(migrated)
+    content = render_toml(migrated)
+    parse_project_table(output_path or path, tomllib.loads(content))
+    return content
 
 
 def _read_root(path: Path) -> TomlTable:
@@ -90,7 +93,7 @@ def _read_root(path: Path) -> TomlTable:
     try:
         with path.open("rb") as file_obj:
             root = tomllib.load(file_obj)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"Cannot read {path}: {exc}")
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")
@@ -271,6 +274,8 @@ def _migrate_named_resources(
     for index, raw_resource in enumerate(raw_resources):
         resource = _table(raw_resource, f"{path}[{index}]")
         name = _string(resource.get("name"), f"{path}[{index}].name")
+        if name in resources:
+            fail(f"{path}[{index}].name duplicates {name!r}.")
         resources[name] = migrate_resource(resource)
     return resources
 
@@ -330,10 +335,10 @@ def _migrate_action(value: TomlValue, action_name: str) -> TomlValue:
         migrated["targets"] = targets
     if "type" in table:
         raw_type = _string(table["type"], f"{action_name}.type").lower()
-        if action_name == "super_long" and raw_type == "selective" and targets is None:
-            if migrated.get("network") is True:
-                return migrated
-            return False
+        if action_name == "super_long" and raw_type == "selective" and not targets:
+            if migrated.get("network") is not True:
+                return False
+            migrated.pop("targets", None)
         migrated["action"] = (
             _migrate_super_long_type(raw_type)
             if action_name == "super_long"

@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 from typing import TYPE_CHECKING, TypeVar
 
-from .constants import DEFAULT_LONG_CLICK_MS, DEFAULT_SUPER_LONG_CLICK_MS, UINT8_MAX
+from .constants import (
+    DEFAULT_LONG_CLICK_MS,
+    DEFAULT_SUPER_LONG_CLICK_MS,
+    UINT8_MAX,
+    UINT16_MAX,
+)
+from .cpp import header_guard
 from .errors import fail
+from .metrics import count_active_network_clicks
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Iterable, Sequence
+    from pathlib import Path
 
     from .models import ActionStep, ClickableConfig, DeviceConfig, ProjectConfig
 
@@ -44,6 +53,9 @@ def _validate_resource_count(count: int, path: str) -> None:
 
 def _validate_resource_counts(device: DeviceConfig) -> None:
     """Validate generated array/index limits for one device."""
+    _validate_resource_count(
+        count_active_network_clicks(device), f"devices.{device.key}.network_click_slots"
+    )
     _validate_resource_count(
         len(device.actuators),
         f"devices.{device.key}.actuators",
@@ -92,8 +104,26 @@ def _validate_unique_fields(device: DeviceConfig) -> None:
     )
 
 
-def _validate_unique_pins(device: DeviceConfig) -> None:
+def _validate_unique_pins(device: DeviceConfig, *, maxi: bool) -> None:
     """Reject two generated peripherals that would reconfigure the same pin."""
+    maxi_pins = (
+        {
+            **{
+                f"CONTROLLINO_{prefix}{i}": str(base + i)
+                for prefix, base, count in (
+                    ("R", 22, 10),
+                    ("D", 2, 12),
+                    ("A", 54, 10),
+                    ("IN", 18, 2),
+                )
+                for i in range(count)
+            },
+            "CONTROLLINO_MINUS": "14",
+            "CONTROLLINO_PLUS": "15",
+        }
+        if maxi
+        else {}
+    )
     owners: dict[str, str] = {}
     resources = (
         (
@@ -112,10 +142,13 @@ def _validate_unique_pins(device: DeviceConfig) -> None:
     for group_name, entries in resources:
         for resource_name, pin in entries:
             path = f"devices.{device.key}.{group_name}.{resource_name}.pin"
-            previous_owner = owners.get(pin)
+            key = maxi_pins.get(pin, pin)
+            with suppress(ValueError):
+                key = str(int(key, 8 if key.startswith("0") and key.isdigit() else 0))
+            previous_owner = owners.get(key)
             if previous_owner is not None:
                 fail(f"{path} duplicates {previous_owner}: {pin!r}.")
-            owners[pin] = path
+            owners[key] = path
 
 
 def validate_target_set(targets: Sequence[str], allowed: set[str], path: str) -> None:
@@ -239,6 +272,14 @@ def _validate_clickable_targets(device: DeviceConfig) -> None:
                         f"{target!r}; protected actuators cannot be switched "
                         "off by super-long actions."
                     )
+        for step in clickable.super_long.steps:
+            if step.operation != "ON" and protected_actuator_names.intersection(
+                step.targets
+            ):
+                fail(
+                    f"devices.{device.key}.clickables.{clickable.name}.super_long "
+                    "scene may switch off a protected actuator."
+                )
         _validate_click_timing(device, clickable)
         if (
             not _has_effective_short_action(clickable)
@@ -267,18 +308,74 @@ def _validate_indicator_targets(device: DeviceConfig) -> None:
             )
 
 
-def validate_device(device: DeviceConfig) -> None:
+def validate_device(device: DeviceConfig, *, maxi: bool = False) -> None:
     """Validate cross-resource references and static resource limits."""
     _validate_resource_counts(device)
     _validate_unique_fields(device)
-    _validate_unique_pins(device)
+    _validate_unique_pins(device, maxi=maxi)
     _validate_actuator_options(device)
     _validate_clickable_targets(device)
     _validate_indicator_targets(device)
 
 
+def validate_output_paths(
+    project: ProjectConfig, schema_path: Path | None = None
+) -> None:
+    """Check all destinations before any write, including aliases to existing files."""
+    settings = project.settings
+    root = project.source_path.parent
+    header_names = [settings.user_config_header, settings.static_config_router_header]
+    for device in project.devices.values():
+        header_names.extend((device.config_include, device.static_config_include))
+    paths = [project.source_path.resolve(), settings.id_lock_file.resolve()]
+    output_dir = settings.output_dir.resolve()
+    if not settings.id_lock_file.resolve().is_relative_to(
+        root
+    ) or not output_dir.is_relative_to(root):
+        fail("Generated output must stay inside the TOML directory.")
+    for name in header_names:
+        header = (settings.output_dir / name).resolve()
+        if not header.is_relative_to(output_dir):
+            fail(f"Generated header {name} escapes the output directory.")
+        paths.append(header)
+    if schema_path is not None:
+        paths.append(schema_path.resolve())
+    _check_distinct_files(paths)
+
+
+def _check_distinct_files(paths: list[Path]) -> None:
+    """Reject aliases and file/directory conflicts across the complete output set."""
+    seen: set[Path] = set()
+    inodes: set[tuple[int, int]] = set()
+    for path in paths:
+        if path in seen:
+            fail(f"Generated path collides with another project file: {path}.")
+        seen.add(path)
+        if path.exists():
+            if not path.is_file():
+                fail(f"Expected a file at {path}.")
+            stat = path.stat()
+            identity = (stat.st_dev, stat.st_ino)
+            if identity in inodes:
+                fail(f"Generated path {path} aliases another project file.")
+            inodes.add(identity)
+    for parent in {parent for path in paths for parent in path.parents}:
+        if parent in seen or (parent.exists() and not parent.is_dir()):
+            fail(f"Parent directory {parent} collides with a file.")
+
+
 def validate_project(project: ProjectConfig) -> None:
     """Validate cross-device generated paths and macro selectors."""
+    guards: dict[str, str] = {}
+    for include in (
+        project.settings.user_config_header,
+        project.settings.static_config_router_header,
+    ):
+        if not include.endswith((".h", ".hpp")):
+            fail(f"Generated header {include!r} must end in .h or .hpp.")
+    guards[header_guard(project.settings.user_config_header)] = (
+        project.settings.user_config_header
+    )
     header_names = {
         project.settings.user_config_header,
         project.settings.static_config_router_header,
@@ -298,6 +395,7 @@ def validate_project(project: ProjectConfig) -> None:
     )
     for device in project.devices.values():
         _validate_device_name(device)
+        _validate_connection_timeout(project, device)
         previous_macro = build_macros.get(device.build_macro)
         if previous_macro is not None:
             fail(
@@ -317,6 +415,35 @@ def validate_project(project: ProjectConfig) -> None:
                     f"{previous_owner}: {include_path}."
                 )
             generated_headers[include_path] = f"devices.{device.key}.{field_name}"
+            suffixes = (
+                ("_RESOURCE", "_IMPLEMENTATION")
+                if field_name == "static_config_include"
+                else ("",)
+            )
+            for suffix in suffixes:
+                guard = header_guard(include_path + suffix)
+                if guard in guards:
+                    fail(
+                        f"Include guard {guard} for {include_path} "
+                        f"collides with {guards[guard]}."
+                    )
+                guards[guard] = include_path
+    validate_output_paths(project)
+
+
+def _validate_connection_timeout(project: ProjectConfig, device: DeviceConfig) -> None:
+    """Leave room for the runtime's default ping timeout margin."""
+    defines = project.common_defines | device.defines
+    ping = defines.get("CONFIG_PING_INTERVAL_MS")
+    if (
+        isinstance(ping, int)
+        and ping > UINT16_MAX - 200
+        and not defines.get("CONFIG_CONNECTION_TIMEOUT_MS")
+    ):
+        fail(
+            f"devices.{device.key}.timing.ping_interval leaves no room for "
+            "the default connection_timeout (+200 ms)."
+        )
 
 
 def _validate_device_name(device: DeviceConfig) -> None:

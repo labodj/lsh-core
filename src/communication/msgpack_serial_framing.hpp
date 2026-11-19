@@ -28,6 +28,20 @@
 namespace lsh::core::transport
 {
 /**
+ * @brief Maximum deframed v3 command size for this controller's packed state.
+ * ACK/FAILOVER_CLICK: map4 + four one-byte keys with fixstr headers + p,t + uint8 i,c.
+ * SET_STATE: map2, keys and command (6 bytes), fixarray/array16, up to two bytes per uint8.
+ * Escaping is removed before a byte enters the receiver buffer.
+ */
+constexpr auto maxInboundPayloadSize(uint16_t packedStateBytes) noexcept -> uint16_t
+{
+    constexpr uint16_t clickBytes = 15U;
+    const uint16_t arrayHeader = packedStateBytes < 16U ? 1U : 3U;
+    const uint16_t stateBytes = 6U + arrayHeader + 2U * packedStateBytes;
+    return stateBytes > clickBytes ? stateBytes : clickBytes;
+}
+
+/**
  * @brief Outcome of feeding one raw serial byte into the MsgPack frame receiver.
  */
 enum class MsgPackFrameConsumeResult : uint8_t

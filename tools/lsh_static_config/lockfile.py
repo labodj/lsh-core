@@ -39,7 +39,7 @@ class IdLockResult:
 
 def apply_id_lock(root: TomlTable, lock_path: Path) -> IdLockResult:
     """Apply stable IDs to resources that omit an explicit public ID."""
-    lock_root = _read_lock(lock_path)
+    lock_root = read_lock(lock_path)
     devices = _table(root.get("devices"), "devices")
     locked_devices = _table(lock_root.get("devices", {}), "lock.devices")
 
@@ -71,21 +71,32 @@ def apply_id_lock(root: TomlTable, lock_path: Path) -> IdLockResult:
     )
 
 
-def _read_lock(path: Path) -> TomlTable:
+def read_lock(path: Path) -> TomlTable:
     """Read an existing lockfile, or return an empty lock when none exists."""
     if not path.exists():
         return {}
     try:
         with path.open("rb") as file_obj:
             root = tomllib.load(file_obj)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         fail(f"Cannot read {path}: {exc}")
     except tomllib.TOMLDecodeError as exc:
         fail(f"Invalid TOML in {path}: {exc}")
     table = _table(root, "lock")
     version = table.get("schema_version")
-    if version is not None and version != LOCK_SCHEMA_VERSION:
+    if set(table) - {"schema_version", "devices"} or not table:
+        fail(f"{path} is not an lsh-core ID lockfile.")
+    if version is not None and (
+        type(version) is not int or version != LOCK_SCHEMA_VERSION
+    ):
         fail(f"{path.name}.schema_version must be {LOCK_SCHEMA_VERSION}.")
+    for key, device in _table(table.get("devices", {}), str(path)).items():
+        groups = _table(device, f"{path}: devices.{key}")
+        if set(groups).difference(LOCKED_RESOURCE_GROUPS):
+            fail(f"{path}: unrecognized lock group in devices.{key}.")
+        for group, values in groups.items():
+            for name, value in _table(values, f"{path}: {key}.{group}").items():
+                _public_id(value, f"{path}: {key}.{group}.{name}")
     return table
 
 
@@ -102,36 +113,35 @@ def _apply_group_lock(
     rendered: dict[str, int] = {}
     auto_paths: list[str] = []
 
-    for resource_name, raw_resource in resources.items():
-        resource = _table(raw_resource, f"{path}.{resource_name}")
+    automatic: dict[str, TomlTable] = {}
+    for name, raw_resource in resources.items():
+        resource = _table(raw_resource, f"{path}.{name}")
         if "id" not in resource:
+            automatic[name] = resource
+            auto_paths.append(f"{path}.{name}.id")
             continue
-        explicit_id = _public_id(resource["id"], f"{path}.{resource_name}.id")
+        explicit_id = _public_id(resource["id"], f"{path}.{name}.id")
         if explicit_id in used_ids:
-            fail(f"{path}.{resource_name}.id duplicates another ID: {explicit_id}.")
+            fail(f"{path}.{name}.id duplicates another ID: {explicit_id}.")
         used_ids.add(explicit_id)
-        rendered[resource_name] = explicit_id
+        rendered[name] = explicit_id
 
-    for resource_name, raw_resource in resources.items():
-        resource = _table(raw_resource, f"{path}.{resource_name}")
-        if "id" in resource:
+    # Reserve every live lock before allocating IDs, regardless of TOML order.
+    for name, resource in automatic.items():
+        locked_id = _locked_id(locked_group, name, path)
+        if locked_id is None:
             continue
-        auto_paths.append(f"{path}.{resource_name}.id")
-        locked_id = _locked_id(locked_group, resource_name, path)
-        if locked_id is not None:
-            if locked_id in used_ids:
-                fail(
-                    f"{path}.{resource_name} lock ID {locked_id} conflicts "
-                    "with another ID in the current profile."
-                )
-            resource["id"] = locked_id
-            used_ids.add(locked_id)
-            rendered[resource_name] = locked_id
-            continue
-        assigned_id = _next_free_id(used_ids, path)
-        resource["id"] = assigned_id
-        used_ids.add(assigned_id)
-        rendered[resource_name] = assigned_id
+        if locked_id in used_ids:
+            fail(f"{path}.{name} lock ID {locked_id} conflicts with another ID.")
+        resource["id"] = locked_id
+        used_ids.add(locked_id)
+
+    for name, resource in automatic.items():
+        if "id" not in resource:
+            assigned_id = _next_free_id(used_ids, path)
+            resource["id"] = assigned_id
+            used_ids.add(assigned_id)
+        rendered[name] = cast("int", resource["id"])
 
     return rendered, auto_paths
 

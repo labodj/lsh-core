@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .action_bodies import (
     render_bool_accumulator,
+    render_majority_on,
     render_switch_case_with_body,
     render_u8_sum_declaration,
 )
@@ -217,7 +218,7 @@ def render_indicator_case_body(
     lines = render_u8_sum_declaration("totalControlledActuatorsOn", terms)
     lines.append(
         "        return "
-        f"static_cast<uint8_t>(totalControlledActuatorsOn << 1U) > {u8(len(links))};"
+        f"{render_majority_on('totalControlledActuatorsOn', len(links))};"
     )
     return lines
 
@@ -379,7 +380,7 @@ def render_indicator_refresh_lines(
     lines = render_u8_sum_declaration(variable_name, terms, indent="    ")
     lines.append(
         f"    {indicator_name}.applyComputedState("
-        f"static_cast<uint8_t>({variable_name} << 1U) > {u8(len(links))});"
+        f"{render_majority_on(variable_name, len(links))});"
     )
     return lines
 
@@ -413,7 +414,7 @@ def render_generated_action_accessors(
     """Render all direct generated action helpers used by hot runtime paths."""
     lines: list[str] = []
     for section in (
-        render_generated_actuator_action_helpers(device),
+        render_generated_actuator_action_helpers(device, profile.actuator_indexes),
         render_direct_short_clicks(device, profile),
         render_direct_long_clicks(device, profile),
         render_turn_off_all_actuators(device),

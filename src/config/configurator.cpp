@@ -45,7 +45,7 @@ void Configurator::finalizeSetup()
 #endif
 #undef LSH_STATIC_CONFIG_IMPLEMENTATION_PASS
 
-#if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
+#if defined(CONTROLLINO_RTC_CHIP_SELECT)
 /**
  * @brief Disable the Controllino's Real-Time Clock chip select.
  * @details This helper is intentionally kept on `Configurator` so a device
@@ -57,7 +57,9 @@ void Configurator::disableRtc()
     digitalWrite(CONTROLLINO_RTC_CHIP_SELECT, LOW);
     pinMode(CONTROLLINO_RTC_CHIP_SELECT, OUTPUT);
 }
+#endif
 
+#if defined(CONTROLLINO_ETHERNET_CHIP_SELECT)
 /**
  * @brief Disable the Controllino Ethernet controller chip select.
  * @details Use this from `Configurator::configure()` when the AVR firmware does
@@ -68,4 +70,4 @@ void Configurator::disableEth()
     digitalWrite(CONTROLLINO_ETHERNET_CHIP_SELECT, HIGH);
     pinMode(CONTROLLINO_ETHERNET_CHIP_SELECT, OUTPUT);
 }
-#endif  // defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
+#endif

@@ -339,6 +339,15 @@ jobs:
 
           platformio run -d "$smoke_dir" -e uno_release
           test -f "$smoke_dir/include/lsh_user_config.hpp"
+          starter=$(mktemp -d)
+          mkdir -p "$starter/src"
+          cp examples/avr-board-matrix/src/main.cpp "$starter/src/"
+          awk '/^```ini$/{copy=1;next} copy && /^```$/{exit} copy' docs/static-toml-config.md |
+            sed "s|labodj/lsh-core @ [^ ]*|file://$package_path|" > "$starter/platformio.ini"
+          platformio pkg install -d "$starter"
+          python3 "$starter/.pio/libdeps/kitchen_release/lsh-core/tools/generate_lsh_static_config.py" \
+            --init-config "$starter/lsh_devices.toml" --device-key kitchen
+          platformio run -d "$starter" -e kitchen_release
 
   release:
     needs:

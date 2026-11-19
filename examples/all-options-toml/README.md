@@ -13,3 +13,6 @@ ignored by git.
 
 `lsh_devices.lock.toml` is generated from the catalog and committed intentionally: it
 documents the stable ID mapping that a consumer should keep beside its TOML profile.
+
+The three catalog profiles build on Controllino Maxi. The two profiles that use
+`Arduino.h` also build on a generic Arduino Mega 2560.

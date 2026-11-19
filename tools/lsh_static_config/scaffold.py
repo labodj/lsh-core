@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .constants import IDENTIFIER_RE
 from .errors import fail
-from .json_schema import write_project_schema
+from .json_schema import default_vscode_schema_path, write_schema_for_project
+from .parser import parse_project_table
 from .presets import PRESETS
+from .validation import validate_output_paths
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -35,7 +38,9 @@ class ScaffoldOptions:
 def render_scaffold(options: ScaffoldOptions) -> str:
     """Render a small, valid, production-shaped schema v2 TOML profile."""
     _validate_options(options)
-    device_name = options.device_name or options.device_key
+    device_name = (
+        options.device_key if options.device_name is None else options.device_name
+    )
     relay_names = [f"relay{index}" for index in range(1, options.relays + 1)]
     button_names = [f"button{index}" for index in range(1, options.buttons + 1)]
     indicator_names = [
@@ -43,8 +48,11 @@ def render_scaffold(options: ScaffoldOptions) -> str:
     ]
 
     lines = [
-        "#:schema ./.vscode/lsh_devices.schema.json",
-        "",
+        *(
+            ["#:schema ./.vscode/lsh_devices.schema.json", ""]
+            if options.write_schema
+            else []
+        ),
         "schema_version = 2",
         f"preset = {_toml_string(options.preset)}",
         "",
@@ -67,10 +75,14 @@ def write_scaffold(path: Path, options: ScaffoldOptions) -> Path:
     config_path = path.resolve()
     if config_path.exists() and not options.force:
         fail(f"{config_path} already exists; pass --force to overwrite it.")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(render_scaffold(options), encoding="utf-8")
+    content = render_scaffold(options)
+    project = parse_project_table(config_path, tomllib.loads(content))
     if options.write_schema:
-        write_project_schema(config_path)
+        validate_output_paths(project, default_vscode_schema_path(config_path))
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(content, encoding="utf-8")
+    if options.write_schema:
+        write_schema_for_project(project)
     return config_path
 
 
@@ -87,6 +99,8 @@ def _validate_options(options: ScaffoldOptions) -> None:
     ):
         if isinstance(value, bool) or value < 0 or value > MAX_SCAFFOLD_RESOURCES:
             fail(f"{field_name} must be between 0 and {MAX_SCAFFOLD_RESOURCES}.")
+    if not options.relays and (options.buttons or options.indicators):
+        fail("Starter buttons and indicators require at least one relay.")
 
 
 def _validate_identifier(value: str, path: str) -> None:
@@ -143,9 +157,6 @@ def _append_buttons(
                 f"pin = {_toml_string(_button_pin(options.preset, index))}",
             ]
         )
-        if not relay_names:
-            lines.append("short = false")
-            continue
         target = relay_names[index % len(relay_names)]
         lines.append(f"short = {_toml_string(target)}")
         if index == 0 and len(relay_names) > 1:
@@ -159,8 +170,6 @@ def _append_indicators(
     indicator_names: list[str],
 ) -> None:
     """Append indicator tables only when there is a relay state to mirror."""
-    if not relay_names:
-        return
     for index, indicator_name in enumerate(indicator_names):
         lines.extend(
             [

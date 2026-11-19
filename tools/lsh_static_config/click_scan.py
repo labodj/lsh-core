@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .action_bodies import (
     render_cached_action_time_declaration,
+    render_minority_on,
     render_u8_sum_declaration,
 )
 from .action_calls import (
@@ -135,11 +136,11 @@ def render_long_local_action(
                 state_terms,
                 indent=indent,
                 outer_indent_width=4,
+                group_toggle=True,
             )
         )
         lines.append(
-            f"{indent}const bool stateToSet = "
-            f"(static_cast<uint8_t>(actuatorsLongOn << 1U) < {u8(len(links))});"
+            f"{indent}const bool stateToSet = {render_minority_on(len(links))};"
         )
         state = "stateToSet"
     else:

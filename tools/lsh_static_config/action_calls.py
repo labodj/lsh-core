@@ -31,17 +31,6 @@ def pulse_slot_map(device: DeviceConfig) -> dict[int, int]:
     }
 
 
-def interlock_indexes(device: DeviceConfig, actuator_index: int) -> list[int]:
-    """Return generated dense indexes switched OFF before this actuator turns ON."""
-    actuator_indexes = {
-        actuator.name: index for index, actuator in enumerate(device.actuators)
-    }
-    return [
-        actuator_indexes[target]
-        for target in device.actuators[actuator_index].interlock_targets
-    ]
-
-
 def actuator_needs_generated_wrapper(device: DeviceConfig, actuator_index: int) -> bool:
     """Return true when direct object calls cannot express generated semantics."""
     actuator = device.actuators[actuator_index]
@@ -148,10 +137,12 @@ def render_cached_time_for_helper() -> list[str]:
     ]
 
 
-def render_interlock_lines(device: DeviceConfig, actuator_index: int) -> list[str]:
+def render_interlock_lines(
+    device: DeviceConfig, actuator_index: int, actuator_indexes: dict[str, int]
+) -> list[str]:
     """Render interlock OFF calls guarded by the requested ON state."""
-    indexes = interlock_indexes(device, actuator_index)
-    if not indexes:
+    targets = device.actuators[actuator_index].interlock_targets
+    if not targets:
         return []
     lines = [
         "    if (state)",
@@ -161,7 +152,8 @@ def render_interlock_lines(device: DeviceConfig, actuator_index: int) -> list[st
             "this output turns ON."
         ),
     ]
-    for interlock_index in indexes:
+    for target in targets:
+        interlock_index = actuator_indexes[target]
         function_name = actuator_action_function_name(device, interlock_index)
         object_name = actuator_name_at(device, interlock_index)
         lines.append(
@@ -253,6 +245,7 @@ def render_action_helper_definition(
     device: DeviceConfig,
     actuator_index: int,
     pulse_indexes: dict[int, int],
+    actuator_indexes: dict[str, int],
 ) -> list[str]:
     """Render the central generated wrapper for one actuator."""
     object_name = actuator_name_at(device, actuator_index)
@@ -282,7 +275,7 @@ def render_action_helper_definition(
             "    bool anyActuatorChangedState = false;",
         ]
     )
-    lines.extend(render_interlock_lines(device, actuator_index))
+    lines.extend(render_interlock_lines(device, actuator_index, actuator_indexes))
     pulse_index = pulse_indexes.get(actuator_index)
     if pulse_index is None:
         lines.append(render_regular_set_line(device, actuator_index))
@@ -317,7 +310,9 @@ def render_action_helper_definition(
     return lines
 
 
-def render_generated_actuator_action_helpers(device: DeviceConfig) -> list[str]:
+def render_generated_actuator_action_helpers(
+    device: DeviceConfig, actuator_indexes: dict[str, int]
+) -> list[str]:
     """Render central wrappers used by every generated actuator action."""
     if not device.actuators:
         return []
@@ -330,6 +325,8 @@ def render_generated_actuator_action_helpers(device: DeviceConfig) -> list[str]:
     for actuator_index in range(len(device.actuators)):
         lines.append("")
         lines.extend(
-            render_action_helper_definition(device, actuator_index, pulse_indexes)
+            render_action_helper_definition(
+                device, actuator_index, pulse_indexes, actuator_indexes
+            )
         )
     return lines

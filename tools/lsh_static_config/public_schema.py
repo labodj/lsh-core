@@ -9,6 +9,7 @@ does the rest.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -16,6 +17,8 @@ from .constants import (
     DURATION_RE,
     INDICATOR_MODES,
     UINT8_MAX,
+    UINT16_MAX,
+    UINT32_MAX,
 )
 from .errors import fail
 from .lockfile import apply_id_lock
@@ -43,29 +46,40 @@ FEATURE_DEFINE_MAP = {
 }
 
 TIMING_DEFINE_MAP = {
-    "actuator_debounce": ("CONFIG_ACTUATOR_DEBOUNCE_TIME_MS", True),
-    "button_debounce": ("CONFIG_CLICKABLE_DEBOUNCE_TIME_MS", True),
-    "scan_interval": ("CONFIG_CLICKABLE_SCAN_INTERVAL_MS", False),
-    "long_click": ("CONFIG_CLICKABLE_LONG_CLICK_TIME_MS", False),
-    "super_long_click": ("CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS", False),
-    "network_click_timeout": ("CONFIG_LCNB_TIMEOUT_MS", False),
-    "network_click_ack_timeout": ("CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS", False),
+    "actuator_debounce": ("CONFIG_ACTUATOR_DEBOUNCE_TIME_MS", True, UINT8_MAX),
+    "button_debounce": ("CONFIG_CLICKABLE_DEBOUNCE_TIME_MS", True, UINT8_MAX),
+    "scan_interval": ("CONFIG_CLICKABLE_SCAN_INTERVAL_MS", False, UINT16_MAX),
+    "long_click": ("CONFIG_CLICKABLE_LONG_CLICK_TIME_MS", False, UINT16_MAX),
+    "super_long_click": (
+        "CONFIG_CLICKABLE_SUPER_LONG_CLICK_TIME_MS",
+        False,
+        UINT16_MAX,
+    ),
+    "network_click_timeout": ("CONFIG_LCNB_TIMEOUT_MS", False, UINT16_MAX),
+    "network_click_ack_timeout": (
+        "CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS",
+        False,
+        UINT16_MAX,
+    ),
     "network_click_confirm_retry_timeout": (
         "CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS",
         False,
+        UINT16_MAX,
     ),
-    "ping_interval": ("CONFIG_PING_INTERVAL_MS", False),
-    "connection_timeout": ("CONFIG_CONNECTION_TIMEOUT_MS", False),
-    "bridge_boot_retry": ("CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS", False),
-    "bridge_state_timeout": ("CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS", False),
-    "post_receive_delay": ("CONFIG_DELAY_AFTER_RECEIVE_MS", True),
+    "ping_interval": ("CONFIG_PING_INTERVAL_MS", True, UINT16_MAX - 1),
+    "connection_timeout": ("CONFIG_CONNECTION_TIMEOUT_MS", False, UINT16_MAX),
+    "bridge_boot_retry": ("CONFIG_BRIDGE_BOOT_RETRY_INTERVAL_MS", False, UINT16_MAX),
+    "bridge_state_timeout": ("CONFIG_BRIDGE_AWAIT_STATE_TIMEOUT_MS", False, UINT16_MAX),
+    "post_receive_delay": ("CONFIG_DELAY_AFTER_RECEIVE_MS", True, UINT8_MAX),
     "network_click_check_interval": (
         "CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS",
         False,
+        UINT8_MAX,
     ),
     "auto_off_check_interval": (
         "CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS",
         False,
+        UINT16_MAX,
     ),
 }
 
@@ -77,6 +91,15 @@ SERIAL_DEFINE_MAP = {
     "max_rx_payloads_per_loop": "CONFIG_COM_SERIAL_MAX_RX_PAYLOADS_PER_LOOP",
     "max_rx_bytes_per_loop": "CONFIG_COM_SERIAL_MAX_RX_BYTES_PER_LOOP",
     "flush_after_send": "CONFIG_COM_SERIAL_FLUSH_AFTER_SEND",
+}
+
+SERIAL_INTEGER_LIMITS = {
+    "debug_baud": UINT32_MAX,
+    "bridge_baud": UINT32_MAX,
+    "max_rx_payloads_per_loop": UINT8_MAX,
+    "max_rx_bytes_per_loop": UINT16_MAX,
+    "tx_buffer_size": UINT16_MAX,
+    "rx_buffer_size": UINT16_MAX,
 }
 
 SERIAL_BUFFER_FLAG_MAP = {
@@ -127,6 +150,7 @@ class TimingDefaults:
 class ActionAliasContext:
     """Resolved device-local aliases that actions may reference."""
 
+    actuator_names: set[str]
     groups: dict[str, list[str]]
     scenes: dict[str, list[TomlTable]]
 
@@ -301,12 +325,16 @@ def _expect_bool(value: TomlValue | None, path: str) -> bool:
     return value
 
 
-def _expect_int(value: TomlValue | None, path: str, minimum: int = 0) -> int:
+def _expect_int(
+    value: TomlValue | None, path: str, minimum: int = 0, maximum: int = UINT32_MAX
+) -> int:
     """Return a TOML integer in the requested lower-bounded range."""
     if isinstance(value, bool) or not isinstance(value, int):
         fail(f"{path} must be an integer.")
     if value < minimum:
         fail(f"{path} must be at least {minimum}.")
+    if value > maximum:
+        fail(f"{path} must be at most {maximum}.")
     return value
 
 
@@ -495,12 +523,13 @@ def _apply_timing(
     _reject_unknown_keys(table, set(TIMING_DEFINE_MAP), path)
     long_click_ms: int | None = None
     super_long_click_ms: int | None = None
-    for field_name, (define_name, allow_zero) in TIMING_DEFINE_MAP.items():
+    for field_name, (define_name, allow_zero, maximum) in TIMING_DEFINE_MAP.items():
         if field_name in table:
             milliseconds = _duration_ms(
                 table[field_name],
                 f"{path}.{field_name}",
                 allow_zero=allow_zero,
+                maximum=maximum,
             )
             defines[define_name] = milliseconds
             if field_name == "long_click":
@@ -533,15 +562,20 @@ def _apply_serial(
             flush_after_send = _expect_bool(value, f"{path}.{field_name}")
             defines[define_name] = 1 if flush_after_send else 0
         elif field_name in {"timeout", "msgpack_frame_idle_timeout"}:
-            defines[define_name] = _duration_ms(value, f"{path}.{field_name}")
+            defines[define_name] = _duration_ms(
+                value, f"{path}.{field_name}", allow_zero=True, maximum=UINT8_MAX
+            )
         else:
-            defines[define_name] = _expect_int(value, f"{path}.{field_name}", 1)
+            defines[define_name] = _expect_int(
+                value, f"{path}.{field_name}", 1, SERIAL_INTEGER_LIMITS[field_name]
+            )
     for field_name, flag_name in SERIAL_BUFFER_FLAG_MAP.items():
         if field_name in table:
             buffer_size = _expect_int(
                 table[field_name],
                 f"{path}.{field_name}",
-                1,
+                2,
+                SERIAL_INTEGER_LIMITS[field_name],
             )
             raw_flags.append(f"-D {flag_name}={buffer_size}")
 
@@ -555,10 +589,19 @@ def _apply_advanced(
     """Apply expert-only escape hatches after semantic defaults."""
     _reject_unknown_keys(table, {"defines", "build_flags"}, path)
     if "defines" in table:
-        defines.update(_expect_table(table["defines"], f"{path}.defines"))
+        advanced = _expect_table(table["defines"], f"{path}.defines")
+        for field in ("long_click", "super_long_click"):
+            macro = TIMING_DEFINE_MAP[field][0]
+            if macro in advanced:
+                fail(f"{path}.defines.{macro}: use timing.{field}.")
+        defines.update(advanced)
     raw_value = table.get("build_flags")
     if raw_value is not None:
-        raw_flags.extend(_string_list(raw_value, f"{path}.build_flags"))
+        flags = _string_list(raw_value, f"{path}.build_flags")
+        for field in ("long_click", "super_long_click"):
+            if re.search(rf"-D\s*{TIMING_DEFINE_MAP[field][0]}\b", " ".join(flags)):
+                fail(f"{path}.build_flags: use timing.{field}.")
+        raw_flags.extend(flags)
 
 
 def _normalize_devices(
@@ -665,7 +708,11 @@ def _normalize_device(
         f"{path}.interlocks",
         actuator_names=actuator_names,
     )
-    aliases = ActionAliasContext(groups=groups, scenes=scenes)
+    aliases = ActionAliasContext(
+        actuator_names={name.lower() for name in actuator_names},
+        groups=groups,
+        scenes=scenes,
+    )
 
     device["actuators"] = _normalize_actuators(
         table.get("actuators"),
@@ -754,7 +801,6 @@ def _normalize_actuators(
 ) -> list[TomlTable]:
     """Normalize named actuator tables and assign omitted public IDs."""
     resources = _named_resource_tables(raw, path)
-    _assign_missing_ids(resources, "id", path)
     normalized: list[TomlTable] = []
     for name, table in resources:
         item_path = f"{path}.{name}"
@@ -813,7 +859,6 @@ def _normalize_clickables(
 ) -> list[TomlTable]:
     """Normalize named button/clickable tables and assign omitted public IDs."""
     resources = _named_resource_tables(raw, path)
-    _assign_missing_ids(resources, "id", path)
     normalized: list[TomlTable] = []
     for name, table in resources:
         item_path = f"{path}.{name}"
@@ -1016,36 +1061,6 @@ def _normalize_scenes(
     return scenes
 
 
-def _assign_missing_ids(
-    resources: list[tuple[str, TomlTable]],
-    field_name: str,
-    path: str,
-) -> None:
-    """Assign deterministic IDs to resources that omit their public wire ID."""
-    used_ids: set[int] = set()
-    for name, table in resources:
-        if field_name not in table:
-            continue
-        item_path = f"{path}.{name}.{field_name}"
-        resource_id = _expect_int(table[field_name], item_path, 1)
-        if resource_id > UINT8_MAX:
-            fail(f"{item_path} must be between 1 and {UINT8_MAX}.")
-        if resource_id in used_ids:
-            fail(f"{item_path} duplicates another {path} ID: {resource_id}.")
-        used_ids.add(resource_id)
-
-    next_id = 1
-    for _, table in resources:
-        if field_name in table:
-            continue
-        while next_id in used_ids:
-            next_id += 1
-        if next_id > UINT8_MAX:
-            fail(f"{path} has more than {UINT8_MAX} public IDs.")
-        table[field_name] = next_id
-        used_ids.add(next_id)
-
-
 def _normalize_short_action(
     raw: TomlValue | None,
     path: str,
@@ -1085,7 +1100,7 @@ def _normalize_short_action(
     return normalized
 
 
-def _normalize_timed_action(  # noqa: PLR0911
+def _normalize_timed_action(
     raw: TomlValue | None,
     path: str,
     action_name: str,
@@ -1101,14 +1116,32 @@ def _normalize_timed_action(  # noqa: PLR0911
             return {"enabled": True, "time_ms": default_ms}
         return raw
     if isinstance(raw, str):
-        return _apply_action_default_time(
-            _normalize_string_action(raw, action_name),
-            default_ms,
-        )
+        shorthand = _normalize_string_action(raw, action_name)
+        if not isinstance(shorthand, list):
+            if raw.lower() in aliases.actuator_names:
+                fail(
+                    f"{path}: ambiguous {raw!r}; use an explicit action, "
+                    "enabled flag or target."
+                )
+            return _apply_action_default_time(shorthand, default_ms)
+        raw = shorthand
     if isinstance(raw, list):
-        return _apply_action_default_time(raw, default_ms)
+        if not raw:
+            fail(f"{path} must contain at least one target.")
+        raw = {"targets": raw}
 
     table = _expect_table(raw, path)
+    normalized = _normalize_timed_action_table(table, path, action_name, aliases)
+    return _apply_action_default_time(normalized, default_ms)
+
+
+def _normalize_timed_action_table(
+    table: TomlTable,
+    path: str,
+    action_name: str,
+    aliases: ActionAliasContext,
+) -> TomlTable:
+    """Resolve a timed action's targets and type together before rendering."""
     _reject_unknown_keys(
         table,
         {
@@ -1132,12 +1165,14 @@ def _normalize_timed_action(  # noqa: PLR0911
     if scene_steps is not None:
         _reject_scene_conflicts(table, path)
         normalized["steps"] = scene_steps
-        return _apply_action_default_time(normalized, default_ms)
+        return normalized
 
     targets = _optional_targets_or_groups(table, path, groups=aliases.groups)
     if targets is not None:
         normalized["targets"] = targets
     action = _get_optional_action(table, path)
+    if action is None and targets and action_name == "super_long":
+        action = "off"
     if action is not None:
         normalized["type"] = _click_type_from_action(
             action,
@@ -1145,7 +1180,7 @@ def _normalize_timed_action(  # noqa: PLR0911
             action_name,
             has_targets=bool(targets),
         )
-    return _apply_action_default_time(normalized, default_ms)
+    return normalized
 
 
 def _merge_timing_defaults(
@@ -1287,11 +1322,13 @@ def _optional_targets_or_groups(
     groups: dict[str, list[str]],
 ) -> list[str] | None:
     """Read explicit actuator targets plus explicit local groups."""
-    targets = _optional_targets(table, path) or []
+    targets = _optional_targets(table, path)
     group_names = _optional_groups(table, path)
-    if not targets and group_names is None:
+    if targets == [] or group_names == []:
+        fail(f"{path} must contain at least one target or group.")
+    if targets is None and group_names is None:
         return None
-    expanded = list(targets)
+    expanded = list(targets or [])
     for group_name in group_names or []:
         try:
             expanded.extend(groups[group_name])
@@ -1391,6 +1428,7 @@ def _duration_ms(
     path: str,
     *,
     allow_zero: bool = False,
+    maximum: int = UINT32_MAX,
 ) -> int:
     """Parse a public duration value into integer milliseconds."""
     if isinstance(value, bool):
@@ -1409,6 +1447,8 @@ def _duration_ms(
     minimum = 0 if allow_zero else 1
     if milliseconds < minimum:
         fail(f"{path} must be at least {minimum} ms.")
+    if milliseconds > maximum:
+        fail(f"{path} must be at most {maximum} ms.")
     return milliseconds
 
 

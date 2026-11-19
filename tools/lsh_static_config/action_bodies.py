@@ -10,6 +10,16 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+def render_minority_on(count: int) -> str:
+    """Render the ON decision for a group toggle, with ties switching OFF."""
+    return f"actuatorsLongOn < {(count + 1) // 2}U"
+
+
+def render_majority_on(variable: str, count: int) -> str:
+    """Compare an 8-bit ON count to half the fixed group size without overflow."""
+    return f"{variable} > {count // 2}U"
+
+
 def render_cached_action_time_declaration(indent: str) -> list[str]:
     """Render one generated timestamp shared by a multi-actuator action body."""
     return [
@@ -52,11 +62,14 @@ def render_u8_sum_declaration(
     *,
     indent: str = "        ",
     outer_indent_width: int = 0,
+    group_toggle: bool = False,
 ) -> list[str]:
     """Render a clang-format-stable uint8_t sum declaration."""
     if not terms:
         return [f"{indent}const uint8_t {variable_name} = 0U;"]
-    joined_terms = " + ".join(terms)
+    # On a pair, any active relay makes a normal long click switch both off.
+    operator = "|" if group_toggle and len(terms) == 2 else "+"  # noqa: PLR2004
+    joined_terms = f" {operator} ".join(terms)
     one_line = f"{indent}const uint8_t {variable_name} = {joined_terms};"
     if (
         len(terms) <= MAX_INLINE_SUM_TERMS

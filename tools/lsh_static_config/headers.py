@@ -20,7 +20,13 @@ from .topology import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from .models import ActuatorConfig, DeviceConfig, ProjectConfig
+    from .models import (
+        ActuatorConfig,
+        ClickableConfig,
+        DeviceConfig,
+        IndicatorConfig,
+        ProjectConfig,
+    )
 
 
 def render_user_config(project: ProjectConfig) -> str:
@@ -124,6 +130,34 @@ def render_device_config(device: DeviceConfig, project: ProjectConfig) -> str:
 def render_object_declarations(device: DeviceConfig) -> list[str]:
     """Render static Actuator, Clickable and Indicator object declarations."""
     lines = ["namespace", "{"]
+    pins: list[ActuatorConfig | ClickableConfig | IndicatorConfig] = [
+        *device.actuators,
+        *device.clickables,
+        *device.indicators,
+    ]
+    if len(pins) > 1:
+        lines.extend(
+            [
+                "[[maybe_unused]] constexpr void validatePinAssignments()",
+                "{",
+                "    switch (0)",
+                "    {",
+            ]
+        )
+        for resource in pins:
+            lines.extend(
+                [f"    case ({resource.pin}):  // {resource.name}", "        break;"]
+            )
+        lines.extend(["    }", "}", ""])
+    if device.debug_serial == device.com_serial:
+        lines.extend(
+            [
+                "#if defined(LSH_DEBUG) || defined(CONFIG_LSH_BENCH)",
+                '#warning "LSH debug/benchmark text shares the bridge UART"',
+                "#endif",
+                "",
+            ]
+        )
     lines.extend(render_static_payload_arrays(device))
     lines.append("")
     lines.extend(render_static_payload_writer_helper())

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .action_bodies import (
     render_bool_accumulator,
+    render_minority_on,
     render_switch_case_with_body,
     render_u8_sum_declaration,
 )
@@ -69,11 +70,8 @@ def render_long_normal_body(
         )
         for actuator_index in links
     ]
-    lines = render_u8_sum_declaration("actuatorsLongOn", state_terms)
-    lines.append(
-        "        const bool stateToSet = "
-        f"(static_cast<uint8_t>(actuatorsLongOn << 1U) < {u8(len(links))});"
-    )
+    lines = render_u8_sum_declaration("actuatorsLongOn", state_terms, group_toggle=True)
+    lines.append(f"        const bool stateToSet = {render_minority_on(len(links))};")
     lines.extend(render_bool_accumulator(calls, with_cached_time=cached_time))
     return lines
 

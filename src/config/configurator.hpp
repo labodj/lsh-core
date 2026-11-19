@@ -29,13 +29,16 @@
 class Configurator
 {
 private:
-#if defined(CONTROLLINO_MAXI) || defined(CONTROLLINO_MAXI_AUTOMATION) || defined(CONTROLLINO_MEGA)
+#if defined(CONTROLLINO_RTC_CHIP_SELECT)
     /**
      * @brief Disable the Controllino RTC chip select during device setup.
      * @details Call from `Configurator::configure()` when the profile does not
      *          use the onboard RTC and wants the peripheral forced inactive.
      */
     static void disableRtc();
+#endif
+
+#if defined(CONTROLLINO_ETHERNET_CHIP_SELECT)
 
     /**
      * @brief Disable the Controllino Ethernet chip select during device setup.

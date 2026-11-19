@@ -33,12 +33,22 @@ Install the library from the PlatformIO Registry:
 platform = atmelavr
 framework = arduino
 board = controllino_maxi
-lib_deps = labodj/lsh-core @ ^4.0.1
+lib_deps =
+    labodj/lsh-core @ ^4.0.2
+    controllino-plc/CONTROLLINO
+build_unflags = -std=gnu++11 -std=c++11
+build_flags =
+    -I include
+    -std=gnu++17
+extra_scripts = pre:.pio/libdeps/kitchen_release/lsh-core/tools/platformio_lsh_static_config.py
+custom_lsh_config = lsh_devices.toml
+custom_lsh_device = kitchen
 ```
 
-Then create `lsh_devices.toml` in the consumer project with the guided scaffold. Run
-`platformio pkg install` once first if the package has not yet been downloaded into
-`.pio/libdeps`:
+Copy the [Arduino entry point](../examples/avr-board-matrix/src/main.cpp) to
+`src/main.cpp`. Then create `lsh_devices.toml` in the consumer project with the guided
+scaffold. Run `platformio pkg install` once first if the package has not yet been
+downloaded into `.pio/libdeps`:
 
 ```bash
 platformio pkg install
@@ -51,8 +61,9 @@ python3 .pio/libdeps/kitchen_release/lsh-core/tools/generate_lsh_static_config.p
   --indicators 1
 ```
 
-The command also writes `.vscode/lsh_devices.schema.json`, a project-specific
-autocomplete schema that lists the actuator, group and scene names in your TOML.
+Build with `platformio run -e kitchen_release`. The command above also writes
+`.vscode/lsh_devices.schema.json`, a project-specific autocomplete schema that lists the
+actuator, group and scene names in your TOML.
 
 A compact hand-written profile looks like this:
 
@@ -84,16 +95,6 @@ pin = "D0"
 when = "ceiling"
 ```
 
-Add the PlatformIO pre-build hook:
-
-```ini
-[env:kitchen_release]
-extra_scripts = pre:.pio/libdeps/kitchen_release/lsh-core/tools/platformio_lsh_static_config.py
-custom_lsh_config = lsh_devices.toml
-custom_lsh_device = kitchen
-build_src_filter = +<*> -<configs/>
-```
-
 The hook validates the TOML, writes generated headers, adds the selected `LSH_BUILD_*`
 macro, appends the generated include path, and applies the merged semantic options,
 advanced defines and raw build flags.
@@ -113,6 +114,7 @@ python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-pla
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-stack-config
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --print-stack-report
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --doctor
+# Rewriting removes comments except the editor schema directive.
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --format-config
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --check-format
 python3 tools/generate_lsh_static_config.py path/to/lsh_devices.toml --write-vscode-schema
@@ -122,6 +124,16 @@ python3 tools/generate_lsh_static_config.py --init-config path/to/lsh_devices.to
 ```
 
 Python 3.11+ is required by the project tooling.
+
+The AVR serial RX and TX rings each need at least two bytes. Debug and benchmark output
+should use a separate UART from the bridge. Stack export requires a positive ping
+interval and a larger connection timeout. A zero ping interval is core-only.
+
+Auto-off accepts up to 2,147,483,647 ms. The remaining half of the 32-bit clock cycle
+gives the scanner time to observe the deadline across rollover. Super-long scenes may
+turn protected relays on. They may only switch off or toggle unprotected relays. If a
+relay is named `all_off`, `off`, `none` or `disabled`, use an explicit `target`,
+`action` or `enabled` field for super-long clicks.
 
 ## Stack Export
 
@@ -306,6 +318,11 @@ Durations accept integers in milliseconds or strings ending in `ms`, `s`, `m` or
 | `network_click_check_interval`        | Pending network-click polling interval.                       |
 | `auto_off_check_interval`             | Auto-off scan interval.                                       |
 
+After conversion to milliseconds, actuator/button debounce, post-receive delay and
+network-click check interval fit in 8 bits (at most 255 ms). The other timing fields fit
+in 16 bits. The ping interval can reach 65,534 ms with an explicit connection timeout,
+or 65,335 ms with the default 200 ms margin.
+
 `long_click` and `super_long_click` are also propagated into generated static button
 scanner templates for actions that do not define their own `after` / `time` value.
 
@@ -324,6 +341,10 @@ Serial transport tuning.
 | `flush_after_send`           | Force serial flush after sends.                       |
 | `rx_buffer_size`             | Emits `-D SERIAL_RX_BUFFER_SIZE=<value>`.             |
 | `tx_buffer_size`             | Emits `-D SERIAL_TX_BUFFER_SIZE=<value>`.             |
+
+Serial timeouts and the per-loop payload count fit in 8 bits. The per-loop byte count
+and UART buffer sizes fit in 16 bits. The editor schema bounds integer millisecond
+values; the generator also validates strings after unit conversion.
 
 ### `[advanced]`
 
@@ -507,7 +528,9 @@ long = { network = true, fallback = "do_nothing" }
 long = { enabled = false }
 ```
 
-Supported long actions: `toggle`, `on`, `off`.
+Supported long actions: `toggle`, `on`, `off`. A long group toggle sets the whole group
+ON when fewer than half are ON and OFF otherwise (including a tie). A short group toggle
+inverts each target independently.
 
 Super-long actions:
 
@@ -523,7 +546,9 @@ super_long = { enabled = false }
 Supported super-long actions:
 
 - `all_off`: switch off every unprotected actuator.
-- `off`: switch off only the listed targets.
+- `off`: switch off only the listed targets. A target name, a nonempty list or a table
+  with targets or groups and no action selects the same behavior. Protected actuators
+  are rejected in a selective action.
 
 Network-click options on `long` and `super_long`:
 
@@ -570,7 +595,7 @@ The generator includes project helpers that do not change runtime behavior:
   `#:schema` directive.
 - `--init-config PATH` writes a guided starter profile. Use `--preset`, `--device-key`,
   `--device-name`, `--relays`, `--buttons`, `--indicators` and `--force` to tune the
-  generated file.
+  generated file. Use `--no-vscode-schema` to skip the editor schema.
 - `--doctor` prints non-fatal advice, such as automatic IDs without a committed lockfile
   or raw defines that have semantic schema v2 fields.
 - `--format-config` rewrites TOML into deterministic table order. It preserves the
@@ -593,7 +618,8 @@ The generator fails before compilation when it finds:
 - invalid C++ identifiers or preprocessor macro names;
 - duplicate names or IDs;
 - duplicate pin expressions across actuators, buttons or indicators;
-- more than 255 actuators, buttons or indicators in one profile;
+- more than 255 actuators, buttons, indicators or combined long/super-long network slots
+  in one profile;
 - IDs or timing overrides outside generated field widths;
 - unknown actuator references;
 - duplicated targets in one action;
@@ -614,27 +640,34 @@ The generator fails before compilation when it finds:
   `LSH_COMPACT_ACTUATOR_SWITCH_TIMES`;
 - unsafe C++ pin or serial expressions;
 - malformed or unsafe explicit C++ include operands;
-- generated paths that escape the output directory.
+- generated paths that collide with the input, the ID lock, another output or an include
+  guard, and header paths that escape the output directory.
+
+A stack export also requires unique runtime device names among its selected profiles. An
+imported unsigned C++ baud rate or timing literal may use decimal, hexadecimal, binary
+or octal notation and an integer suffix such as `U` or `UL`.
 
 This keeps configuration mistakes close to the TOML and avoids defensive runtime lookup
 tables on AVR.
 
 ## Generated Code Strategy
 
-The generated profile avoids SRAM tables for static facts:
+The generated profile specializes static facts for each controller:
 
 - resource capacities are preprocessor constants;
 - device name and serial objects are generated as C++ `constexpr` values;
-- IDs and reverse-ID lookups are compact branch/range accessors;
+- IDs and reverse-ID lookups use compares and ranges. Larger sparse sets can use a
+  switch; the AVR compiler may place its lookup table in SRAM;
 - auto-off timers are branch-grouped by equal duration;
-- button objects store only dynamic FSM state;
+- button objects retain their pin binding and dynamic click-detection state;
 - generated actuator wrappers centralize pulse and interlock behavior, so local clicks
   and bridge commands cannot drift semantically;
 - generated action paths pass actuator indexes as compile-time constants;
 - click actions, network fallback routing, scanning, indicator refreshes and auto-off
   sweeps are emitted as topology-specialized code;
 - DEVICE_DETAILS JSON and serial-framed MsgPack payloads are pre-serialized at
-  generation time and stored in flash on AVR targets;
+  generation time and stored in flash on AVR targets. Release builds stream the selected
+  payload in a loop. Debug builds can unroll writes for payloads up to 128 bytes;
 - network-click pools are sized exactly and compiled out when unused;
 - compact actuator switch-time storage is selected automatically when actuator debounce
   is disabled and only auto-off actuators need switch timestamps.

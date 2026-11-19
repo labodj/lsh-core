@@ -56,6 +56,43 @@
 
 namespace
 {
+[[maybe_unused]] constexpr void validatePinAssignments()
+{
+    switch (0)
+    {
+    case (CONTROLLINO_R0):  // ceiling
+        break;
+    case (CONTROLLINO_R1):  // worktop
+        break;
+    case (CONTROLLINO_R2):  // ambient
+        break;
+    case (CONTROLLINO_R3):  // door_strike
+        break;
+    case (CONTROLLINO_R4):  // blind_up
+        break;
+    case (CONTROLLINO_R5):  // blind_down
+        break;
+    case (CONTROLLINO_R6):  // service
+        break;
+    case (CONTROLLINO_A0):  // door
+        break;
+    case (CONTROLLINO_A1):  // worktop
+        break;
+    case (CONTROLLINO_A2):  // strike
+        break;
+    case (CONTROLLINO_A3):  // blind_up
+        break;
+    case (CONTROLLINO_A4):  // blind_down
+        break;
+    case (CONTROLLINO_D0):  // ceiling_led
+        break;
+    case (CONTROLLINO_D1):  // any_light_led
+        break;
+    case (CONTROLLINO_D2):  // cooking_led
+        break;
+    }
+}
+
 // clang-format off
 const uint8_t DETAILS_JSON_PAYLOAD[] LSH_STATIC_CONFIG_PROGMEM = {
     0x7BU, 0x22U, 0x70U, 0x22U, 0x3AU, 0x31U, 0x2CU, 0x22U, 0x76U, 0x22U, 0x3AU, 0x33U,
@@ -74,7 +111,11 @@ const uint8_t DETAILS_MSGPACK_PAYLOAD[] LSH_STATIC_CONFIG_PROGMEM = {
 };
 // clang-format on
 
+#ifdef LSH_DEBUG
 constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 128U;
+#else
+constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 0U;
+#endif
 
 template <uint16_t ByteIndex, uint16_t PayloadSize> struct GeneratedPayloadByteWriter
 {

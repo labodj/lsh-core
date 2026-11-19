@@ -230,7 +230,11 @@ def render_static_payload_arrays(device: DeviceConfig) -> list[str]:
 def render_static_payload_writer_helper() -> list[str]:
     """Render a direct PROGMEM/RAM byte writer for generated static payloads."""
     return [
+        "#ifdef LSH_DEBUG",
         "constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 128U;",
+        "#else",
+        "constexpr uint16_t LSH_STATIC_CONFIG_UNROLLED_PAYLOAD_LIMIT = 0U;",
+        "#endif",
         "",
         (
             "template <uint16_t ByteIndex, uint16_t PayloadSize> "

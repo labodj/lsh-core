@@ -90,6 +90,9 @@ where the button scan path is performance-sensitive.
 | `CONFIG_NETWORK_CLICK_ACK_TIMEOUT_MS`           | `CONFIG_LCNB_TIMEOUT_MS` | ACK timeout before fallback is applied.                     |
 | `CONFIG_NETWORK_CLICK_CONFIRM_RETRY_TIMEOUT_MS` | `CONFIG_LCNB_TIMEOUT_MS` | Retry budget for `NETWORK_CLICK_CONFIRM` after ACK is seen. |
 
+In generated TOML profiles configure the scanner with `timing.long_click` and
+`timing.super_long_click`. Use the per-action `after` field for individual buttons.
+
 `CONFIG_CLICKABLE_SCAN_INTERVAL_MS` is a scan policy setting, not a hard real-time
 guarantee. If the controller is busy, elapsed time is still passed through the button
 state machine so debounce and click timing stay coherent.
@@ -115,6 +118,12 @@ serial fairness and CPU headroom.
 | `CONFIG_DELAY_AFTER_RECEIVE_MS`                   | `50U`                          | Quiet window after bridge-side state-changing payloads.                   |
 | `CONFIG_NETWORK_CLICK_CHECK_INTERVAL_MS`          | `50U`                          | Pending network-click polling interval.                                   |
 | `CONFIG_ACTUATORS_AUTO_OFF_CHECK_INTERVAL_MS`     | `1000U`                        | Auto-off scan interval.                                                   |
+
+With MsgPack the core sizes its decoded input buffer from the v3 commands and the
+controller topology. A click ACK can occupy 15 bytes when both IDs exceed 127. Each
+packed state byte can take two MsgPack bytes. Framing and escape bytes are handled as
+they arrive. The per-loop byte budget controls scheduling; changing it is unnecessary
+for accepting a valid packet that spans several loop iterations.
 
 Keep the receive fairness guards on their mode-derived defaults for a first build. Raise
 them only if the bridge regularly delivers bursts that should be drained faster and
